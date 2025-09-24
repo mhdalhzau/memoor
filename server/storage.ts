@@ -237,8 +237,16 @@ export class MemStorage implements IStorage {
     });
     
     // Initialize with sample stores
-    this.initializeSampleData();
-    this.initializeSampleWallets();
+    this.initializeAllData();
+  }
+
+  private async initializeAllData() {
+    try {
+      await this.initializeSampleData();
+      await this.initializeSampleWallets();
+    } catch (error) {
+      console.error('Error initializing data:', error);
+    }
   }
 
   private async initializeSampleData() {
@@ -541,6 +549,7 @@ export class MemStorage implements IStorage {
       this.walletRecords.set(eWallet.id, eWallet);
     }
   }
+
 
   // User methods
   async getUser(id: string): Promise<User | undefined> {
