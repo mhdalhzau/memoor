@@ -14,7 +14,7 @@ export default defineConfig({
   dbCredentials: {
     url: databaseUrl,
     ssl: process.env.AIVEN_CA_CERT ? {
-      rejectUnauthorized: false,
+      rejectUnauthorized: true,
       ca: process.env.AIVEN_CA_CERT
     } : { rejectUnauthorized: false },
   },
