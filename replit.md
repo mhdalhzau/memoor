@@ -36,7 +36,7 @@ Uses PostgreSQL with Drizzle ORM for type-safe database operations:
 - **Schema**: Relational design with users, stores, attendance, sales, cashflow, payroll, and proposals tables
 - **Multi-tenancy**: Store-based data isolation with storeId foreign keys
 - **Migrations**: Drizzle Kit for schema management and migrations
-- **Cloud Database**: Aiven PostgreSQL 17.6 for production-grade hosting
+- **Cloud Database**: Neon PostgreSQL for production-grade serverless hosting
 
 ## Role-Based Access Control
 Three-tier role system with different permissions:
@@ -56,9 +56,9 @@ Monorepo structure with shared types and utilities:
 # External Dependencies
 
 ## Database
-- **PostgreSQL**: Primary database with Aiven cloud hosting (PostgreSQL 17.6)
+- **PostgreSQL**: Primary database with Neon serverless hosting
 - **Drizzle ORM**: Type-safe database toolkit with migration support
-- **Aiven Configuration**: Managed PostgreSQL with SSL encryption and automated backups
+- **Neon Configuration**: Serverless PostgreSQL with automatic scaling, branching, and SSL encryption
 
 ## Authentication & Security  
 - **Passport.js**: Authentication middleware with local strategy
@@ -82,33 +82,33 @@ Monorepo structure with shared types and utilities:
 - **TypeScript**: Static type checking across the entire application
 - **Replit Plugins**: Development banner and error overlay for Replit environment
 
-# Aiven Database Configuration
+# Neon Database Configuration
 
 ## Cloud Database Setup
-This project uses **Aiven PostgreSQL** as the production cloud database to ensure data persistence across deployments.
+This project uses **Neon PostgreSQL** as the production serverless database to ensure data persistence across deployments.
 
 ### Database Details:
-- **Provider**: Aiven PostgreSQL
-- **Version**: PostgreSQL 17.6
-- **SSL**: Required with certificate validation
-- **Connection**: Via AIVEN_DATABASE_URL environment variable (Aiven PostgreSQL only)
+- **Provider**: Neon PostgreSQL
+- **Version**: PostgreSQL 16+ (latest supported by Neon)
+- **SSL**: Standard SSL encryption (no custom certificates required)
+- **Connection**: Via NEON_DATABASE_URL environment variable
 
 ### Migration to Other Platforms:
 To migrate this application to other AI/deployment platforms:
 
 1. **Environment Variable Required**:
    ```
-   AIVEN_DATABASE_URL=postgresql://avnadmin:PASSWORD@HOST:PORT/defaultdb?sslmode=require
+   NEON_DATABASE_URL=postgresql://username:password@ep-xyz.region.neon.tech/database?sslmode=require
    ```
 
 2. **SSL Configuration**:
-   - Aiven requires SSL connections
-   - For development: Use `NODE_TLS_REJECT_UNAUTHORIZED=0` if needed
-   - For production: Configure proper SSL certificates
+   - Neon uses standard SSL certificates (no custom CA required)
+   - SSL is enabled by default with `sslmode=require`
+   - No additional SSL configuration needed
 
 3. **Schema Migration**:
    ```bash
-   npm run db:push --force
+   npm run db:push
    ```
 
 4. **Database Schema**:
@@ -119,11 +119,12 @@ To migrate this application to other AI/deployment platforms:
 ### Platform Independence:
 - ✅ Database persists independently of deployment platform
 - ✅ No vendor lock-in - portable across any platform
-- ✅ Automated backups and high availability from Aiven
-- ✅ SSL encryption for secure connections
+- ✅ Serverless scaling and automated backups from Neon
+- ✅ Built-in SSL encryption with standard certificates
+- ✅ Database branching for development workflows
 
 ### Required Configuration Files:
 - `drizzle.config.ts`: Database connection configuration
 - `shared/schema.ts`: Complete database schema definitions
 - `api/core/config.py`: Python backend database configuration (if used)
-- Environment: `AIVEN_DATABASE_URL` secret/environment variable (Aiven PostgreSQL required)
+- Environment: `NEON_DATABASE_URL` secret/environment variable (Neon PostgreSQL required)
