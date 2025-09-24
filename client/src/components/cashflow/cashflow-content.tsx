@@ -50,6 +50,7 @@ import {
   FileText,
   Plus,
   User,
+  Trash2,
 } from "lucide-react";
 
 // Define transaction types by category

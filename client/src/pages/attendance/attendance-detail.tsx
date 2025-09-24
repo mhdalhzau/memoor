@@ -30,6 +30,8 @@ interface AttendanceRecord {
   shift: string;
   latenessMinutes: number;
   overtimeMinutes: number;
+  earlyArrivalMinutes?: number;
+  lateLeaveMinutes?: number;
   attendanceStatus: string;
   notes: string;
 }
@@ -52,12 +54,7 @@ const ATTENDANCE_STATUS_OPTIONS = [
   { value: "alpha", label: "Alpha", color: "bg-red-100 text-red-800" },
 ];
 
-const SHIFT_OPTIONS = [
-  { value: "pagi", label: "Pagi (07:00-17:00)" },
-  { value: "siang", label: "Siang (12:00-21:00)" },
-  { value: "malam", label: "Malam (22:00-07:00)" },
-  { value: "full-day", label: "Malam (22:00-07:00)" },
-];
+// Dynamic shift options will be generated based on store settings
 
 export default function AttendanceDetailPage() {
   const params = useParams();
@@ -85,6 +82,43 @@ export default function AttendanceDetailPage() {
       return failureCount < 2;
     }
   });
+
+  // Generate dynamic shift options based on store settings
+  const generateShiftOptions = () => {
+    if (!monthlyData?.employee?.stores?.length) {
+      // Fallback to default options if no store data
+      return [
+        { value: "pagi", label: "Pagi (07:00-17:00)" },
+        { value: "siang", label: "Siang (12:00-21:00)" },
+        { value: "malam", label: "Malam (22:00-07:00)" },
+      ];
+    }
+
+    const store = monthlyData.employee.stores[0];
+    const entryStart = store.entryTimeStart || '07:00';
+    const entryEnd = store.entryTimeEnd || '09:00';
+    const exitStart = store.exitTimeStart || '17:00';
+    const exitEnd = store.exitTimeEnd || '19:00';
+
+    return [
+      { 
+        value: "pagi", 
+        label: `Pagi (${entryStart}-${exitStart})` 
+      },
+      { 
+        value: "siang", 
+        label: "Siang (12:00-21:00)" 
+      },
+      { 
+        value: "malam", 
+        label: "Malam (22:00-07:00)" 
+      },
+      { 
+        value: "full-day", 
+        label: `Full Day (${entryStart}-${exitEnd})` 
+      },
+    ];
+  };
 
   // Update local state when data loads
   useEffect(() => {
@@ -151,13 +185,15 @@ export default function AttendanceDetailPage() {
       
       // Auto-calculate lateness and overtime when times are updated
       if (updatedData[index].checkIn && updatedData[index].checkOut) {
-        const { latenessMinutes, overtimeMinutes } = calculateTimeMetrics(
+        const { latenessMinutes, overtimeMinutes, earlyArrivalMinutes, lateLeaveMinutes } = calculateTimeMetrics(
           updatedData[index].checkIn,
           updatedData[index].checkOut,
           updatedData[index].shift
         );
         updatedData[index].latenessMinutes = latenessMinutes;
         updatedData[index].overtimeMinutes = overtimeMinutes;
+        updatedData[index].earlyArrivalMinutes = earlyArrivalMinutes;
+        updatedData[index].lateLeaveMinutes = lateLeaveMinutes;
       }
     } else {
       updatedData[index] = { ...updatedData[index], [field]: value };
@@ -167,18 +203,29 @@ export default function AttendanceDetailPage() {
     setHasChanges(true);
   };
 
-  // Calculate lateness and overtime with proper cross-midnight handling
+  // Calculate lateness and overtime with store-specific working hours and configurable overtime rates
   const calculateTimeMetrics = (checkIn: string, checkOut: string, shift: string) => {
-    if (!checkIn || !checkOut || !shift) return { latenessMinutes: 0, overtimeMinutes: 0 };
+    if (!checkIn || !checkOut || !shift || !monthlyData?.employee?.stores?.length) {
+      return { latenessMinutes: 0, overtimeMinutes: 0, earlyArrivalMinutes: 0, lateLeaveMinutes: 0 };
+    }
     
+    // Use the first store's working hours (assuming employee works at one store primarily)
+    const store = monthlyData.employee.stores[0];
+    const entryStart = store.entryTimeStart || '07:00';
+    const entryEnd = store.entryTimeEnd || '09:00'; 
+    const exitStart = store.exitTimeStart || '17:00';
+    const exitEnd = store.exitTimeEnd || '19:00';
+    
+    // Define shift mappings with store-specific working hours
     const shiftTimes = {
-      pagi: { start: '08:00', end: '17:00', crossMidnight: false },
+      pagi: { start: entryStart, end: exitStart, crossMidnight: false },
       siang: { start: '12:00', end: '21:00', crossMidnight: false },
-      malam: { start: '22:00', end: '07:00', crossMidnight: true }
+      malam: { start: '22:00', end: '07:00', crossMidnight: true },
+      'full-day': { start: entryStart, end: exitEnd, crossMidnight: false }
     };
     
     const shiftTime = shiftTimes[shift as keyof typeof shiftTimes];
-    if (!shiftTime) return { latenessMinutes: 0, overtimeMinutes: 0 };
+    if (!shiftTime) return { latenessMinutes: 0, overtimeMinutes: 0, earlyArrivalMinutes: 0, lateLeaveMinutes: 0 };
     
     const baseDate = '2024-01-01';
     const nextDate = '2024-01-02';
@@ -187,6 +234,8 @@ export default function AttendanceDetailPage() {
       // Night shift: 22:00 -> 07:00 (next day)
       const expectedStart = new Date(`${baseDate} ${shiftTime.start}`);
       const expectedEnd = new Date(`${nextDate} ${shiftTime.end}`);
+      const storeEntryStart = new Date(`${baseDate} ${entryStart}`);
+      const storeExitEnd = new Date(`${nextDate} ${exitEnd}`);
       
       // For night shift, times before 22:00 are considered next day
       const checkInDate = checkIn < '22:00' ? nextDate : baseDate;
@@ -195,31 +244,49 @@ export default function AttendanceDetailPage() {
       const checkInTime = new Date(`${checkInDate} ${checkIn}`);
       const checkOutTime = new Date(`${checkOutDate} ${checkOut}`);
       
-      // Calculate lateness
+      // Calculate lateness (late arrival after shift start)
       const latenessMinutes = checkInTime > expectedStart ? 
         Math.max(0, Math.floor((checkInTime.getTime() - expectedStart.getTime()) / (1000 * 60))) : 0;
       
-      // Calculate overtime
+      // Calculate overtime (working beyond shift end)
       const overtimeMinutes = checkOutTime > expectedEnd ? 
         Math.max(0, Math.floor((checkOutTime.getTime() - expectedEnd.getTime()) / (1000 * 60))) : 0;
       
-      return { latenessMinutes, overtimeMinutes };
+      // Calculate early arrival penalty (arriving before store entry time)
+      const earlyArrivalMinutes = checkInTime < storeEntryStart ? 
+        Math.max(0, Math.floor((storeEntryStart.getTime() - checkInTime.getTime()) / (1000 * 60))) : 0;
+      
+      // Calculate late leave penalty (leaving after store exit time)  
+      const lateLeaveMinutes = checkOutTime > storeExitEnd ? 
+        Math.max(0, Math.floor((checkOutTime.getTime() - storeExitEnd.getTime()) / (1000 * 60))) : 0;
+      
+      return { latenessMinutes, overtimeMinutes, earlyArrivalMinutes, lateLeaveMinutes };
     } else {
       // Day shifts: same day calculation
       const checkInTime = new Date(`${baseDate} ${checkIn}`);
       const checkOutTime = new Date(`${baseDate} ${checkOut}`);
       const expectedStart = new Date(`${baseDate} ${shiftTime.start}`);
       const expectedEnd = new Date(`${baseDate} ${shiftTime.end}`);
+      const storeEntryStart = new Date(`${baseDate} ${entryStart}`);
+      const storeExitEnd = new Date(`${baseDate} ${exitEnd}`);
       
-      // Calculate lateness
+      // Calculate lateness (late arrival after shift start)
       const latenessMinutes = checkInTime > expectedStart ? 
         Math.max(0, Math.floor((checkInTime.getTime() - expectedStart.getTime()) / (1000 * 60))) : 0;
       
-      // Calculate overtime
+      // Calculate overtime (working beyond shift end)
       const overtimeMinutes = checkOutTime > expectedEnd ? 
         Math.max(0, Math.floor((checkOutTime.getTime() - expectedEnd.getTime()) / (1000 * 60))) : 0;
       
-      return { latenessMinutes, overtimeMinutes };
+      // Calculate early arrival penalty (arriving before store entry time)
+      const earlyArrivalMinutes = checkInTime < storeEntryStart ? 
+        Math.max(0, Math.floor((storeEntryStart.getTime() - checkInTime.getTime()) / (1000 * 60))) : 0;
+      
+      // Calculate late leave penalty (leaving after store exit time)
+      const lateLeaveMinutes = checkOutTime > storeExitEnd ? 
+        Math.max(0, Math.floor((checkOutTime.getTime() - storeExitEnd.getTime()) / (1000 * 60))) : 0;
+      
+      return { latenessMinutes, overtimeMinutes, earlyArrivalMinutes, lateLeaveMinutes };
     }
   };
 
@@ -477,6 +544,8 @@ export default function AttendanceDetailPage() {
                   <TableHead>Jam Keluar</TableHead>
                   <TableHead>Terlambat</TableHead>
                   <TableHead>Lembur</TableHead>
+                  <TableHead>Datang Terlalu Awal</TableHead>
+                  <TableHead>Pulang Terlambat</TableHead>
                   <TableHead>Catatan</TableHead>
                 </TableRow>
               </TableHeader>
@@ -515,7 +584,7 @@ export default function AttendanceDetailPage() {
                             <SelectValue placeholder="Pilih shift" />
                           </SelectTrigger>
                           <SelectContent>
-                            {SHIFT_OPTIONS.map(option => (
+                            {generateShiftOptions().map(option => (
                               <SelectItem key={option.value} value={option.value}>
                                 {option.label}
                               </SelectItem>
@@ -549,6 +618,26 @@ export default function AttendanceDetailPage() {
                       <TableCell>
                         <span className={`text-sm ${record.overtimeMinutes > 0 ? 'text-purple-600 font-medium' : 'text-gray-500'}`}>
                           {record.overtimeMinutes} min
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`text-sm ${(record.earlyArrivalMinutes || 0) > 0 ? 'text-orange-600 font-medium' : 'text-gray-500'}`}>
+                          {record.earlyArrivalMinutes || 0} min
+                          {(record.earlyArrivalMinutes || 0) > 0 && (
+                            <div className="text-xs text-red-500">
+                              Rp {((record.earlyArrivalMinutes || 0) / 60 * 10000).toLocaleString('id-ID')}
+                            </div>
+                          )}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`text-sm ${(record.lateLeaveMinutes || 0) > 0 ? 'text-orange-600 font-medium' : 'text-gray-500'}`}>
+                          {record.lateLeaveMinutes || 0} min
+                          {(record.lateLeaveMinutes || 0) > 0 && (
+                            <div className="text-xs text-red-500">
+                              Rp {((record.lateLeaveMinutes || 0) / 60 * 10000).toLocaleString('id-ID')}
+                            </div>
+                          )}
                         </span>
                       </TableCell>
                       <TableCell>

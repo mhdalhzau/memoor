@@ -2421,6 +2421,21 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(attendance.date));
   }
 
+  async getAttendanceByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<Attendance[]> {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    return await db.select().from(attendance)
+      .where(
+        and(
+          eq(attendance.userId, userId),
+          gte(attendance.date, start),
+          lte(attendance.date, end)
+        )
+      )
+      .orderBy(desc(attendance.date));
+  }
+
   async createAttendance(insertAttendance: InsertAttendance): Promise<Attendance> {
     const [created] = await db.insert(attendance).values(insertAttendance).returning();
     return created;
