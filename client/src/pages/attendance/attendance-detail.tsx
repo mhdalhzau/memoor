@@ -29,9 +29,6 @@ interface AttendanceRecord {
   checkOut: string;
   shift: string;
   latenessMinutes: number;
-  overtimeMinutes: number;
-  earlyArrivalMinutes?: number;
-  lateLeaveMinutes?: number;
   attendanceStatus: string;
   notes: string;
 }
@@ -149,7 +146,7 @@ export default function AttendanceDetailPage() {
     if (selectedStoreId && attendanceData.length > 0) {
       const updatedData = attendanceData.map(record => {
         if (record.checkIn && record.checkOut && record.shift) {
-          const { latenessMinutes, overtimeMinutes, earlyArrivalMinutes, lateLeaveMinutes } = calculateTimeMetrics(
+          const { latenessMinutes, overtimeMinutes, earlyArrivalMinutes } = calculateTimeMetrics(
             record.checkIn,
             record.checkOut,
             record.shift
@@ -158,8 +155,7 @@ export default function AttendanceDetailPage() {
             ...record,
             latenessMinutes,
             overtimeMinutes,
-            earlyArrivalMinutes,
-            lateLeaveMinutes
+            earlyArrivalMinutes
           };
         }
         return record;
@@ -227,7 +223,7 @@ export default function AttendanceDetailPage() {
       
       // Auto-calculate lateness and overtime when times are updated
       if (updatedData[index].checkIn && updatedData[index].checkOut) {
-        const { latenessMinutes, overtimeMinutes, earlyArrivalMinutes, lateLeaveMinutes } = calculateTimeMetrics(
+        const { latenessMinutes, overtimeMinutes, earlyArrivalMinutes } = calculateTimeMetrics(
           updatedData[index].checkIn,
           updatedData[index].checkOut,
           updatedData[index].shift
@@ -235,7 +231,6 @@ export default function AttendanceDetailPage() {
         updatedData[index].latenessMinutes = latenessMinutes;
         updatedData[index].overtimeMinutes = overtimeMinutes;
         updatedData[index].earlyArrivalMinutes = earlyArrivalMinutes;
-        updatedData[index].lateLeaveMinutes = lateLeaveMinutes;
       }
     } else {
       updatedData[index] = { ...updatedData[index], [field]: value };
@@ -245,10 +240,10 @@ export default function AttendanceDetailPage() {
     setHasChanges(true);
   };
 
-  // Calculate lateness and overtime with store-specific working hours and configurable overtime rates
+  // Calculate lateness with store-specific working hours
   const calculateTimeMetrics = (checkIn: string, checkOut: string, shift: string) => {
     if (!checkIn || !checkOut || !shift || !monthlyData?.employee?.stores?.length) {
-      return { latenessMinutes: 0, overtimeMinutes: 0, earlyArrivalMinutes: 0, lateLeaveMinutes: 0 };
+      return { latenessMinutes: 0 };
     }
     
     // Use selected store or fall back to first store (consistent with shift options)
@@ -268,7 +263,7 @@ export default function AttendanceDetailPage() {
     };
     
     const shiftTime = shiftTimes[shift as keyof typeof shiftTimes];
-    if (!shiftTime) return { latenessMinutes: 0, overtimeMinutes: 0, earlyArrivalMinutes: 0, lateLeaveMinutes: 0 };
+    if (!shiftTime) return { latenessMinutes: 0, overtimeMinutes: 0, earlyArrivalMinutes: 0 };
     
     const baseDate = '2024-01-01';
     const nextDate = '2024-01-02';
@@ -299,11 +294,7 @@ export default function AttendanceDetailPage() {
       const earlyArrivalMinutes = checkInTime < storeEntryStart ? 
         Math.max(0, Math.floor((storeEntryStart.getTime() - checkInTime.getTime()) / (1000 * 60))) : 0;
       
-      // Calculate late leave penalty (leaving after store exit time)  
-      const lateLeaveMinutes = checkOutTime > storeExitEnd ? 
-        Math.max(0, Math.floor((checkOutTime.getTime() - storeExitEnd.getTime()) / (1000 * 60))) : 0;
-      
-      return { latenessMinutes, overtimeMinutes, earlyArrivalMinutes, lateLeaveMinutes };
+      return { latenessMinutes, overtimeMinutes, earlyArrivalMinutes };
     } else {
       // Day shifts: same day calculation
       const checkInTime = new Date(`${baseDate} ${checkIn}`);
@@ -325,11 +316,7 @@ export default function AttendanceDetailPage() {
       const earlyArrivalMinutes = checkInTime < storeEntryStart ? 
         Math.max(0, Math.floor((storeEntryStart.getTime() - checkInTime.getTime()) / (1000 * 60))) : 0;
       
-      // Calculate late leave penalty (leaving after store exit time)
-      const lateLeaveMinutes = checkOutTime > storeExitEnd ? 
-        Math.max(0, Math.floor((checkOutTime.getTime() - storeExitEnd.getTime()) / (1000 * 60))) : 0;
-      
-      return { latenessMinutes, overtimeMinutes, earlyArrivalMinutes, lateLeaveMinutes };
+      return { latenessMinutes, overtimeMinutes, earlyArrivalMinutes };
     }
   };
 
@@ -345,7 +332,7 @@ export default function AttendanceDetailPage() {
     }
     
     try {
-      const headers = ['Tanggal', 'Hari', 'Jam Masuk', 'Jam Keluar', 'Shift', 'Status', 'Terlambat (menit)', 'Lembur (menit)', 'Catatan'];
+      const headers = ['Tanggal', 'Hari', 'Jam Masuk', 'Jam Keluar', 'Shift', 'Status', 'Terlambat (menit)', 'Catatan'];
       const csvContent = [
         headers.join(','),
         ...attendanceData.map(record => [
@@ -356,7 +343,6 @@ export default function AttendanceDetailPage() {
           record.shift || '',
           record.attendanceStatus,
           record.latenessMinutes.toString(),
-          record.overtimeMinutes.toString(),
           `"${record.notes || ''}"`
         ].join(','))
       ].join('\n');
@@ -387,9 +373,8 @@ export default function AttendanceDetailPage() {
     const alphaCount = attendanceData.filter(r => r.attendanceStatus === 'alpha').length;
     const belumDiaturCount = attendanceData.filter(r => r.attendanceStatus === 'belum_diatur' || !r.attendanceStatus).length;
     const totalLateness = attendanceData.reduce((sum, r) => sum + r.latenessMinutes, 0);
-    const totalOvertime = attendanceData.reduce((sum, r) => sum + r.overtimeMinutes, 0);
     
-    return { hadirCount, cutiCount, alphaCount, belumDiaturCount, totalLateness, totalOvertime };
+    return { hadirCount, cutiCount, alphaCount, belumDiaturCount, totalLateness };
   };
 
   if (isLoading) {
@@ -585,12 +570,6 @@ export default function AttendanceDetailPage() {
             <div className="text-sm text-gray-600">Menit Terlambat</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-purple-600" data-testid="summary-overtime-minutes">{summary.totalOvertime}</div>
-            <div className="text-sm text-gray-600">Menit Lembur</div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Attendance Table */}
@@ -610,9 +589,6 @@ export default function AttendanceDetailPage() {
                   <TableHead>Jam Masuk</TableHead>
                   <TableHead>Jam Keluar</TableHead>
                   <TableHead>Terlambat</TableHead>
-                  <TableHead>Lembur</TableHead>
-                  <TableHead>Datang Terlalu Awal</TableHead>
-                  <TableHead>Pulang Terlambat</TableHead>
                   <TableHead>Catatan</TableHead>
                 </TableRow>
               </TableHeader>
@@ -680,31 +656,6 @@ export default function AttendanceDetailPage() {
                       <TableCell>
                         <span className={`text-sm ${record.latenessMinutes > 0 ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                           {record.latenessMinutes} min
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`text-sm ${record.overtimeMinutes > 0 ? 'text-purple-600 font-medium' : 'text-gray-500'}`}>
-                          {record.overtimeMinutes} min
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`text-sm ${(record.earlyArrivalMinutes || 0) > 0 ? 'text-orange-600 font-medium' : 'text-gray-500'}`}>
-                          {record.earlyArrivalMinutes || 0} min
-                          {(record.earlyArrivalMinutes || 0) > 0 && (
-                            <div className="text-xs text-red-500">
-                              Rp {((record.earlyArrivalMinutes || 0) / 60 * 10000).toLocaleString('id-ID')}
-                            </div>
-                          )}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`text-sm ${(record.lateLeaveMinutes || 0) > 0 ? 'text-orange-600 font-medium' : 'text-gray-500'}`}>
-                          {record.lateLeaveMinutes || 0} min
-                          {(record.lateLeaveMinutes || 0) > 0 && (
-                            <div className="text-xs text-red-500">
-                              Rp {((record.lateLeaveMinutes || 0) / 60 * 10000).toLocaleString('id-ID')}
-                            </div>
-                          )}
                         </span>
                       </TableCell>
                       <TableCell>
