@@ -1,10 +1,10 @@
 import { defineConfig } from "drizzle-kit";
 
-// Use Neon database URL - no fallback to prevent using Replit database  
-let databaseUrl = process.env.NEON_DATABASE_URL;
+// Use Neon database URL - check both NEON_DATABASE_URL and DATABASE_URL  
+let databaseUrl = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error("NEON_DATABASE_URL must be set. This application requires Neon PostgreSQL database.");
+  throw new Error("NEON_DATABASE_URL or DATABASE_URL must be set. This application requires Neon PostgreSQL database.");
 }
 
 // Neon uses standard SSL configuration - no custom certificates needed
