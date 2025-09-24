@@ -39,7 +39,14 @@ interface AttendanceRecord {
 interface EmployeeData {
   id: string;
   name: string;
-  stores: Array<{ id: number; name: string }>;
+  stores: Array<{ 
+    id: number; 
+    name: string; 
+    entryTimeStart?: string;
+    entryTimeEnd?: string;
+    exitTimeStart?: string;
+    exitTimeEnd?: string;
+  }>;
 }
 
 interface MonthlyAttendanceData {
@@ -69,6 +76,7 @@ export default function AttendanceDetailPage() {
   // State for attendance data
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
+  const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
 
   // Fetch monthly attendance data - using the correct API endpoint
   const { data: monthlyData, isLoading, refetch, error } = useQuery<MonthlyAttendanceData>({
@@ -83,7 +91,7 @@ export default function AttendanceDetailPage() {
     }
   });
 
-  // Generate dynamic shift options based on store settings
+  // Generate dynamic shift options based on selected store settings
   const generateShiftOptions = () => {
     if (!monthlyData?.employee?.stores?.length) {
       // Fallback to default options if no store data
@@ -94,7 +102,10 @@ export default function AttendanceDetailPage() {
       ];
     }
 
-    const store = monthlyData.employee.stores[0];
+    // Use selected store or fall back to first store
+    const targetStoreId = selectedStoreId || monthlyData.employee.stores[0]?.id;
+    const store = monthlyData.employee.stores.find(s => s.id === targetStoreId) || monthlyData.employee.stores[0];
+    
     const entryStart = store.entryTimeStart || '07:00';
     const entryEnd = store.entryTimeEnd || '09:00';
     const exitStart = store.exitTimeStart || '17:00';
@@ -126,7 +137,38 @@ export default function AttendanceDetailPage() {
       setAttendanceData(monthlyData.attendanceData);
       setHasChanges(false);
     }
+    
+    // Initialize selectedStoreId to first store if not set
+    if (monthlyData?.employee?.stores?.length && !selectedStoreId) {
+      setSelectedStoreId(monthlyData.employee.stores[0].id);
+    }
   }, [monthlyData]);
+
+  // Recalculate time metrics when selected store changes
+  useEffect(() => {
+    if (selectedStoreId && attendanceData.length > 0) {
+      const updatedData = attendanceData.map(record => {
+        if (record.checkIn && record.checkOut && record.shift) {
+          const { latenessMinutes, overtimeMinutes, earlyArrivalMinutes, lateLeaveMinutes } = calculateTimeMetrics(
+            record.checkIn,
+            record.checkOut,
+            record.shift
+          );
+          return {
+            ...record,
+            latenessMinutes,
+            overtimeMinutes,
+            earlyArrivalMinutes,
+            lateLeaveMinutes
+          };
+        }
+        return record;
+      });
+      
+      setAttendanceData(updatedData);
+      setHasChanges(true);
+    }
+  }, [selectedStoreId]);
 
   // Save changes mutation - using bulk update API
   const saveMutation = useMutation({
@@ -209,8 +251,9 @@ export default function AttendanceDetailPage() {
       return { latenessMinutes: 0, overtimeMinutes: 0, earlyArrivalMinutes: 0, lateLeaveMinutes: 0 };
     }
     
-    // Use the first store's working hours (assuming employee works at one store primarily)
-    const store = monthlyData.employee.stores[0];
+    // Use selected store or fall back to first store (consistent with shift options)
+    const targetStoreId = selectedStoreId || monthlyData.employee.stores[0]?.id;
+    const store = monthlyData.employee.stores.find(s => s.id === targetStoreId) || monthlyData.employee.stores[0];
     const entryStart = store.entryTimeStart || '07:00';
     const entryEnd = store.entryTimeEnd || '09:00'; 
     const exitStart = store.exitTimeStart || '17:00';
@@ -431,9 +474,33 @@ export default function AttendanceDetailPage() {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100" data-testid="text-employee-name">
               {monthlyData.employee.name}
             </h1>
-            <p className="text-gray-600 dark:text-gray-400" data-testid="text-store-info">
-              {monthlyData.employee.stores.map((s: any) => s.name).join(', ')}
-            </p>
+            <div className="space-y-2">
+              <p className="text-gray-600 dark:text-gray-400" data-testid="text-store-info">
+                Toko: {monthlyData.employee.stores.map((s: any) => s.name).join(', ')}
+              </p>
+              {monthlyData.employee.stores.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Jadwal Shift:
+                  </label>
+                  <Select
+                    value={selectedStoreId?.toString() || monthlyData.employee.stores[0]?.id?.toString()}
+                    onValueChange={(value) => setSelectedStoreId(parseInt(value))}
+                  >
+                    <SelectTrigger className="w-48" data-testid="select-store-shift">
+                      <SelectValue placeholder="Pilih toko untuk jadwal shift" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {monthlyData.employee.stores.map((store: any) => (
+                        <SelectItem key={store.id} value={store.id.toString()}>
+                          {store.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
