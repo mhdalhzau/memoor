@@ -11,10 +11,29 @@ if (!databaseUrl) {
   );
 }
 
+// Determine which environment variable is being used
+const usingNeonVar = !!process.env.NEON_DATABASE_URL;
+const usingDatabaseVar = !process.env.NEON_DATABASE_URL && !!process.env.DATABASE_URL;
+
+if (process.env.NEON_DATABASE_URL && process.env.DATABASE_URL && process.env.NEON_DATABASE_URL !== process.env.DATABASE_URL) {
+  console.log("⚠️ Warning: Both NEON_DATABASE_URL and DATABASE_URL are set with different values. Using NEON_DATABASE_URL.");
+}
+
+console.log(`🔄 Using database connection from ${usingNeonVar ? 'NEON_DATABASE_URL' : 'DATABASE_URL'}`);
+
 if (databaseUrl.includes('neon.tech')) {
-  console.log("🔄 Connected to Neon PostgreSQL database");
+  console.log("🔄 Connecting to Neon PostgreSQL database...");
 } else {
-  console.log("⚠️ Warning: Not using Neon database - please verify DATABASE_URL points to your Neon instance");
+  console.log("⚠️ Warning: Database URL does not appear to be Neon - please verify it points to your Neon instance");
+}
+
+// Test database connection on startup
+try {
+  await pool.query('SELECT 1');
+  console.log("✅ Database connection verified successfully");
+} catch (error) {
+  console.error("❌ Failed to connect to database:", error);
+  process.exit(1);
 }
 
 // Neon uses standard SSL configuration

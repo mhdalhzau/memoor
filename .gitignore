@@ -5,3 +5,4 @@ server/public
 vite.config.ts.*
 *.tar.gzcookies.txt
 .env
+.env.local
