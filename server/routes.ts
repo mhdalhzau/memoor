@@ -501,6 +501,119 @@ export function registerRoutes(app: Express): Server {
             // Save to sales database
             const savedSales = await storage.createSales(validatedSalesData);
             
+            // Create additional cashflow entries for income and expenses from setoran data
+            let cashflowEntriesCreated = 0;
+            
+            try {
+              // Parse income and expense details from the setoran data
+              let incomeItems = [];
+              let expenseItems = [];
+              
+              // Parse income data
+              if (setoran.income_data || setoran.income) {
+                try {
+                  if (typeof setoran.income_data === 'string') {
+                    incomeItems = JSON.parse(setoran.income_data || '[]');
+                  } else if (Array.isArray(setoran.income)) {
+                    incomeItems = setoran.income;
+                  }
+                } catch (e) {
+                  console.warn('Failed to parse income data:', e);
+                }
+              }
+              
+              // Parse expense data
+              if (setoran.expenses_data || setoran.expenses) {
+                try {
+                  if (typeof setoran.expenses_data === 'string') {
+                    expenseItems = JSON.parse(setoran.expenses_data || '[]');
+                  } else if (Array.isArray(setoran.expenses)) {
+                    expenseItems = setoran.expenses;
+                  }
+                } catch (e) {
+                  console.warn('Failed to parse expense data:', e);
+                }
+              }
+              
+              // Create cashflow entries for individual income items
+              for (const incomeItem of incomeItems) {
+                if (incomeItem.amount && incomeItem.amount > 0 && incomeItem.description) {
+                  // Create unique identifier for idempotency check
+                  const idempotencyKey = `setoran-${setoran.id || setoran.created_at}-income-${incomeItem.description}-${incomeItem.amount}`;
+                  
+                  // Check if this cashflow entry already exists to prevent duplicates
+                  const existingCashflow = await storage.getCashflowByStore(targetStoreId);
+                  const isDuplicate = existingCashflow.some(cf => 
+                    cf.description?.includes(idempotencyKey) ||
+                    (cf.description?.includes(incomeItem.description) && 
+                     cf.amount === incomeItem.amount.toString() &&
+                     cf.category === 'Income' &&
+                     cf.date?.toDateString() === savedSales.date?.toDateString())
+                  );
+                  
+                  if (!isDuplicate) {
+                    const incomeCashflowData = {
+                      storeId: targetStoreId,
+                      category: 'Income' as const,
+                      type: 'Other' as const,
+                      amount: incomeItem.amount.toString(),
+                      description: `${incomeItem.description} (Auto-imported from setoran data) [${idempotencyKey}]`,
+                      date: savedSales.date
+                    };
+                    
+                    // Validate using schema
+                    const { insertCashflowSchema } = await import("@shared/schema");
+                    const validatedCashflow = insertCashflowSchema.parse(incomeCashflowData);
+                    
+                    await storage.createCashflow(validatedCashflow);
+                    cashflowEntriesCreated++;
+                  }
+                }
+              }
+              
+              // Create cashflow entries for individual expense items
+              for (const expenseItem of expenseItems) {
+                if (expenseItem.amount && expenseItem.amount > 0 && expenseItem.description) {
+                  // Create unique identifier for idempotency check
+                  const idempotencyKey = `setoran-${setoran.id || setoran.created_at}-expense-${expenseItem.description}-${expenseItem.amount}`;
+                  
+                  // Check if this cashflow entry already exists to prevent duplicates
+                  const existingCashflow = await storage.getCashflowByStore(targetStoreId);
+                  const isDuplicate = existingCashflow.some(cf => 
+                    cf.description?.includes(idempotencyKey) ||
+                    (cf.description?.includes(expenseItem.description) && 
+                     cf.amount === expenseItem.amount.toString() &&
+                     cf.category === 'Expense' &&
+                     cf.date?.toDateString() === savedSales.date?.toDateString())
+                  );
+                  
+                  if (!isDuplicate) {
+                    const expenseCashflowData = {
+                      storeId: targetStoreId,
+                      category: 'Expense' as const,
+                      type: 'Other' as const,
+                      amount: expenseItem.amount.toString(),
+                      description: `${expenseItem.description} (Auto-imported from setoran data) [${idempotencyKey}]`,
+                      date: savedSales.date
+                    };
+                    
+                    // Validate using schema
+                    const { insertCashflowSchema } = await import("@shared/schema");
+                    const validatedCashflow = insertCashflowSchema.parse(expenseCashflowData);
+                    
+                    await storage.createCashflow(validatedCashflow);
+                    cashflowEntriesCreated++;
+                  }
+                }
+              }
+              
+              console.log(`Created ${cashflowEntriesCreated} additional cashflow entries for setoran ${i + 1}`);
+              
+            } catch (cashflowError) {
+              console.error(`Failed to create additional cashflow entries for setoran ${i + 1}:`, cashflowError);
+              // Don't fail the entire import if cashflow creation fails
+            }
+            
             // Real-time sync to Google Sheets if configured
             const sheetsService = getGoogleSheetsService();
             if (sheetsService) {
@@ -521,7 +634,8 @@ export function registerRoutes(app: Express): Server {
               salesId: savedSales.id,
               totalSales: salesData.totalSales,
               transactions: salesData.transactions,
-              date: salesData.date
+              date: salesData.date,
+              cashflowEntriesCreated: cashflowEntriesCreated
             });
 
             console.log(`Successfully converted setoran ${i + 1}/${setoranData.length} (Employee: ${setoran.employee_name})`);
