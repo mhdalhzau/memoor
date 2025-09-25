@@ -15,7 +15,27 @@ import { useToast } from "@/hooks/use-toast";
 import { Database, CheckCircle, AlertCircle, Loader2, TestTube, Eye, EyeOff } from "lucide-react";
 
 const databaseConfigSchema = z.object({
-  databaseUrl: z.string().url("Invalid database URL").min(1, "Database URL is required"),
+  databaseUrl: z.string()
+    .min(1, "Database URL is required")
+    .refine(
+      (url) => {
+        try {
+          const urlObj = new URL(url);
+          return urlObj.protocol === 'postgresql:' || urlObj.protocol === 'postgres:';
+        } catch {
+          return url.startsWith('postgresql://') || url.startsWith('postgres://');
+        }
+      },
+      {
+        message: "Invalid database URL format. Must start with postgresql:// or postgres://"
+      }
+    )
+    .refine(
+      (url) => url.includes('aivencloud.com'), 
+      {
+        message: "🔒 Security restriction: Only Aiven PostgreSQL databases are allowed (*.aivencloud.com)"
+      }
+    ),
   connectionPool: z.object({
     min: z.number().min(1, "Minimum connections must be at least 1").max(50, "Maximum 50 connections"),
     max: z.number().min(2, "Maximum connections must be at least 2").max(100, "Maximum 100 connections"),
@@ -62,11 +82,7 @@ export default function DatabaseConfigContent() {
 
   // Update config mutation
   const updateConfigMutation = useMutation({
-    mutationFn: (data: DatabaseConfig) => apiRequest('/api/settings/database', {
-      method: 'POST',
-      body: JSON.stringify(data),
-      headers: { 'Content-Type': 'application/json' }
-    }),
+    mutationFn: (data: DatabaseConfig) => apiRequest('POST', '/api/settings/database', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/settings/database'] });
       toast({
@@ -85,11 +101,7 @@ export default function DatabaseConfigContent() {
 
   // Test connection mutation
   const testConnectionMutation = useMutation({
-    mutationFn: (url: string) => apiRequest('/api/settings/database/test', {
-      method: 'POST',
-      body: JSON.stringify({ databaseUrl: url }),
-      headers: { 'Content-Type': 'application/json' }
-    }),
+    mutationFn: (url: string) => apiRequest('POST', '/api/settings/database/test', { databaseUrl: url }),
     onSuccess: () => {
       setConnectionStatus('success');
       setTestError("");
@@ -129,6 +141,18 @@ export default function DatabaseConfigContent() {
         title: "URL Required",
         description: "Please enter a database URL before testing."
       });
+      return;
+    }
+
+    // Client-side Aiven validation before sending request
+    if (!url.includes('aivencloud.com')) {
+      toast({
+        variant: "destructive",
+        title: "🔒 Security Restriction",
+        description: "Only Aiven PostgreSQL databases are allowed (*.aivencloud.com). Please use a valid Aiven connection string."
+      });
+      setConnectionStatus('error');
+      setTestError("Security restriction: Only Aiven databases are supported");
       return;
     }
 
@@ -195,7 +219,7 @@ export default function DatabaseConfigContent() {
                           <Input
                             {...field}
                             type={showPassword ? "text" : "password"}
-                            placeholder="postgresql://username:password@host:port/database"
+                            placeholder="postgresql:// or postgres://username:password@host:port/database"
                             data-testid="input-database-url"
                             className="pr-20"
                           />

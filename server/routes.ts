@@ -140,9 +140,16 @@ export function registerRoutes(app: Express): Server {
       
       const { databaseUrl, connectionPool, ssl } = req.body;
       
-      // Basic validation
-      if (!databaseUrl || !databaseUrl.startsWith('postgresql://')) {
-        return res.status(400).json({ message: "Invalid database URL format" });
+      // SECURITY: Only allow Aiven databases
+      if (!databaseUrl || (!databaseUrl.startsWith('postgresql://') && !databaseUrl.startsWith('postgres://'))) {
+        return res.status(400).json({ message: "Invalid database URL format. Must start with postgresql:// or postgres://" });
+      }
+      
+      if (!databaseUrl.includes('aivencloud.com')) {
+        return res.status(403).json({ 
+          message: "Security restriction: Only Aiven PostgreSQL databases are allowed",
+          details: "Please use a valid Aiven database connection string (*.aivencloud.com)"
+        });
       }
       
       // Log configuration change (without sensitive data)
@@ -174,9 +181,16 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Database URL is required" });
       }
       
-      // Validate URL format
-      if (!databaseUrl.startsWith('postgresql://')) {
-        return res.status(400).json({ message: "Invalid database URL format. Must start with postgresql://" });
+      // SECURITY: Only allow Aiven databases
+      if (!databaseUrl.startsWith('postgresql://') && !databaseUrl.startsWith('postgres://')) {
+        return res.status(400).json({ message: "Invalid database URL format. Must start with postgresql:// or postgres://" });
+      }
+      
+      if (!databaseUrl.includes('aivencloud.com')) {
+        return res.status(403).json({ 
+          message: "Security restriction: Only Aiven PostgreSQL databases are allowed",
+          details: "Please use a valid Aiven database connection string (*.aivencloud.com)"
+        });
       }
       
       // Test connection with timeout

@@ -1,54 +1,67 @@
 import { defineConfig } from "drizzle-kit";
 
-// Use database URL from environment variables
+// Use database URL from environment variables - ONLY AIVEN ALLOWED
 let databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error("DATABASE_URL must be set. This application requires a PostgreSQL database.");
+  throw new Error("DATABASE_URL must be set. This application requires Aiven PostgreSQL database.");
 }
 
-// Configure SSL based on database provider
+// SECURITY: Only allow Aiven databases
+if (!databaseUrl.includes('aivencloud.com')) {
+  throw new Error(
+    "❌ SECURITY RESTRICTION: This application only supports Aiven PostgreSQL databases. " +
+    "Please use a valid Aiven database connection string."
+  );
+}
+
+// Configure SSL for Aiven
 function getSSLConfig() {
   const isDevelopment = process.env.NODE_ENV === 'development';
+  console.log("✅ Drizzle: Using Aiven SSL configuration");
   
-  if (databaseUrl.includes('neon.tech')) {
-    console.log("✅ Drizzle: Using Neon standard SSL configuration");
-    return {
-      rejectUnauthorized: true  // Neon uses proper SSL certificates
-    };
-  } else if (databaseUrl.includes('aivencloud.com')) {
-    console.log("✅ Drizzle: Using Aiven SSL configuration");
+  // In development with explicit flag, allow insecure connection
+  if (isDevelopment && process.env.DISABLE_DB_TLS_VALIDATION === 'true') {
+    console.log("⚠️ Drizzle WARNING: TLS validation disabled for development");
+    return { rejectUnauthorized: false };
+  }
+  
+  // Try to load CA certificate for secure connection
+  try {
+    const fs = require('fs');
     
-    // In development with explicit flag, allow insecure connection
-    if (isDevelopment && process.env.DISABLE_DB_TLS_VALIDATION === 'true') {
-      console.log("⚠️ Drizzle WARNING: TLS validation disabled for development");
-      return { rejectUnauthorized: false };
-    }
+    // Use CA certificate from environment variable if available
+    let caCert = process.env.AIVEN_CA_CERT;
     
-    // Try to load CA certificate for secure connection
-    try {
-      const fs = require('fs');
+    // Fallback to file if environment variable is not set
+    if (!caCert) {
       const path = require('path');
       const caCertPath = path.resolve(__dirname, 'attached_assets', 'ca_1758665108054.pem');
-      const caCert = fs.readFileSync(caCertPath).toString();
-      
+      if (fs.existsSync(caCertPath)) {
+        caCert = fs.readFileSync(caCertPath).toString();
+      }
+    }
+    
+    if (caCert) {
       return {
         rejectUnauthorized: true,
         ca: caCert
       };
-    } catch (error) {
+    } else {
       if (isDevelopment) {
-        console.log("⚠️ Drizzle: Falling back to insecure SSL for development");
+        console.log("⚠️ Drizzle: No CA certificate found - falling back to insecure SSL for development");
         return { rejectUnauthorized: false };
       } else {
         throw new Error("Production requires valid CA certificate for Aiven connection");
       }
     }
-  } else {
-    console.log("✅ Drizzle: Using secure default SSL configuration");
-    return isDevelopment ? 
-      { rejectUnauthorized: false } : 
-      { rejectUnauthorized: true };
+  } catch (error) {
+    if (isDevelopment) {
+      console.log("⚠️ Drizzle: Falling back to insecure SSL for development");
+      return { rejectUnauthorized: false };
+    } else {
+      throw new Error("Production requires valid CA certificate for Aiven connection");
+    }
   }
 }
 
