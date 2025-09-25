@@ -3817,7 +3817,17 @@ export function registerRoutes(app: Express): Server {
         case 'sales':
           for (const storeId of targetStoreIds) {
             const storeSales = await storage.getSalesByStore(storeId);
-            data = data.concat(storeSales);
+            // Add user and store names for cleaner display
+            const enrichedSales = await Promise.all(storeSales.map(async (sale) => {
+              const user = await storage.getUserById(sale.userId);
+              const store = await storage.getStoreById(storeId);
+              return {
+                ...sale,
+                userName: user?.name || '',
+                storeName: store?.name || ''
+              };
+            }));
+            data = data.concat(enrichedSales);
           }
           break;
 
@@ -3841,11 +3851,13 @@ export function registerRoutes(app: Express): Server {
         case 'cashflow':
           for (const storeId of targetStoreIds) {
             const storeCashflow = await storage.getCashflowByStore(storeId);
-            // Add store names for cleaner display
+            // Add user and store names for cleaner display
             const enrichedCashflow = await Promise.all(storeCashflow.map(async (cf) => {
+              const user = await storage.getUserById(cf.userId);
               const store = await storage.getStoreById(storeId);
               return {
                 ...cf,
+                userName: user?.name || '',
                 storeName: store?.name || ''
               };
             }));

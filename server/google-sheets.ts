@@ -72,10 +72,10 @@ export class GoogleSheetsService {
     switch (worksheetType) {
       case 'sales':
         return [
-          '', '', '', 'Tanggal', 'Total Penjualan', 'Jumlah Transaksi', 'Rata-rata Tiket',
+          'ID Sales', 'Nama Toko', 'Nama Staff', 'Tanggal', 'Total Penjualan', 'Jumlah Transaksi', 'Rata-rata Tiket',
           'Total QRIS', 'Total Tunai', 'Meter Awal', 'Meter Akhir', 'Total Liter',
           'Total Pemasukan', 'Total Pengeluaran', 'Detail Pemasukan', 'Detail Pengeluaran',
-          'Shift', 'Jam Masuk', 'Jam Keluar', '', 'Tanggal Dibuat'
+          'Shift', 'Jam Masuk', 'Jam Keluar', 'User ID', 'Tanggal Dibuat'
         ];
       case 'attendance':
         return [
@@ -85,8 +85,8 @@ export class GoogleSheetsService {
         ];
       case 'cashflow':
         return [
-          '', '', 'Nama Toko', 'Kategori', 'Jenis', 'Jumlah', 'Keterangan',
-          '', 'Status Pembayaran', 'Jumlah Galon', 'Pajak Ongkos', 'Pajak Transfer',
+          'ID Cashflow', 'Nama Staff', 'Nama Toko', 'Kategori', 'Jenis', 'Jumlah', 'Keterangan',
+          'Customer ID', 'Status Pembayaran', 'Jumlah Galon', 'Pajak Ongkos', 'Pajak Transfer',
           'Total Pengeluaran', 'Konter', 'Hasil', 'Tanggal', 'Tanggal Dibuat'
         ];
       case 'piutang':
@@ -133,11 +133,11 @@ export class GoogleSheetsService {
     }
   }
 
-  private formatSalesDataForSheets(sales: Sales): (string | number)[] {
+  private formatSalesDataForSheets(sales: Sales & { storeName?: string; userName?: string }): (string | number)[] {
     return [
-      '', // Hide ID for cleaner view
-      '', // Hide Store ID for cleaner view
-      '', // Hide User ID for cleaner view
+      sales.id || '', // Show ID for tracking
+      sales.storeName || '', // Store name
+      sales.userName || '', // Staff name
       sales.date ? new Date(sales.date).toLocaleDateString('id-ID') : '',
       parseFloat(sales.totalSales || '0'),
       sales.transactions || 0,
@@ -154,7 +154,7 @@ export class GoogleSheetsService {
       sales.shift || '',
       sales.checkIn || '',
       sales.checkOut || '',
-      '', // Hide submission date for cleaner view
+      sales.userId || '', // Show user ID for reference
       sales.createdAt ? new Date(sales.createdAt).toLocaleDateString('id-ID') : ''
     ];
   }
@@ -180,16 +180,16 @@ export class GoogleSheetsService {
     ];
   }
 
-  private formatCashflowDataForSheets(cashflow: Cashflow & { storeName?: string }): (string | number)[] {
+  private formatCashflowDataForSheets(cashflow: Cashflow & { storeName?: string; userName?: string }): (string | number)[] {
     return [
-      '', // Hide ID for cleaner view
-      '', // Hide Store ID for cleaner view
-      cashflow.storeName || '',
+      cashflow.id || '', // Show ID for tracking
+      cashflow.userName || '', // Staff name
+      cashflow.storeName || '', // Store name
       cashflow.category || '',
       cashflow.type || '',
       parseFloat(cashflow.amount || '0'),
       cashflow.description || '',
-      '', // Hide Customer ID for cleaner view
+      cashflow.customerId || '', // Show Customer ID for reference
       cashflow.paymentStatus || '',
       parseFloat(cashflow.jumlahGalon || '0'),
       parseFloat(cashflow.pajakOngkos || '0'),
@@ -338,7 +338,7 @@ export class GoogleSheetsService {
     }
   }
 
-  async syncAllSalesData(salesData: Sales[]): Promise<void> {
+  async syncAllSalesData(salesData: (Sales & { storeName?: string; userName?: string })[]): Promise<void> {
     try {
       await this.ensureHeadersExist('sales');
       
@@ -405,7 +405,7 @@ export class GoogleSheetsService {
   }
 
   // Cashflow sync methods
-  async syncAllCashflowData(cashflowData: (Cashflow & { storeName?: string })[]): Promise<void> {
+  async syncAllCashflowData(cashflowData: (Cashflow & { storeName?: string; userName?: string })[]): Promise<void> {
     try {
       await this.ensureHeadersExist('cashflow');
       
