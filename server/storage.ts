@@ -2598,4 +2598,4 @@ export class DatabaseStorage implements IStorage {
   async createInventoryTransaction(transaction: InsertInventoryTransaction): Promise<InventoryTransaction> { throw new Error("Method not implemented."); }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
