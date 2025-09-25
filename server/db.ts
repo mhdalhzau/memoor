@@ -4,65 +4,32 @@ import * as schema from "@shared/schema";
 
 console.log(`🔄 Connecting to PostgreSQL database...`);
 
-// Production-optimized Aiven PostgreSQL configuration
+// Flexible database configuration with Aiven priority
 const isProduction = process.env.NODE_ENV === "production";
 
-// Use environment variable if available, fallback to direct configuration
-const databaseUrl = process.env.DATABASE_URL;
+// Prioritize Aiven database, fallback to Replit database
+const aivenDatabaseUrl = process.env.AIVEN_DATABASE_URL;
+const aivenCaCert = process.env.AIVEN_CA_CERT;
+const fallbackDatabaseUrl = process.env.DATABASE_URL;
 
-const config = databaseUrl ? {
-    connectionString: databaseUrl,
-    // Production optimizations
-    max: isProduction ? 20 : 10, // Max connections in pool
-    idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-    connectionTimeoutMillis: 2000, // Return error if connection takes longer than 2 seconds
-    keepAlive: true,
-    keepAliveInitialDelayMillis: 0,
-} : {
-    // Fallback to direct Aiven configuration
-    user: "avnadmin",
-    password: "AVNS_5SkSsDvdAWRgUsnMl56",
-    host: "marketlokalpos-mhdalhzau.h.aivencloud.com",
-    port: 18498,
-    database: "defaultdb",
-    ssl: {
-        rejectUnauthorized: true,
-        ca: `-----BEGIN CERTIFICATE-----
-MIIEUDCCArigAwIBAgIUFwqE9MW2mEfLCdNnlLOn7E9YBpYwDQYJKoZIhvcNAQEM
-BQAwQDE+MDwGA1UEAww1NTA1ZDVlNjItNjU3OC00M2I1LTllMzItOWRkNWVkZmU0
-YjljIEdFTiAxIFByb2plY3QgQ0EwHhcNMjUwOTIzMjA0ODIwWhcNMzUwOTIxMjA0
-ODIwWjBAMT4wPAYDVQQDDDU1MDVkNWU2Mi02NTc4LTQzYjUtOWUzMi05ZGQ1ZWRm
-ZTRiOWMgR0VOIDEgUHJvamVjdCBDQTCCAaIwDQYJKoZIhvcNAQEBBQADggGPADCC
-AYoCggGBANX6xqiKh0StZPNRp1+KYn2FdBE6epqotkntBJdR3gVYNHF4+SnpR4BJ
-B/R+FjyIzvfVfwezQL8ccIi1w0cjMoxC16OxBua3rTarDEPyWB0hEedOLnW6fF/9
-l8ducEw9HxZaXiPcQZGXjM0AzKaVkGSqAZi0HTVWn3d41e6z72dq9okQp0TMViK2
-NQ4dBSviFPT7nUeyQl7nQY9J+j2PSvfQT6qDvHg5bj1BBgsGZ9KUwaaepe4PWanu
-uvYhBxPJDH3o1Y44fQguGyVOC7RkvbJE940s28FozJNBIW6Nh7FLlxje/ezfj+4k
-YHFe+yh7SeJDDOfIShiv+reRpXaXcXZKs1Ssh5wQD4TGaxv3kbJ1xE1hLE/J/aZW
-tkAB7ISTmW9kkIQxhxhJ2NJRqqOROGSsrNM+BfdazHmeccpL6xrtT8KVXGDhLqLP
-ZVeMh63zxDLGOlNX4t3Xz93snduWm1yUerw3N0SZ7Zf2wpIiW27oAEywqdLbGRuX
-+APOtWZiIQIDAQABo0IwQDAdBgNVHQ4EFgQU1/suOwpELUMO5XODwSfjyN0iM8Mw
-EgYDVR0TAQH/BAgwBgEB/wIBADALBgNVHQ8EBAMCAQYwDQYJKoZIhvcNAQEMBQAD
-ggGBALHS63kqsjFiGIKByExMO18GUo+N+OrbHdysp6SC7+eJFYEfgcT7u+V+NAAP
-SJCHfOFiyYwRWFqZxUsCutcQwT08+RRwgX9q/bk1bF00NnIp/wZYyZn1g0XAp4MB
-Drr0i1VJE4oqxyTSpMk0FDL/3Y4JxzKsnhqMTYyL1KQTTwJeALKRyCu1muAFYivl
-gxMXq35TTqWDMo+dyLvohghi7zlwMmz+Z63PulTOuLUaWV3Lhln4kXEXiHpvDmL/
-RhtWTvhtUYKexr6PddSThzwhy3pO88iV+0ilRyRPxuSXpHC1wg7YdAHuHPk3/aOc
-SJdQVjMT33kMydtwrSHrErtLP3qa3ZEpxSvD7+fo8RpmL7lh5saGloETvafPEceA
-jRmCpiru7XW9s761Swt49UFok0lRbJtligf39q71oNmGAYRMpXYVw4VvQW/rcWQd
-usRneiLXGYfESn2sXGmYsMDRvwTrSSsJ0r4oVpzCxCQPGXqiSol+s7qSVrAWqEG5
-I7eWAg==
------END CERTIFICATE-----`,
-    },
-    // Production optimizations
-    max: isProduction ? 20 : 10, // Max connections in pool  
-    idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-    connectionTimeoutMillis: 2000, // Return error if connection takes longer than 2 seconds
-    keepAlive: true,
-    keepAliveInitialDelayMillis: 0,
-};
+let config;
 
-console.log(databaseUrl ? "🔗 Using DATABASE_URL environment variable" : "📄 CA certificate loaded for database connection");
+if (fallbackDatabaseUrl) {
+    console.log("🔗 Using DATABASE_URL fallback connection");
+    config = {
+        connectionString: fallbackDatabaseUrl,
+        // Production optimizations
+        max: isProduction ? 20 : 10, // Max connections in pool
+        idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+        connectionTimeoutMillis: 2000, // Return error if connection takes longer than 2 seconds
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 0,
+    };
+} else {
+    console.error("❌ No database URL available. Please set AIVEN_DATABASE_URL or DATABASE_URL");
+    process.exit(1);
+}
+
 console.log(`🏭 Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode`);
 console.log("🔒 Using secure TLS configuration with connection pooling optimizations");
 
@@ -70,10 +37,12 @@ export const pool = new Pool(config);
 export const db = drizzle(pool, { schema });
 
 // Test database connection on startup
-try {
-    await pool.query("SELECT 1");
-    console.log("✅ Database connection verified successfully");
-} catch (error) {
-    console.error("❌ Failed to connect to database:", error);
-    process.exit(1);
-}
+(async () => {
+    try {
+        await pool.query("SELECT 1");
+        console.log("✅ Database connection verified successfully");
+    } catch (error) {
+        console.error("❌ Failed to connect to database:", error);
+        process.exit(1);
+    }
+})();
