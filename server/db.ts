@@ -9,24 +9,28 @@ const isProduction = process.env.NODE_ENV === "production";
 
 // Prioritize Aiven database, fallback to Replit database
 const aivenDatabaseUrl = process.env.AIVEN_DATABASE_URL;
-const aivenCaCert = process.env.AIVEN_CA_CERT;
 const fallbackDatabaseUrl = process.env.DATABASE_URL;
 
 let config;
 
-if (aivenDatabaseUrl && aivenCaCert) {
+if (aivenDatabaseUrl) {
     console.log("🔗 Using Aiven PostgreSQL database connection");
-    // Use sslmode=no-verify for self-signed certificates as recommended by node-postgres maintainer
-    const cleanUrl = aivenDatabaseUrl.replace(/[?&]sslmode=[^&]*/g, '');
-    const connectionStringWithNoVerify = cleanUrl + (cleanUrl.includes('?') ? '&' : '?') + 'sslmode=no-verify';
+    
+    // For development, temporarily disable SSL verification 
+    // In production, you should use proper certificates
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    
     config = {
-        connectionString: connectionStringWithNoVerify,
-        // Production optimizations
+        connectionString: aivenDatabaseUrl,
+        // Production optimizations for Aiven
         max: isProduction ? 20 : 10, // Max connections in pool
         idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-        connectionTimeoutMillis: 2000, // Return error if connection takes longer than 2 seconds
+        connectionTimeoutMillis: 10000, // Longer timeout for Aiven
         keepAlive: true,
         keepAliveInitialDelayMillis: 0,
+        ssl: {
+            rejectUnauthorized: false
+        }
     };
 } else if (fallbackDatabaseUrl) {
     console.log("🔗 Using DATABASE_URL fallback connection");
