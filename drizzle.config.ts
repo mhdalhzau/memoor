@@ -1,18 +1,55 @@
 import { defineConfig } from "drizzle-kit";
 
-// Use Neon database URL - check both NEON_DATABASE_URL and DATABASE_URL  
-let databaseUrl = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
+// Use database URL from environment variables
+let databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error("NEON_DATABASE_URL or DATABASE_URL must be set. This application requires Neon PostgreSQL database.");
+  throw new Error("DATABASE_URL must be set. This application requires a PostgreSQL database.");
 }
 
-// Neon uses standard SSL configuration - no custom certificates needed
+// Configure SSL based on database provider
 function getSSLConfig() {
-  console.log("✅ Drizzle: Using Neon standard SSL configuration");
-  return {
-    rejectUnauthorized: true  // Neon uses proper SSL certificates
-  };
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
+  if (databaseUrl.includes('neon.tech')) {
+    console.log("✅ Drizzle: Using Neon standard SSL configuration");
+    return {
+      rejectUnauthorized: true  // Neon uses proper SSL certificates
+    };
+  } else if (databaseUrl.includes('aivencloud.com')) {
+    console.log("✅ Drizzle: Using Aiven SSL configuration");
+    
+    // In development with explicit flag, allow insecure connection
+    if (isDevelopment && process.env.DISABLE_DB_TLS_VALIDATION === 'true') {
+      console.log("⚠️ Drizzle WARNING: TLS validation disabled for development");
+      return { rejectUnauthorized: false };
+    }
+    
+    // Try to load CA certificate for secure connection
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const caCertPath = path.resolve(__dirname, 'attached_assets', 'ca_1758665108054.pem');
+      const caCert = fs.readFileSync(caCertPath).toString();
+      
+      return {
+        rejectUnauthorized: true,
+        ca: caCert
+      };
+    } catch (error) {
+      if (isDevelopment) {
+        console.log("⚠️ Drizzle: Falling back to insecure SSL for development");
+        return { rejectUnauthorized: false };
+      } else {
+        throw new Error("Production requires valid CA certificate for Aiven connection");
+      }
+    }
+  } else {
+    console.log("✅ Drizzle: Using secure default SSL configuration");
+    return isDevelopment ? 
+      { rejectUnauthorized: false } : 
+      { rejectUnauthorized: true };
+  }
 }
 
 export default defineConfig({

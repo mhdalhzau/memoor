@@ -1,38 +1,75 @@
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from "@shared/schema";
+import fs from 'fs';
+import path from 'path';
 
-// Use Neon database URL - check both NEON_DATABASE_URL and DATABASE_URL
+// Use database URL from environment variables
 const databaseUrl = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!databaseUrl) {
   throw new Error(
-    "NEON_DATABASE_URL or DATABASE_URL must be set. This application requires Neon PostgreSQL database.",
+    "DATABASE_URL must be set. This application requires a PostgreSQL database.",
   );
 }
 
-// Determine which environment variable is being used
-const usingNeonVar = !!process.env.NEON_DATABASE_URL;
-const usingDatabaseVar = !process.env.NEON_DATABASE_URL && !!process.env.DATABASE_URL;
-
-if (process.env.NEON_DATABASE_URL && process.env.DATABASE_URL && process.env.NEON_DATABASE_URL !== process.env.DATABASE_URL) {
-  console.log("⚠️ Warning: Both NEON_DATABASE_URL and DATABASE_URL are set with different values. Using NEON_DATABASE_URL.");
-}
-
-console.log(`🔄 Using database connection from ${usingNeonVar ? 'NEON_DATABASE_URL' : 'DATABASE_URL'}`);
+// Determine database provider and configure SSL accordingly
+let sslConfig;
+let providerName = "PostgreSQL";
 
 if (databaseUrl.includes('neon.tech')) {
   console.log("🔄 Connecting to Neon PostgreSQL database...");
+  providerName = "Neon PostgreSQL";
+  sslConfig = {
+    rejectUnauthorized: true  // Neon uses proper SSL certificates
+  };
+} else if (databaseUrl.includes('aivencloud.com')) {
+  console.log("🔄 Connecting to Aiven PostgreSQL database...");
+  providerName = "Aiven PostgreSQL";
+  
+  // Proper Aiven SSL configuration with CA certificate
+  const caCertPath = path.resolve(import.meta.dirname, '..', 'attached_assets', 'ca_1758665108054.pem');
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
+  try {
+    const caCert = fs.readFileSync(caCertPath).toString();
+    console.log("📄 CA certificate loaded for Aiven connection");
+    
+    if (isDevelopment && process.env.DISABLE_DB_TLS_VALIDATION === 'true') {
+      console.log("⚠️ WARNING: TLS validation disabled for development only");
+      // For development, disable TLS verification globally as a workaround
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+      sslConfig = {
+        rejectUnauthorized: false
+      };
+    } else {
+      // Secure configuration for production
+      console.log("🔒 Using secure TLS configuration with CA certificate");
+      sslConfig = {
+        rejectUnauthorized: true,
+        ca: caCert,
+        minVersion: 'TLSv1.2'
+      };
+    }
+  } catch (error) {
+    console.error(`❌ Failed to read CA certificate: ${error}`);
+    if (isDevelopment) {
+      console.log("⚠️ Falling back to insecure SSL for development");
+      sslConfig = { rejectUnauthorized: false };
+    } else {
+      throw new Error("Production requires valid CA certificate for Aiven connection");
+    }
+  }
 } else {
-  console.log("⚠️ Warning: Database URL does not appear to be Neon - please verify it points to your Neon instance");
+  console.log("🔄 Connecting to PostgreSQL database...");
+  // Secure default for unknown providers
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  sslConfig = isDevelopment ? 
+    { rejectUnauthorized: false } : 
+    { rejectUnauthorized: true, minVersion: 'TLSv1.2' };
 }
 
-// Neon uses standard SSL configuration
-console.log("🔄 Using Neon PostgreSQL database");
-
-const sslConfig = {
-  rejectUnauthorized: true  // Neon uses proper SSL certificates
-};
+console.log(`🔄 Using ${providerName} database`);
 
 export const pool = new Pool({ 
   connectionString: databaseUrl,
