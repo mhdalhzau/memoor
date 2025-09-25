@@ -41,7 +41,8 @@ app.use((req, res, next) => {
   const server = await registerRoutes(app);
   
   // Setup database middleware untuk operasi CRUD yang dioptimalkan
-  setupDatabaseMiddleware(app);
+  // TODO: Fix route conflicts with existing routes.ts before enabling
+  // setupDatabaseMiddleware(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
