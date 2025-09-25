@@ -301,7 +301,8 @@ export function registerRoutes(app: Express): Server {
 
   // Attendance routes
   // Commented out - replaced by middleware integration
-  // app.post("/api/attendance", async (req, res) => {
+  /*
+  app.post("/api/attendance", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
       
@@ -365,6 +366,7 @@ export function registerRoutes(app: Express): Server {
       res.status(400).json({ message: error.message });
     }
   });
+  */
 
   app.get("/api/attendance", async (req, res) => {
     try {
@@ -1746,7 +1748,8 @@ export function registerRoutes(app: Express): Server {
 
   // Cashflow routes
   // Commented out - replaced by middleware integration
-  // app.post("/api/cashflow", async (req, res) => {
+  /*
+  app.post("/api/cashflow", async (req, res) => {
     try {
       if (!req.user || !['manager', 'administrasi', 'staff'].includes(req.user.role)) {
         return res.status(403).json({ message: "Forbidden" });
@@ -1774,6 +1777,7 @@ export function registerRoutes(app: Express): Server {
       res.status(400).json({ message: error.message });
     }
   });
+  */
 
   app.get("/api/cashflow", async (req, res) => {
     try {
@@ -3060,7 +3064,8 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Commented out - replaced by middleware integration
-  // app.post("/api/stores", async (req, res) => {
+  /*
+  app.post("/api/stores", async (req, res) => {
     try {
       if (!req.user || req.user.role !== 'manager') {
         return res.status(403).json({ message: "Forbidden" });
@@ -3072,6 +3077,7 @@ export function registerRoutes(app: Express): Server {
       res.status(400).json({ message: error.message });
     }
   });
+  */
 
   app.patch("/api/stores/:id", async (req, res) => {
     try {
@@ -3129,11 +3135,12 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Commented out - replaced by middleware integration
-  // app.post("/api/customers", async (req, res) => {
-  //   try {
-  //     if (!req.user) return res.status(401).json({ message: "Unauthorized" });
-  //     
-  //     const targetStoreId = req.body.storeId || await getUserFirstStoreId(req.user);
+  /*
+  app.post("/api/customers", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const targetStoreId = req.body.storeId || await getUserFirstStoreId(req.user);
       
       if (!targetStoreId) {
         return res.status(400).json({ message: "Store ID is required" });
@@ -3155,6 +3162,7 @@ export function registerRoutes(app: Express): Server {
       res.status(400).json({ message: error.message });
     }
   });
+  */
 
   app.patch("/api/customers/:id", async (req, res) => {
     try {
@@ -4267,6 +4275,8 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Duplicate customer route - commented out
+  /*
   app.post("/api/customers", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
@@ -4298,6 +4308,7 @@ export function registerRoutes(app: Express): Server {
       res.status(400).json({ message: error.message });
     }
   });
+  */
 
   app.put("/api/customers/:id", async (req, res) => {
     try {
@@ -4722,7 +4733,8 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Commented out - replaced by middleware integration
-  // app.post("/api/products", async (req, res) => {
+  /*
+  app.post("/api/products", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
       
@@ -4750,6 +4762,7 @@ export function registerRoutes(app: Express): Server {
       res.status(400).json({ message: error.message });
     }
   });
+  */
 
   app.put("/api/products/:id", async (req, res) => {
     try {
