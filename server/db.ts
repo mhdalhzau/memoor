@@ -16,10 +16,6 @@ let config;
 if (aivenDatabaseUrl) {
     console.log("🔗 Using Aiven PostgreSQL database connection");
     
-    // For development, temporarily disable SSL verification 
-    // In production, you should use proper certificates
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-    
     config = {
         connectionString: aivenDatabaseUrl,
         // Production optimizations for Aiven
@@ -28,9 +24,8 @@ if (aivenDatabaseUrl) {
         connectionTimeoutMillis: 10000, // Longer timeout for Aiven
         keepAlive: true,
         keepAliveInitialDelayMillis: 0,
-        ssl: {
-            rejectUnauthorized: false
-        }
+        // SSL completely disabled
+        ssl: false
     };
 } else if (fallbackDatabaseUrl) {
     console.log("🔗 Using DATABASE_URL fallback connection");
@@ -47,8 +42,8 @@ if (aivenDatabaseUrl) {
         connectionTimeoutMillis: isExternalDb ? 10000 : 2000, // Longer timeout for external databases
         keepAlive: true,
         keepAliveInitialDelayMillis: 0,
-        // SSL configuration for external databases
-        ssl: isExternalDb ? { rejectUnauthorized: false } : false,
+        // SSL completely disabled
+        ssl: false,
     };
 } else {
     console.error("❌ No database URL available. Please set AIVEN_DATABASE_URL or DATABASE_URL");
