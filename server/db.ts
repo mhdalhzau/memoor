@@ -1,72 +1,97 @@
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";
+import fs from "fs";
+import path from "path";
+import "dotenv/config";
 
-console.log(`🔄 Connecting to PostgreSQL database...`);
+// Use database URL from environment variables
+const databaseUrl = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
 
-// Flexible database configuration with Aiven priority
-const isProduction = process.env.NODE_ENV === "production";
-
-// Prioritize Aiven database, fallback to Replit database
-const aivenDatabaseUrl = process.env.AIVEN_DATABASE_URL;
-const fallbackDatabaseUrl = process.env.DATABASE_URL;
-
-let config;
-
-if (aivenDatabaseUrl) {
-    console.log("🔗 Using Aiven PostgreSQL database connection");
-    
-    config = {
-        connectionString: aivenDatabaseUrl,
-        // Production optimizations for Aiven
-        max: isProduction ? 20 : 10, // Max connections in pool
-        idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-        connectionTimeoutMillis: 10000, // Longer timeout for Aiven
-        keepAlive: true,
-        keepAliveInitialDelayMillis: 0,
-        // SSL completely disabled
-        ssl: false
-    };
-} else if (fallbackDatabaseUrl) {
-    console.log("🔗 Using DATABASE_URL fallback connection");
-    
-    // Check if it's an external database
-    const url = new URL(fallbackDatabaseUrl);
-    const isExternalDb = url.hostname !== 'localhost' && url.hostname !== '127.0.0.1';
-    
-    config = {
-        connectionString: fallbackDatabaseUrl,
-        // Production optimizations
-        max: isProduction ? 20 : 10, // Max connections in pool
-        idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-        connectionTimeoutMillis: isExternalDb ? 10000 : 2000, // Longer timeout for external databases
-        keepAlive: true,
-        keepAliveInitialDelayMillis: 0,
-        // SSL completely disabled
-        ssl: false,
-    };
-} else {
-    console.error("❌ No database URL available. Please set AIVEN_DATABASE_URL or DATABASE_URL");
-    process.exit(1);
+if (!databaseUrl) {
+  throw new Error(
+    "DATABASE_URL must be set. This application requires a PostgreSQL database.",
+  );
 }
 
-console.log(`🏭 Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode`);
-console.log("🔒 Using secure TLS configuration with connection pooling optimizations");
+// Determine database provider and configure SSL accordingly
+let poolConfig: any = {
+  connectionString: databaseUrl,
+};
+let providerName = "PostgreSQL";
 
-export const pool = new Pool(config);
+if (databaseUrl.includes("neon.tech")) {
+  console.log("🔄 Connecting to Neon PostgreSQL database...");
+  providerName = "Neon PostgreSQL";
+  poolConfig.ssl = {
+    rejectUnauthorized: true, // Neon uses proper SSL certificates
+  };
+} else if (databaseUrl.includes("aivencloud.com")) {
+  console.log("🔄 Connecting to Aiven PostgreSQL database...");
+  providerName = "Aiven PostgreSQL";
+
+  // Proper Aiven SSL configuration with CA certificate
+  const caCertPath = path.resolve(
+    import.meta.dirname,
+    "..",
+    "attached_assets",
+    "ca_aiven.pem",
+  );
+  const isDevelopment = process.env.NODE_ENV === "development";
+
+  try {
+    const caCert = fs.readFileSync(caCertPath).toString();
+    console.log("📄 CA certificate loaded for Aiven connection");
+
+    if (isDevelopment && process.env.DISABLE_DB_TLS_VALIDATION === "true") {
+      console.log("⚠️ WARNING: TLS validation disabled for development only");
+      poolConfig.ssl = {
+        rejectUnauthorized: false,
+      };
+    } else {
+      // Secure configuration for production
+      console.log("🔒 Using secure TLS configuration with CA certificate");
+      poolConfig.ssl = {
+        rejectUnauthorized: true,
+        ca: caCert,
+        minVersion: "TLSv1.2",
+      };
+    }
+  } catch (error) {
+    console.error(`❌ Failed to read CA certificate: ${error}`);
+    if (isDevelopment) {
+      console.log("⚠️ Falling back to insecure SSL for development");
+      poolConfig.ssl = { rejectUnauthorized: false };
+    } else {
+      throw new Error(
+        "Production requires valid CA certificate for Aiven connection",
+      );
+    }
+  }
+} else {
+  console.log("🔄 Connecting to PostgreSQL database...");
+  // Untuk server yang tidak support SSL, jangan set ssl sama sekali
+  // poolConfig.ssl = ...  // Jangan di-set
+}
+
+console.log(`🔄 Using ${providerName} database`);
+
+export const pool = new Pool(poolConfig);
 export const db = drizzle(pool, { schema });
 
 // Test database connection on startup (non-blocking)
 (async () => {
-    try {
-        await pool.query("SELECT 1");
-        console.log("✅ Database connection verified successfully");
-    } catch (error) {
-        console.error("❌ Failed to connect to database:", error);
-        console.log("⚠️ Application will continue running without database connection");
-        console.log("🔍 Please check:");
-        console.log("   - Database server is running and accessible");
-        console.log("   - Firewall allows connections from Replit");
-        console.log("   - Database credentials are correct");
-    }
+  try {
+    await pool.query("SELECT 1");
+    console.log("✅ Database connection verified successfully");
+  } catch (error) {
+    console.error("❌ Failed to connect to database:", error);
+    console.log(
+      "⚠️ Application will continue running without database connection",
+    );
+    console.log("🔍 Please check:");
+    console.log("   - Database server is running and accessible");
+    console.log("   - Firewall allows connections from Replit");
+    console.log("   - Database credentials are correct");
+  }
 })();
