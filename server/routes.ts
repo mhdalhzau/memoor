@@ -2,6 +2,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
+import { initializeRealtimeService, getRealtimeService } from "./websocket";
+import { realtimeMiddleware } from "./middleware/realtime";
 import { 
   initializeGoogleSheetsService, 
   getGoogleSheetsService, 
@@ -80,6 +82,9 @@ export function registerRoutes(app: Express): Server {
 
   // Setup authentication routes
   setupAuth(app);
+  
+  // Setup real-time middleware for automatic event broadcasting
+  app.use(realtimeMiddleware);
   
   // Database settings routes
   app.get("/api/settings/database", async (req, res) => {
@@ -4921,5 +4926,19 @@ export function registerRoutes(app: Express): Server {
   });
 
   const httpServer = createServer(app);
+  
+  // Initialize WebSocket service with session middleware
+  const sessionMiddleware = app._router.stack.find((layer: any) => 
+    layer.name === 'session'
+  )?.handle;
+  
+  if (sessionMiddleware) {
+    const realtimeService = initializeRealtimeService(httpServer, sessionMiddleware);
+    console.log(`🚀 Real-time WebSocket service initialized`);
+    console.log(`📡 Connected users: ${realtimeService.getConnectedUsersCount()}`);
+  } else {
+    console.warn('⚠️ Session middleware not found, WebSocket authentication may fail');
+  }
+  
   return httpServer;
 }

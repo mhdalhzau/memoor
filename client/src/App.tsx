@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "./hooks/use-auth";
 import { ProtectedRoute } from "./lib/protected-route";
+import { WebSocketProvider } from "@/lib/websocket-provider";
 import HomePage from "@/pages/home-page";
 import AuthPage from "@/pages/auth-page";
 import StaffPage from "@/pages/staff-page";
@@ -29,10 +30,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <WebSocketProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </WebSocketProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
