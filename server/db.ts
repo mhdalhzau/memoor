@@ -27,15 +27,6 @@ if (databaseUrl.includes('neon.tech')) {
   console.log("⚠️ Warning: Database URL does not appear to be Neon - please verify it points to your Neon instance");
 }
 
-// Test database connection on startup
-try {
-  await pool.query('SELECT 1');
-  console.log("✅ Database connection verified successfully");
-} catch (error) {
-  console.error("❌ Failed to connect to database:", error);
-  process.exit(1);
-}
-
 // Neon uses standard SSL configuration
 console.log("🔄 Using Neon PostgreSQL database");
 
@@ -48,3 +39,12 @@ export const pool = new Pool({
   ssl: sslConfig
 });
 export const db = drizzle(pool, { schema });
+
+// Test database connection on startup
+try {
+  await pool.query('SELECT 1');
+  console.log("✅ Database connection verified successfully");
+} catch (error) {
+  console.error("❌ Failed to connect to database:", error);
+  process.exit(1);
+}
