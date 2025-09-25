@@ -3819,8 +3819,8 @@ export function registerRoutes(app: Express): Server {
             const storeSales = await storage.getSalesByStore(storeId);
             // Add user and store names for cleaner display
             const enrichedSales = await Promise.all(storeSales.map(async (sale) => {
-              const user = await storage.getUserById(sale.userId);
-              const store = await storage.getStoreById(storeId);
+              const user = await storage.getUser(sale.userId);
+              const store = await storage.getStore(storeId);
               return {
                 ...sale,
                 userName: user?.name || '',
@@ -3836,8 +3836,8 @@ export function registerRoutes(app: Express): Server {
             const storeAttendance = await storage.getAttendanceByStore(storeId);
             // Add user and store names for cleaner display
             const enrichedAttendance = await Promise.all(storeAttendance.map(async (att) => {
-              const user = await storage.getUserById(att.userId);
-              const store = await storage.getStoreById(storeId);
+              const user = await storage.getUser(att.userId);
+              const store = await storage.getStore(storeId);
               return {
                 ...att,
                 userName: user?.name || '',
@@ -3853,8 +3853,8 @@ export function registerRoutes(app: Express): Server {
             const storeCashflow = await storage.getCashflowByStore(storeId);
             // Add user and store names for cleaner display
             const enrichedCashflow = await Promise.all(storeCashflow.map(async (cf) => {
-              const user = await storage.getUserById(cf.userId);
-              const store = await storage.getStoreById(storeId);
+              const user = await storage.getUser(cf.userId);
+              const store = await storage.getStore(storeId);
               return {
                 ...cf,
                 userName: user?.name || '',
@@ -3870,8 +3870,8 @@ export function registerRoutes(app: Express): Server {
             const storePiutang = await storage.getPiutangByStore(storeId);
             // Add customer and store names for cleaner display
             const enrichedPiutang = await Promise.all(storePiutang.map(async (piutang) => {
-              const customer = await storage.getCustomerById(piutang.customerId);
-              const store = await storage.getStoreById(storeId);
+              const customer = await storage.getCustomer(piutang.customerId);
+              const store = await storage.getStore(storeId);
               return {
                 ...piutang,
                 customerName: customer?.name || '',
@@ -3885,7 +3885,7 @@ export function registerRoutes(app: Express): Server {
         case 'dashboard':
           // Generate dashboard summary for each store
           for (const storeId of targetStoreIds) {
-            const store = await storage.getStoreById(storeId);
+            const store = await storage.getStore(storeId);
             const sales = await storage.getSalesByStore(storeId);
             const cashflow = await storage.getCashflowByStore(storeId);
             const piutang = await storage.getPiutangByStore(storeId);
