@@ -14,27 +14,25 @@ if (!databaseUrl) {
 }
 
 // Database provider detection
-let providerName = "PostgreSQL";
-if (databaseUrl.includes('aivencloud.com')) {
-  providerName = "Aiven PostgreSQL";
-} else if (databaseUrl.includes('neon.tech')) {
-  providerName = "Neon PostgreSQL";
-} else if (databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1')) {
-  providerName = "Local PostgreSQL";
-} else {
-  providerName = "Replit PostgreSQL";
+let providerType = "cloud";
+if (databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1')) {
+  providerType = "local";
 }
 
-console.log(`🔄 Connecting to ${providerName} database...`);
+console.log(`🔄 Connecting to PostgreSQL database...`);
 
 // SSL configuration based on database provider
 const isDevelopment = process.env.NODE_ENV === 'development';
 
 let sslConfig;
 try {
-  if (providerName === "Aiven PostgreSQL") {
-    // Use CA certificate from environment variable if available for Aiven
-    let caCert = process.env.AIVEN_CA_CERT;
+  if (providerType === "local") {
+    // Local databases typically don't use SSL
+    console.log("🔓 Using non-SSL configuration for local database");
+    sslConfig = false;
+  } else {
+    // For cloud databases, check for custom CA certificate
+    let caCert = process.env.DATABASE_CA_CERT;
     
     // Fallback to file if environment variable is not set (for backward compatibility)
     if (!caCert) {
@@ -45,7 +43,7 @@ try {
     }
     
     if (caCert) {
-      console.log("📄 CA certificate loaded for Aiven connection");
+      console.log("📄 CA certificate loaded for database connection");
       
       if (isDevelopment && process.env.DISABLE_DB_TLS_VALIDATION === 'true') {
         console.log("⚠️ WARNING: TLS validation disabled for development only");
@@ -60,25 +58,14 @@ try {
         };
       }
     } else {
-      if (isDevelopment) {
-        console.log("⚠️ No CA certificate found - using fallback SSL for development");
+      // Standard SSL configuration for cloud databases
+      if (isDevelopment && process.env.DISABLE_DB_TLS_VALIDATION === 'true') {
+        console.log("⚠️ WARNING: TLS validation disabled for development only");
         sslConfig = { rejectUnauthorized: false };
       } else {
-        throw new Error("❌ Production requires valid CA certificate for Aiven connection");
+        console.log("🔒 Using standard TLS configuration");
+        sslConfig = { rejectUnauthorized: true };
       }
-    }
-  } else if (providerName === "Local PostgreSQL") {
-    // Local databases typically don't use SSL
-    console.log("🔓 Using non-SSL configuration for local database");
-    sslConfig = false;
-  } else {
-    // For other managed databases (Neon, Replit, etc.), use standard SSL
-    if (isDevelopment && process.env.DISABLE_DB_TLS_VALIDATION === 'true') {
-      console.log("⚠️ WARNING: TLS validation disabled for development only");
-      sslConfig = { rejectUnauthorized: false };
-    } else {
-      console.log("🔒 Using standard TLS configuration");
-      sslConfig = { rejectUnauthorized: true };
     }
   }
 } catch (error) {
@@ -91,7 +78,7 @@ try {
   }
 }
 
-console.log(`🔄 Using ${providerName} database`);
+console.log(`🔄 Using PostgreSQL database`);
 
 export const pool = new Pool({ 
   connectionString: databaseUrl,
