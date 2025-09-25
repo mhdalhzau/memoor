@@ -300,7 +300,8 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Attendance routes
-  app.post("/api/attendance", async (req, res) => {
+  // Commented out - replaced by middleware integration
+  // app.post("/api/attendance", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
       
@@ -1744,7 +1745,8 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Cashflow routes
-  app.post("/api/cashflow", async (req, res) => {
+  // Commented out - replaced by middleware integration
+  // app.post("/api/cashflow", async (req, res) => {
     try {
       if (!req.user || !['manager', 'administrasi', 'staff'].includes(req.user.role)) {
         return res.status(403).json({ message: "Forbidden" });
@@ -3057,7 +3059,8 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.post("/api/stores", async (req, res) => {
+  // Commented out - replaced by middleware integration
+  // app.post("/api/stores", async (req, res) => {
     try {
       if (!req.user || req.user.role !== 'manager') {
         return res.status(403).json({ message: "Forbidden" });
@@ -3125,11 +3128,12 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.post("/api/customers", async (req, res) => {
-    try {
-      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
-      
-      const targetStoreId = req.body.storeId || await getUserFirstStoreId(req.user);
+  // Commented out - replaced by middleware integration
+  // app.post("/api/customers", async (req, res) => {
+  //   try {
+  //     if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+  //     
+  //     const targetStoreId = req.body.storeId || await getUserFirstStoreId(req.user);
       
       if (!targetStoreId) {
         return res.status(400).json({ message: "Store ID is required" });
@@ -4717,7 +4721,8 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.post("/api/products", async (req, res) => {
+  // Commented out - replaced by middleware integration
+  // app.post("/api/products", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
       
