@@ -36,9 +36,7 @@ export function SyncButton({ dataType, storeIds, className, variant = "outline" 
 
   // Setup organized worksheets
   const setupWorksheetsMutation = useMutation({
-    mutationFn: () => apiRequest("/api/google-sheets/setup-organized", {
-      method: "POST"
-    }),
+    mutationFn: () => apiRequest("POST", "/api/google-sheets/setup-organized"),
     onSuccess: (data) => {
       if (data.worksheets && data.worksheets.length > 0) {
         toast({
@@ -66,13 +64,10 @@ export function SyncButton({ dataType, storeIds, className, variant = "outline" 
 
   // Sync data mutation
   const syncMutation = useMutation({
-    mutationFn: (worksheetName: string) => apiRequest("/api/google-sheets/sync-data", {
-      method: "POST",
-      body: JSON.stringify({
-        dataType,
-        worksheetName,
-        storeIds
-      })
+    mutationFn: (worksheetName: string) => apiRequest("POST", "/api/google-sheets/sync-data", {
+      dataType,
+      worksheetName,
+      storeIds
     }),
     onSuccess: (data) => {
       toast({
@@ -94,11 +89,8 @@ export function SyncButton({ dataType, storeIds, className, variant = "outline" 
 
   // Read data mutation
   const readMutation = useMutation({
-    mutationFn: (worksheetName: string) => apiRequest("/api/google-sheets/read-data", {
-      method: "POST",
-      body: JSON.stringify({
-        worksheetName
-      })
+    mutationFn: (worksheetName: string) => apiRequest("POST", "/api/google-sheets/read-data", {
+      worksheetName
     }),
     onSuccess: (data) => {
       toast({

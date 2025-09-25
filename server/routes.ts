@@ -56,8 +56,8 @@ export function registerRoutes(app: Express): Server {
   // Initialize Google Sheets Service if credentials are available
   const initializeGoogleSheets = () => {
     try {
-      const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
-      const credentials = process.env.GOOGLE_SHEETS_CREDENTIALS;
+      const spreadsheetId = process.env.GOOGLE_SHEET_ID?.trim();
+      const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS;
       
       if (spreadsheetId && credentials) {
         const config: GoogleSheetsConfig = {
@@ -1444,7 +1444,7 @@ export function registerRoutes(app: Express): Server {
       if (!sheetsService) {
         return res.status(400).json({ 
           message: "Google Sheets not configured",
-          details: "Please configure GOOGLE_SHEETS_CREDENTIALS and GOOGLE_SHEETS_SPREADSHEET_ID environment variables"
+          details: "Please configure GOOGLE_SERVICE_ACCOUNT_CREDENTIALS and GOOGLE_SHEET_ID environment variables"
         });
       }
 
@@ -1511,7 +1511,7 @@ export function registerRoutes(app: Express): Server {
       res.json({
         configured: true,
         connected: isConnected,
-        spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
+        spreadsheetId: process.env.GOOGLE_SHEET_ID?.trim(),
         message: isConnected ? "Google Sheets connected successfully" : "Failed to connect to Google Sheets"
       });
 
@@ -3421,9 +3421,9 @@ export function registerRoutes(app: Express): Server {
       const sheetsService = getGoogleSheetsService();
       const config = {
         id: "default",
-        spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID || googleSheetsConfig?.spreadsheetId || "",
+        spreadsheetId: process.env.GOOGLE_SHEET_ID?.trim() || googleSheetsConfig?.spreadsheetId || "",
         worksheetName: googleSheetsConfig?.worksheetName || "Sales Data",
-        syncEnabled: googleSheetsConfig?.syncEnabled || !!process.env.GOOGLE_SHEETS_CREDENTIALS,
+        syncEnabled: googleSheetsConfig?.syncEnabled || !!process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS,
         autoSync: googleSheetsConfig?.autoSync || false,
         lastSyncAt: googleSheetsConfig?.lastSyncAt,
         status: sheetsService ? "connected" : "disconnected" as "connected" | "disconnected" | "error",
@@ -3449,7 +3449,7 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Spreadsheet ID and worksheet name are required" });
       }
 
-      if (syncEnabled && !credentials && !process.env.GOOGLE_SHEETS_CREDENTIALS) {
+      if (syncEnabled && !credentials && !process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS) {
         return res.status(400).json({ message: "Credentials are required when sync is enabled" });
       }
 
