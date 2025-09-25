@@ -3640,7 +3640,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Google Sheets Configuration API endpoints
-  let googleSheetsConfig: any = null; // In-memory storage for config
+  // Google Sheets config akan disimpan di database
 
   // Get Google Sheets configuration
   app.get("/api/google-sheets/config", async (req, res) => {
@@ -3684,8 +3684,9 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Credentials are required when sync is enabled" });
       }
 
-      // Update in-memory config
-      googleSheetsConfig = {
+      // Config will be stored in database 
+      // TODO: Implement database storage for Google Sheets config
+      const googleSheetsConfig = {
         spreadsheetId,
         worksheetName,
         syncEnabled,
