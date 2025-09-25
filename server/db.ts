@@ -1,89 +1,51 @@
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from "@shared/schema";
-import fs from 'fs';
-import path from 'path';
-
-// Use database URL from environment variables
-const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl) {
-  throw new Error(
-    "DATABASE_URL must be set. This application requires a PostgreSQL database.",
-  );
-}
-
-// Database provider detection
-let providerType = "cloud";
-if (databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1')) {
-  providerType = "local";
-}
 
 console.log(`🔄 Connecting to PostgreSQL database...`);
 
-// SSL configuration based on database provider
-const isDevelopment = process.env.NODE_ENV === 'development';
+// Aiven PostgreSQL configuration
+const config = {
+    user: "avnadmin",
+    password: "AVNS_5SkSsDvdAWRgUsnMl56",
+    host: "marketlokalpos-mhdalhzau.h.aivencloud.com",
+    port: 18498,
+    database: "defaultdb",
+    ssl: {
+        rejectUnauthorized: true,
+        ca: `-----BEGIN CERTIFICATE-----
+MIIEUDCCArigAwIBAgIUFwqE9MW2mEfLCdNnlLOn7E9YBpYwDQYJKoZIhvcNAQEM
+BQAwQDE+MDwGA1UEAww1NTA1ZDVlNjItNjU3OC00M2I1LTllMzItOWRkNWVkZmU0
+YjljIEdFTiAxIFByb2plY3QgQ0EwHhcNMjUwOTIzMjA0ODIwWhcNMzUwOTIxMjA0
+ODIwWjBAMT4wPAYDVQQDDDU1MDVkNWU2Mi02NTc4LTQzYjUtOWUzMi05ZGQ1ZWRm
+ZTRiOWMgR0VOIDEgUHJvamVjdCBDQTCCAaIwDQYJKoZIhvcNAQEBBQADggGPADCC
+AYoCggGBANX6xqiKh0StZPNRp1+KYn2FdBE6epqotkntBJdR3gVYNHF4+SnpR4BJ
+B/R+FjyIzvfVfwezQL8ccIi1w0cjMoxC16OxBua3rTarDEPyWB0hEedOLnW6fF/9
+l8ducEw9HxZaXiPcQZGXjM0AzKaVkGSqAZi0HTVWn3d41e6z72dq9okQp0TMViK2
+NQ4dBSviFPT7nUeyQl7nQY9J+j2PSvfQT6qDvHg5bj1BBgsGZ9KUwaaepe4PWanu
+uvYhBxPJDH3o1Y44fQguGyVOC7RkvbJE940s28FozJNBIW6Nh7FLlxje/ezfj+4k
+YHFe+yh7SeJDDOfIShiv+reRpXaXcXZKs1Ssh5wQD4TGaxv3kbJ1xE1hLE/J/aZW
+tkAB7ISTmW9kkIQxhxhJ2NJRqqOROGSsrNM+BfdazHmeccpL6xrtT8KVXGDhLqLP
+ZVeMh63zxDLGOlNX4t3Xz93snduWm1yUerw3N0SZ7Zf2wpIiW27oAEywqdLbGRuX
++APOtWZiIQIDAQABo0IwQDAdBgNVHQ4EFgQU1/suOwpELUMO5XODwSfjyN0iM8Mw
+EgYDVR0TAQH/BAgwBgEB/wIBADALBgNVHQ8EBAMCAQYwDQYJKoZIhvcNAQEMBQAD
+ggGBALHS63kqsjFiGIKByExMO18GUo+N+OrbHdysp6SC7+eJFYEfgcT7u+V+NAAP
+SJCHfOFiyYwRWFqZxUsCutcQwT08+RRwgX9q/bk1bF00NnIp/wZYyZn1g0XAp4MB
+Drr0i1VJE4oqxyTSpMk0FDL/3Y4JxzKsnhqMTYyL1KQTTwJeALKRyCu1muAFYivl
+gxMXq35TTqWDMo+dyLvohghi7zlwMmz+Z63PulTOuLUaWV3Lhln4kXEXiHpvDmL/
+RhtWTvhtUYKexr6PddSThzwhy3pO88iV+0ilRyRPxuSXpHC1wg7YdAHuHPk3/aOc
+SJdQVjMT33kMydtwrSHrErtLP3qa3ZEpxSvD7+fo8RpmL7lh5saGloETvafPEceA
+jRmCpiru7XW9s761Swt49UFok0lRbJtligf39q71oNmGAYRMpXYVw4VvQW/rcWQd
+usRneiLXGYfESn2sXGmYsMDRvwTrSSsJ0r4oVpzCxCQPGXqiSol+s7qSVrAWqEG5
+I7eWAg==
+-----END CERTIFICATE-----`,
+    },
+};
 
-let sslConfig;
-try {
-  if (providerType === "local") {
-    // Local databases typically don't use SSL
-    console.log("🔓 Using non-SSL configuration for local database");
-    sslConfig = false;
-  } else {
-    // For cloud databases, check for custom CA certificate
-    let caCert = process.env.DATABASE_CA_CERT;
-    
-    // Fallback to file if environment variable is not set (for backward compatibility)
-    if (!caCert) {
-      const caCertPath = path.resolve(import.meta.dirname, '..', 'attached_assets', 'ca_1758665108054.pem');
-      if (fs.existsSync(caCertPath)) {
-        caCert = fs.readFileSync(caCertPath).toString();
-      }
-    }
-    
-    if (caCert) {
-      console.log("📄 CA certificate loaded for database connection");
-      
-      if (isDevelopment && process.env.DISABLE_DB_TLS_VALIDATION === 'true') {
-        console.log("⚠️ WARNING: TLS validation disabled for development only");
-        process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-        sslConfig = { rejectUnauthorized: false };
-      } else {
-        console.log("🔒 Using secure TLS configuration with CA certificate");
-        sslConfig = {
-          rejectUnauthorized: true,
-          ca: caCert,
-          minVersion: 'TLSv1.2'
-        };
-      }
-    } else {
-      // Standard SSL configuration for cloud databases
-      if (isDevelopment && process.env.DISABLE_DB_TLS_VALIDATION === 'true') {
-        console.log("⚠️ WARNING: TLS validation disabled for development only");
-        sslConfig = { rejectUnauthorized: false };
-      } else {
-        console.log("🔒 Using standard TLS configuration");
-        sslConfig = { rejectUnauthorized: true };
-      }
-    }
-  }
-} catch (error) {
-  console.error(`❌ Failed to configure SSL: ${error}`);
-  if (isDevelopment) {
-    console.log("⚠️ Falling back to development SSL configuration");
-    sslConfig = { rejectUnauthorized: false };
-  } else {
-    throw new Error("Failed to configure database SSL");
-  }
-}
+console.log("📄 CA certificate loaded for database connection");
+console.log("🔒 Using secure TLS configuration with CA certificate");
 
-console.log(`🔄 Using PostgreSQL database`);
-
-export const pool = new Pool({ 
-  connectionString: databaseUrl,
-  ssl: sslConfig
-});
+export const pool = new Pool(config);
 export const db = drizzle(pool, { schema });
 
 // Test database connection on startup

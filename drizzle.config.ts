@@ -1,24 +1,16 @@
 import { defineConfig } from "drizzle-kit";
 
-// Use database URL from environment variables - ONLY AIVEN ALLOWED
+// Use database URL from environment variables
 let databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error("DATABASE_URL must be set. This application requires Aiven PostgreSQL database.");
+  throw new Error("DATABASE_URL must be set. This application requires a PostgreSQL database.");
 }
 
-// SECURITY: Only allow Aiven databases
-if (!databaseUrl.includes('aivencloud.com')) {
-  throw new Error(
-    "❌ SECURITY RESTRICTION: This application only supports Aiven PostgreSQL databases. " +
-    "Please use a valid Aiven database connection string."
-  );
-}
-
-// Configure SSL for Aiven
+// Configure SSL for database connection
 function getSSLConfig() {
   const isDevelopment = process.env.NODE_ENV === 'development';
-  console.log("✅ Drizzle: Using Aiven SSL configuration");
+  console.log("✅ Drizzle: Configuring SSL for database connection");
   
   // In development with explicit flag, allow insecure connection
   if (isDevelopment && process.env.DISABLE_DB_TLS_VALIDATION === 'true') {
@@ -31,7 +23,7 @@ function getSSLConfig() {
     const fs = require('fs');
     
     // Use CA certificate from environment variable if available
-    let caCert = process.env.AIVEN_CA_CERT;
+    let caCert = process.env.DATABASE_CA_CERT;
     
     // Fallback to file if environment variable is not set
     if (!caCert) {
@@ -52,7 +44,7 @@ function getSSLConfig() {
         console.log("⚠️ Drizzle: No CA certificate found - falling back to insecure SSL for development");
         return { rejectUnauthorized: false };
       } else {
-        throw new Error("Production requires valid CA certificate for Aiven connection");
+        throw new Error("Production requires valid CA certificate for database connection");
       }
     }
   } catch (error) {
@@ -60,7 +52,7 @@ function getSSLConfig() {
       console.log("⚠️ Drizzle: Falling back to insecure SSL for development");
       return { rejectUnauthorized: false };
     } else {
-      throw new Error("Production requires valid CA certificate for Aiven connection");
+      throw new Error("Production requires valid CA certificate for database connection");
     }
   }
 }
