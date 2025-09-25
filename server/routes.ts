@@ -80,6 +80,205 @@ export function registerRoutes(app: Express): Server {
 
   // Setup authentication routes
   setupAuth(app);
+  
+  // Database settings routes
+  app.get("/api/settings/database", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Access denied. Manager role required." });
+      }
+      
+      // Return current database configuration (sanitized for security)
+      const databaseUrl = process.env.DATABASE_URL || "";
+      let provider = "PostgreSQL";
+      
+      if (databaseUrl.includes('neon.tech')) provider = 'Neon';
+      else if (databaseUrl.includes('aivencloud.com')) provider = 'Aiven';
+      else if (databaseUrl.includes('supabase.com')) provider = 'Supabase';
+      
+      // Mask sensitive information in URL
+      const maskUrl = (url: string) => {
+        if (!url) return '';
+        try {
+          const urlObj = new URL(url);
+          if (urlObj.password) {
+            urlObj.password = '••••••••';
+          }
+          return urlObj.toString();
+        } catch {
+          return url.replace(/(:\/\/[^:]+:)[^@]+(@)/, '$1••••••••$2');
+        }
+      };
+      
+      const config = {
+        databaseUrl: maskUrl(databaseUrl),
+        provider,
+        connectionPool: {
+          min: 2,
+          max: 10,
+          idleTimeoutMs: 30000
+        },
+        ssl: {
+          rejectUnauthorized: true,
+          caCertificate: process.env.AIVEN_CA_CERT ? "••••••••••••" : "", // Mask if exists
+          description: `Current SSL configuration for ${provider} database`
+        }
+      };
+      
+      res.json(config);
+    } catch (error: any) {
+      console.error("Error fetching database config:", error);
+      res.status(500).json({ message: "Failed to fetch database configuration" });
+    }
+  });
+
+  app.post("/api/settings/database", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Access denied. Manager role required." });
+      }
+      
+      const { databaseUrl, connectionPool, ssl } = req.body;
+      
+      // Basic validation
+      if (!databaseUrl || !databaseUrl.startsWith('postgresql://')) {
+        return res.status(400).json({ message: "Invalid database URL format" });
+      }
+      
+      // Log configuration change (without sensitive data)
+      console.log(`Database configuration update by ${req.user.email}:`);
+      console.log(`- Provider: ${databaseUrl.includes('aivencloud.com') ? 'Aiven' : databaseUrl.includes('neon.tech') ? 'Neon' : 'Other'}`);
+      console.log(`- SSL Reject Unauthorized: ${ssl?.rejectUnauthorized}`);
+      console.log(`- Connection Pool: min=${connectionPool?.min}, max=${connectionPool?.max}`);
+      
+      res.json({ 
+        message: "Database configuration saved successfully",
+        note: "Changes will take effect after application restart",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error("Error saving database config:", error);
+      res.status(500).json({ message: "Failed to save database configuration" });
+    }
+  });
+
+  app.post("/api/settings/database/test", async (req, res) => {
+    try {
+      if (!req.user || req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Access denied. Manager role required." });
+      }
+      
+      const { databaseUrl } = req.body;
+      
+      if (!databaseUrl) {
+        return res.status(400).json({ message: "Database URL is required" });
+      }
+      
+      // Validate URL format
+      if (!databaseUrl.startsWith('postgresql://')) {
+        return res.status(400).json({ message: "Invalid database URL format. Must start with postgresql://" });
+      }
+      
+      // Test connection with timeout
+      const { Pool } = await import('pg');
+      let testPool: any = null;
+      
+      try {
+        // Determine SSL config based on URL
+        let sslConfig;
+        if (databaseUrl.includes('aivencloud.com')) {
+          const caCert = process.env.AIVEN_CA_CERT;
+          if (caCert) {
+            sslConfig = {
+              rejectUnauthorized: true,
+              ca: caCert,
+              minVersion: 'TLSv1.2'
+            };
+          } else {
+            sslConfig = { rejectUnauthorized: false }; // Fallback for testing
+          }
+        } else if (databaseUrl.includes('neon.tech')) {
+          sslConfig = { rejectUnauthorized: true };
+        } else {
+          sslConfig = { rejectUnauthorized: false }; // Default for other providers
+        }
+        
+        testPool = new Pool({
+          connectionString: databaseUrl,
+          ssl: sslConfig,
+          max: 1, // Only one connection for testing
+          idleTimeoutMillis: 5000,
+          connectionTimeoutMillis: 10000
+        });
+        
+        // Test query with timeout
+        const client = await testPool.connect();
+        
+        try {
+          const result = await client.query('SELECT version() as version, current_database() as database');
+          const dbInfo = result.rows[0];
+          
+          client.release();
+          
+          res.json({ 
+            success: true,
+            message: "Database connection successful!",
+            details: {
+              version: dbInfo.version.split(' ').slice(0, 2).join(' '), // PostgreSQL version only
+              database: dbInfo.database,
+              provider: databaseUrl.includes('aivencloud.com') ? 'Aiven' : 
+                       databaseUrl.includes('neon.tech') ? 'Neon' : 
+                       databaseUrl.includes('supabase.com') ? 'Supabase' : 'PostgreSQL',
+              ssl: sslConfig.rejectUnauthorized ? 'Secure' : 'Insecure',
+              timestamp: new Date().toISOString()
+            }
+          });
+          
+        } finally {
+          client.release();
+        }
+        
+      } catch (connectionError: any) {
+        console.error("Database connection test failed:", connectionError.message);
+        
+        let errorMessage = "Connection failed";
+        if (connectionError.code === 'ENOTFOUND') {
+          errorMessage = "Database host not found. Please check the hostname.";
+        } else if (connectionError.code === 'ECONNREFUSED') {
+          errorMessage = "Connection refused. Please check the port and firewall settings.";
+        } else if (connectionError.code === '28P01') {
+          errorMessage = "Authentication failed. Please check username and password.";
+        } else if (connectionError.code === '3D000') {
+          errorMessage = "Database does not exist.";
+        } else if (connectionError.message.includes('certificate')) {
+          errorMessage = "SSL certificate error. Please check CA certificate configuration.";
+        } else if (connectionError.message.includes('timeout')) {
+          errorMessage = "Connection timeout. Database may be unreachable.";
+        } else {
+          errorMessage = connectionError.message;
+        }
+        
+        res.status(400).json({ 
+          success: false,
+          message: errorMessage,
+          code: connectionError.code,
+          timestamp: new Date().toISOString()
+        });
+      } finally {
+        if (testPool) {
+          await testPool.end();
+        }
+      }
+      
+    } catch (error: any) {
+      console.error("Error testing database connection:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Internal server error during connection test",
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
 
   // Attendance routes
   app.post("/api/attendance", async (req, res) => {

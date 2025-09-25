@@ -27,12 +27,19 @@ if (databaseUrl.includes('neon.tech')) {
   console.log("🔄 Connecting to Aiven PostgreSQL database...");
   providerName = "Aiven PostgreSQL";
   
-  // Proper Aiven SSL configuration with CA certificate
-  const caCertPath = path.resolve(import.meta.dirname, '..', 'attached_assets', 'ca_1758665108054.pem');
+  // Proper Aiven SSL configuration with CA certificate from environment
   const isDevelopment = process.env.NODE_ENV === 'development';
   
   try {
-    const caCert = fs.readFileSync(caCertPath).toString();
+    // Use CA certificate from environment variable if available
+    let caCert = process.env.AIVEN_CA_CERT;
+    
+    // Fallback to file if environment variable is not set (for backward compatibility)
+    if (!caCert) {
+      const caCertPath = path.resolve(import.meta.dirname, '..', 'attached_assets', 'ca_1758665108054.pem');
+      caCert = fs.readFileSync(caCertPath).toString();
+    }
+    
     console.log("📄 CA certificate loaded for Aiven connection");
     
     if (isDevelopment && process.env.DISABLE_DB_TLS_VALIDATION === 'true') {

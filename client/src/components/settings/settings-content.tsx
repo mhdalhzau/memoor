@@ -9,6 +9,7 @@ import UserManagementContent from "@/components/user-management/user-management-
 import StoreManagementContent from "@/components/store-management/store-management-content";
 import GoogleSheetsConfigContent from "@/components/settings/google-sheets-config-content";
 import PayrollSettingsContent from "@/components/settings/payroll-settings-content";
+import DatabaseConfigContent from "@/components/settings/database-config-content";
 
 interface SettingsMenuItem {
   id: string;
@@ -32,6 +33,13 @@ const settingsMenuItems: SettingsMenuItem[] = [
     icon: <Store className="w-5 h-5" />,
     allowedRoles: ["manager"],
     description: "Manage store information and personnel"
+  },
+  {
+    id: "database-config",
+    label: "Database Configuration", 
+    icon: <Database className="w-5 h-5" />,
+    allowedRoles: ["manager"],
+    description: "Configure database connection, pool settings, and SSL options"
   },
   {
     id: "payroll-settings",
@@ -79,6 +87,8 @@ export default function SettingsContent() {
         return <UserManagementContent />;
       case "store-management":
         return <StoreManagementContent />;
+      case "database-config":
+        return <DatabaseConfigContent />;
       case "payroll-settings":
         return <PayrollSettingsContent />;
       case "google-sheets-sync":
