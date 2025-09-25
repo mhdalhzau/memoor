@@ -4,8 +4,22 @@ import * as schema from "@shared/schema";
 
 console.log(`🔄 Connecting to PostgreSQL database...`);
 
-// Aiven PostgreSQL configuration
-const config = {
+// Production-optimized Aiven PostgreSQL configuration
+const isProduction = process.env.NODE_ENV === "production";
+
+// Use environment variable if available, fallback to direct configuration
+const databaseUrl = process.env.DATABASE_URL;
+
+const config = databaseUrl ? {
+    connectionString: databaseUrl,
+    // Production optimizations
+    max: isProduction ? 20 : 10, // Max connections in pool
+    idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+    connectionTimeoutMillis: 2000, // Return error if connection takes longer than 2 seconds
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 0,
+} : {
+    // Fallback to direct Aiven configuration
     user: "avnadmin",
     password: "AVNS_5SkSsDvdAWRgUsnMl56",
     host: "marketlokalpos-mhdalhzau.h.aivencloud.com",
@@ -40,10 +54,17 @@ usRneiLXGYfESn2sXGmYsMDRvwTrSSsJ0r4oVpzCxCQPGXqiSol+s7qSVrAWqEG5
 I7eWAg==
 -----END CERTIFICATE-----`,
     },
+    // Production optimizations
+    max: isProduction ? 20 : 10, // Max connections in pool  
+    idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+    connectionTimeoutMillis: 2000, // Return error if connection takes longer than 2 seconds
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 0,
 };
 
-console.log("📄 CA certificate loaded for database connection");
-console.log("🔒 Using secure TLS configuration with CA certificate");
+console.log(databaseUrl ? "🔗 Using DATABASE_URL environment variable" : "📄 CA certificate loaded for database connection");
+console.log(`🏭 Running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode`);
+console.log("🔒 Using secure TLS configuration with connection pooling optimizations");
 
 export const pool = new Pool(config);
 export const db = drizzle(pool, { schema });
