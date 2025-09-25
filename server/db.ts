@@ -7,8 +7,8 @@ console.log(`🔄 Connecting to PostgreSQL database...`);
 // Aiven PostgreSQL configuration
 const config = {
     user: "avnadmin",
-    password: "",
-    host: "",
+    password: "AVNS_5SkSsDvdAWRgUsnMl56",
+    host: "marketlokalpos-mhdalhzau.h.aivencloud.com",
     port: 18498,
     database: "defaultdb",
     ssl: {
@@ -31,3 +31,6 @@ try {
     console.error("❌ Failed to connect to database:", error);
     process.exit(1);
 }
+
+
+postgres://avnadmin:AVNS_5SkSsDvdAWRgUsnMl56@marketlokalpos-mhdalhzau.h.aivencloud.com:18498/defaultdb?sslmode=require
