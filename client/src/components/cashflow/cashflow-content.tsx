@@ -40,6 +40,7 @@ import {
   type Customer,
   insertCustomerSchema,
 } from "@shared/schema";
+import { SyncButton } from "@/components/ui/sync-button";
 import {
   DollarSign,
   TrendingUp,
@@ -570,10 +571,17 @@ export default function CashflowContent() {
           {/* Grand Total Summary */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
-                Total Semua Toko
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" />
+                  Total Semua Toko
+                </CardTitle>
+                <SyncButton 
+                  dataType="cashflow"
+                  variant="outline"
+                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                />
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

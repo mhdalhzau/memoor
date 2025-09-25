@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { type SelectSales } from '@shared/schema';
+import { type Sales, type Attendance, type Cashflow, type Piutang, type User, type Store, type Customer } from '@shared/schema';
 
 export interface GoogleSheetsConfig {
   spreadsheetId: string;
@@ -68,43 +68,59 @@ export class GoogleSheetsService {
     }
   }
 
-  async ensureHeadersExist(): Promise<void> {
+  private getWorksheetHeaders(worksheetType: string): string[] {
+    switch (worksheetType) {
+      case 'sales':
+        return [
+          '', '', '', 'Tanggal', 'Total Penjualan', 'Jumlah Transaksi', 'Rata-rata Tiket',
+          'Total QRIS', 'Total Tunai', 'Meter Awal', 'Meter Akhir', 'Total Liter',
+          'Total Pemasukan', 'Total Pengeluaran', 'Detail Pemasukan', 'Detail Pengeluaran',
+          'Shift', 'Jam Masuk', 'Jam Keluar', '', 'Tanggal Dibuat'
+        ];
+      case 'attendance':
+        return [
+          '', '', 'Nama Karyawan', '', 'Nama Toko', 'Tanggal', 'Jam Masuk', 'Jam Keluar',
+          'Shift', 'Terlambat (Menit)', 'Lembur (Menit)', 'Istirahat (Menit)', 'Catatan',
+          'Status Kehadiran', 'Status Persetujuan', 'Tanggal Dibuat'
+        ];
+      case 'cashflow':
+        return [
+          '', '', 'Nama Toko', 'Kategori', 'Jenis', 'Jumlah', 'Keterangan',
+          '', 'Status Pembayaran', 'Jumlah Galon', 'Pajak Ongkos', 'Pajak Transfer',
+          'Total Pengeluaran', 'Konter', 'Hasil', 'Tanggal', 'Tanggal Dibuat'
+        ];
+      case 'piutang':
+        return [
+          '', '', 'Nama Pelanggan', '', 'Nama Toko', 'Jumlah Piutang', 'Keterangan',
+          'Jatuh Tempo', 'Status', 'Jumlah Terbayar', 'Tanggal Bayar', '', 'Tanggal Dibuat'
+        ];
+      case 'dashboard':
+        return [
+          '', 'Nama Toko', 'Total Penjualan', 'Total Pemasukan', 'Total Pengeluaran',
+          'Total Cashflow', 'Total Piutang', 'Piutang Terbayar', 'Piutang Belum Terbayar',
+          'Karyawan Aktif', 'Hadir Hari Ini', 'Terlambat Hari Ini', 'Bulan', 'Terakhir Update'
+        ];
+      default:
+        return ['', 'Data', 'Tanggal Dibuat'];
+    }
+  }
+
+  async ensureHeadersExist(worksheetType: string = 'sales'): Promise<void> {
     try {
-      const headers = [
-        'ID',
-        'Store ID',
-        'User ID', 
-        'Date',
-        'Total Sales',
-        'Transactions',
-        'Average Ticket',
-        'Total QRIS',
-        'Total Cash',
-        'Meter Start',
-        'Meter End',
-        'Total Liters',
-        'Total Income',
-        'Total Expenses',
-        'Income Details',
-        'Expense Details',
-        'Shift',
-        'Check In',
-        'Check Out',
-        'Submission Date',
-        'Created At'
-      ];
+      const headers = this.getWorksheetHeaders(worksheetType);
+      const range = `${this.config.worksheetName}!A1:${String.fromCharCode(64 + headers.length)}1`;
 
       // Check if headers exist
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: this.config.spreadsheetId,
-        range: `${this.config.worksheetName}!A1:U1`,
+        range: range,
       });
 
       if (!response.data.values || response.data.values.length === 0) {
         // Add headers if they don't exist
         await this.sheets.spreadsheets.values.update({
           spreadsheetId: this.config.spreadsheetId,
-          range: `${this.config.worksheetName}!A1:U1`,
+          range: range,
           valueInputOption: 'RAW',
           resource: {
             values: [headers],
@@ -117,12 +133,12 @@ export class GoogleSheetsService {
     }
   }
 
-  private formatSalesDataForSheets(sales: SelectSales): (string | number)[] {
+  private formatSalesDataForSheets(sales: Sales): (string | number)[] {
     return [
-      sales.id || '',
-      sales.storeId || '',
-      sales.userId || '',
-      sales.date ? new Date(sales.date).toISOString() : '',
+      '', // Hide ID for cleaner view
+      '', // Hide Store ID for cleaner view
+      '', // Hide User ID for cleaner view
+      sales.date ? new Date(sales.date).toLocaleDateString('id-ID') : '',
       parseFloat(sales.totalSales || '0'),
       sales.transactions || 0,
       parseFloat(sales.averageTicket || '0'),
@@ -138,14 +154,94 @@ export class GoogleSheetsService {
       sales.shift || '',
       sales.checkIn || '',
       sales.checkOut || '',
-      sales.submissionDate || '',
-      sales.createdAt ? new Date(sales.createdAt).toISOString() : ''
+      '', // Hide submission date for cleaner view
+      sales.createdAt ? new Date(sales.createdAt).toLocaleDateString('id-ID') : ''
     ];
   }
 
-  async appendSalesData(sales: SelectSales): Promise<void> {
+  private formatAttendanceDataForSheets(attendance: Attendance & { userName?: string; storeName?: string }): (string | number)[] {
+    return [
+      '', // Hide ID for cleaner view
+      '', // Hide User ID for cleaner view  
+      attendance.userName || '',
+      '', // Hide Store ID for cleaner view
+      attendance.storeName || '',
+      attendance.date ? new Date(attendance.date).toLocaleDateString('id-ID') + ' ' + new Date(attendance.date).toLocaleTimeString('id-ID') : '',
+      attendance.checkIn || '',
+      attendance.checkOut || '',
+      attendance.shift || '',
+      attendance.latenessMinutes || 0,
+      attendance.overtimeMinutes || 0,
+      attendance.breakDuration || 0,
+      attendance.notes || '',
+      attendance.attendanceStatus || '',
+      attendance.status || '',
+      attendance.createdAt ? new Date(attendance.createdAt).toLocaleDateString('id-ID') : ''
+    ];
+  }
+
+  private formatCashflowDataForSheets(cashflow: Cashflow & { storeName?: string }): (string | number)[] {
+    return [
+      '', // Hide ID for cleaner view
+      '', // Hide Store ID for cleaner view
+      cashflow.storeName || '',
+      cashflow.category || '',
+      cashflow.type || '',
+      parseFloat(cashflow.amount || '0'),
+      cashflow.description || '',
+      '', // Hide Customer ID for cleaner view
+      cashflow.paymentStatus || '',
+      parseFloat(cashflow.jumlahGalon || '0'),
+      parseFloat(cashflow.pajakOngkos || '0'),
+      parseFloat(cashflow.pajakTransfer || '0'),
+      parseFloat(cashflow.totalPengeluaran || '0'),
+      cashflow.konter || '',
+      parseFloat(cashflow.hasil || '0'),
+      cashflow.date ? new Date(cashflow.date).toLocaleDateString('id-ID') : '',
+      cashflow.createdAt ? new Date(cashflow.createdAt).toLocaleDateString('id-ID') : ''
+    ];
+  }
+
+  private formatPiutangDataForSheets(piutang: Piutang & { customerName?: string; storeName?: string }): (string | number)[] {
+    return [
+      '', // Hide ID for cleaner view
+      '', // Hide Customer ID for cleaner view
+      piutang.customerName || '',
+      '', // Hide Store ID for cleaner view
+      piutang.storeName || '',
+      parseFloat(piutang.amount || '0'),
+      piutang.description || '',
+      piutang.dueDate ? new Date(piutang.dueDate).toLocaleDateString('id-ID') : '',
+      piutang.status || '',
+      parseFloat(piutang.paidAmount || '0'),
+      piutang.paidAt ? new Date(piutang.paidAt).toLocaleDateString('id-ID') : '',
+      '', // Hide Created By ID for cleaner view
+      piutang.createdAt ? new Date(piutang.createdAt).toLocaleDateString('id-ID') : ''
+    ];
+  }
+
+  private formatDashboardDataForSheets(dashboard: any): (string | number)[] {
+    return [
+      '', // Hide Store ID for cleaner view
+      dashboard.storeName || '',
+      parseFloat(dashboard.totalSales || '0'),
+      parseFloat(dashboard.totalIncome || '0'),
+      parseFloat(dashboard.totalExpenses || '0'),
+      parseFloat(dashboard.totalCashflow || '0'),
+      parseFloat(dashboard.totalPiutang || '0'),
+      parseFloat(dashboard.paidPiutang || '0'),
+      parseFloat(dashboard.outstandingPiutang || '0'),
+      dashboard.activeUsers || 0,
+      dashboard.presentToday || 0,
+      dashboard.lateToday || 0,
+      dashboard.month || '',
+      new Date().toLocaleDateString('id-ID')
+    ];
+  }
+
+  async appendSalesData(sales: Sales): Promise<void> {
     try {
-      await this.ensureHeadersExist();
+      await this.ensureHeadersExist('sales');
       
       const values = [this.formatSalesDataForSheets(sales)];
       
@@ -166,7 +262,7 @@ export class GoogleSheetsService {
     }
   }
 
-  async updateSalesData(sales: SelectSales): Promise<void> {
+  async updateSalesData(sales: Sales): Promise<void> {
     try {
       const rowIndex = await this.findRowIndexBySalesId(sales.id || '');
       
@@ -242,9 +338,9 @@ export class GoogleSheetsService {
     }
   }
 
-  async syncAllSalesData(salesData: SelectSales[]): Promise<void> {
+  async syncAllSalesData(salesData: Sales[]): Promise<void> {
     try {
-      await this.ensureHeadersExist();
+      await this.ensureHeadersExist('sales');
       
       // Clear existing data (except headers)
       await this.sheets.spreadsheets.values.clear({
@@ -269,6 +365,146 @@ export class GoogleSheetsService {
       console.log(`Synced ${salesData.length} sales records to Google Sheets`);
     } catch (error) {
       console.error('Failed to sync all sales data to Google Sheets:', error);
+      throw error;
+    }
+  }
+
+  // Attendance sync methods
+  async syncAllAttendanceData(attendanceData: (Attendance & { userName?: string; storeName?: string })[]): Promise<void> {
+    try {
+      await this.ensureHeadersExist('attendance');
+      
+      const headers = this.getWorksheetHeaders('attendance');
+      const range = `${this.config.worksheetName}!A2:${String.fromCharCode(64 + headers.length)}`;
+      
+      // Clear existing data (except headers)
+      await this.sheets.spreadsheets.values.clear({
+        spreadsheetId: this.config.spreadsheetId,
+        range: range,
+      });
+      
+      if (attendanceData.length > 0) {
+        const values = attendanceData.map(attendance => this.formatAttendanceDataForSheets(attendance));
+        
+        await this.sheets.spreadsheets.values.append({
+          spreadsheetId: this.config.spreadsheetId,
+          range: range,
+          valueInputOption: 'RAW',
+          insertDataOption: 'INSERT_ROWS',
+          resource: {
+            values,
+          },
+        });
+      }
+      
+      console.log(`Synced ${attendanceData.length} attendance records to Google Sheets`);
+    } catch (error) {
+      console.error('Failed to sync attendance data to Google Sheets:', error);
+      throw error;
+    }
+  }
+
+  // Cashflow sync methods
+  async syncAllCashflowData(cashflowData: (Cashflow & { storeName?: string })[]): Promise<void> {
+    try {
+      await this.ensureHeadersExist('cashflow');
+      
+      const headers = this.getWorksheetHeaders('cashflow');
+      const range = `${this.config.worksheetName}!A2:${String.fromCharCode(64 + headers.length)}`;
+      
+      // Clear existing data (except headers)
+      await this.sheets.spreadsheets.values.clear({
+        spreadsheetId: this.config.spreadsheetId,
+        range: range,
+      });
+      
+      if (cashflowData.length > 0) {
+        const values = cashflowData.map(cashflow => this.formatCashflowDataForSheets(cashflow));
+        
+        await this.sheets.spreadsheets.values.append({
+          spreadsheetId: this.config.spreadsheetId,
+          range: range,
+          valueInputOption: 'RAW',
+          insertDataOption: 'INSERT_ROWS',
+          resource: {
+            values,
+          },
+        });
+      }
+      
+      console.log(`Synced ${cashflowData.length} cashflow records to Google Sheets`);
+    } catch (error) {
+      console.error('Failed to sync cashflow data to Google Sheets:', error);
+      throw error;
+    }
+  }
+
+  // Piutang sync methods
+  async syncAllPiutangData(piutangData: (Piutang & { customerName?: string; storeName?: string })[]): Promise<void> {
+    try {
+      await this.ensureHeadersExist('piutang');
+      
+      const headers = this.getWorksheetHeaders('piutang');
+      const range = `${this.config.worksheetName}!A2:${String.fromCharCode(64 + headers.length)}`;
+      
+      // Clear existing data (except headers)
+      await this.sheets.spreadsheets.values.clear({
+        spreadsheetId: this.config.spreadsheetId,
+        range: range,
+      });
+      
+      if (piutangData.length > 0) {
+        const values = piutangData.map(piutang => this.formatPiutangDataForSheets(piutang));
+        
+        await this.sheets.spreadsheets.values.append({
+          spreadsheetId: this.config.spreadsheetId,
+          range: range,
+          valueInputOption: 'RAW',
+          insertDataOption: 'INSERT_ROWS',
+          resource: {
+            values,
+          },
+        });
+      }
+      
+      console.log(`Synced ${piutangData.length} piutang records to Google Sheets`);
+    } catch (error) {
+      console.error('Failed to sync piutang data to Google Sheets:', error);
+      throw error;
+    }
+  }
+
+  // Dashboard sync methods
+  async syncDashboardData(dashboardData: any[]): Promise<void> {
+    try {
+      await this.ensureHeadersExist('dashboard');
+      
+      const headers = this.getWorksheetHeaders('dashboard');
+      const range = `${this.config.worksheetName}!A2:${String.fromCharCode(64 + headers.length)}`;
+      
+      // Clear existing data (except headers)
+      await this.sheets.spreadsheets.values.clear({
+        spreadsheetId: this.config.spreadsheetId,
+        range: range,
+      });
+      
+      if (dashboardData.length > 0) {
+        const values = dashboardData.map(dashboard => this.formatDashboardDataForSheets(dashboard));
+        
+        await this.sheets.spreadsheets.values.append({
+          spreadsheetId: this.config.spreadsheetId,
+          range: range,
+          valueInputOption: 'RAW',
+          insertDataOption: 'INSERT_ROWS',
+          resource: {
+            values,
+          },
+        });
+      }
+      
+      console.log(`Synced ${dashboardData.length} dashboard records to Google Sheets`);
+    } catch (error) {
+      console.error('Failed to sync dashboard data to Google Sheets:', error);
       throw error;
     }
   }
@@ -466,20 +702,43 @@ export class GoogleSheetsService {
     }
   }
 
-  async syncToWorksheet(worksheetName: string, salesData: SelectSales[]): Promise<{ success: boolean; errorMessage?: string; recordCount: number }> {
+  // Universal sync method that works with any data type
+  async syncToWorksheet(
+    worksheetName: string, 
+    data: any[], 
+    dataType: 'sales' | 'attendance' | 'cashflow' | 'piutang' | 'dashboard'
+  ): Promise<{ success: boolean; errorMessage?: string; recordCount: number }> {
     try {
       // Switch to the target worksheet
       const originalWorksheet = this.config.worksheetName;
       await this.switchWorksheet(worksheetName);
       
       try {
-        // Sync data to the specific worksheet
-        await this.syncAllSalesData(salesData);
+        // Sync data based on type
+        switch (dataType) {
+          case 'sales':
+            await this.syncAllSalesData(data);
+            break;
+          case 'attendance':
+            await this.syncAllAttendanceData(data);
+            break;
+          case 'cashflow':
+            await this.syncAllCashflowData(data);
+            break;
+          case 'piutang':
+            await this.syncAllPiutangData(data);
+            break;
+          case 'dashboard':
+            await this.syncDashboardData(data);
+            break;
+          default:
+            throw new Error(`Unsupported data type: ${dataType}`);
+        }
         
-        console.log(`Successfully synced ${salesData.length} records to worksheet "${worksheetName}"`);
+        console.log(`Successfully synced ${data.length} ${dataType} records to worksheet "${worksheetName}"`);
         return { 
           success: true, 
-          recordCount: salesData.length 
+          recordCount: data.length 
         };
       } finally {
         // Always switch back to original worksheet
@@ -497,6 +756,100 @@ export class GoogleSheetsService {
         success: false, 
         errorMessage: error.message, 
         recordCount: 0 
+      };
+    }
+  }
+
+  // Read data from worksheet
+  async readFromWorksheet(worksheetName: string): Promise<{ success: boolean; data: any[]; errorMessage?: string }> {
+    try {
+      const originalWorksheet = this.config.worksheetName;
+      await this.switchWorksheet(worksheetName);
+      
+      try {
+        const response = await this.sheets.spreadsheets.values.get({
+          spreadsheetId: this.config.spreadsheetId,
+          range: `${worksheetName}!A:ZZ`,
+        });
+
+        const values = response.data.values || [];
+        if (values.length === 0) {
+          return { success: true, data: [] };
+        }
+
+        // First row is headers, rest is data
+        const headers = values[0];
+        const rows = values.slice(1);
+        
+        const data = rows.map(row => {
+          const obj: any = {};
+          headers.forEach((header: string, index: number) => {
+            obj[header] = row[index] || '';
+          });
+          return obj;
+        });
+
+        console.log(`Successfully read ${data.length} records from worksheet "${worksheetName}"`);
+        return { success: true, data };
+      } finally {
+        if (originalWorksheet !== worksheetName) {
+          try {
+            await this.switchWorksheet(originalWorksheet);
+          } catch (switchBackError) {
+            console.warn(`Failed to switch back to original worksheet "${originalWorksheet}":`, switchBackError);
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error(`Failed to read from worksheet "${worksheetName}":`, error);
+      return { 
+        success: false, 
+        data: [],
+        errorMessage: error.message 
+      };
+    }
+  }
+
+  // Auto create organized worksheets
+  async setupOrganizedWorksheets(): Promise<{ success: boolean; worksheets: string[]; errorMessage?: string }> {
+    try {
+      const worksheetsToCreate = [
+        'Absensi Per User',
+        'Sales Per Toko', 
+        'Cashflow Per Toko',
+        'Piutang Per User',
+        'Dashboard Summary'
+      ];
+
+      const existingWorksheets = await this.listWorksheets();
+      const existingNames = existingWorksheets.map(w => w.name.toLowerCase());
+      
+      const createdWorksheets: string[] = [];
+
+      for (const worksheetName of worksheetsToCreate) {
+        if (!existingNames.includes(worksheetName.toLowerCase())) {
+          try {
+            await this.createWorksheet(worksheetName);
+            createdWorksheets.push(worksheetName);
+          } catch (error: any) {
+            if (!error.message.includes('already exists')) {
+              console.error(`Failed to create worksheet "${worksheetName}":`, error);
+            }
+          }
+        }
+      }
+
+      return {
+        success: true,
+        worksheets: createdWorksheets,
+        errorMessage: createdWorksheets.length === 0 ? 'All worksheets already exist' : undefined
+      };
+    } catch (error: any) {
+      console.error('Failed to setup organized worksheets:', error);
+      return {
+        success: false,
+        worksheets: [],
+        errorMessage: error.message
       };
     }
   }

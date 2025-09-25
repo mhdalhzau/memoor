@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import { formatRupiah } from "@/lib/utils";
 import { type Sales } from "@shared/schema";
+import { SyncButton } from "@/components/ui/sync-button";
 import { z } from "zod";
 
 // Function to get user name from userId
@@ -973,6 +974,14 @@ export default function SalesContent() {
               <TextImportModal 
                 storeId={currentStoreId} 
                 storeName={stores.find(s => `store-${s.id}` === activeTab)?.name || `Store ${activeTab.replace('store-', '')}`} 
+              />
+              
+              {/* Google Sheets Sync Button */}
+              <SyncButton 
+                dataType="sales"
+                storeIds={[currentStoreId]}
+                variant="outline"
+                className="text-green-600 border-green-200 hover:bg-green-50"
               />
             </div>
 

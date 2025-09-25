@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, TrendingDown, FileText, TrendingUp, Clock, Wallet } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SyncButton } from "@/components/ui/sync-button";
 import MobileBankingWallet from "@/components/wallet/mobile-banking-wallet";
 
 interface DashboardStats {
@@ -80,6 +81,22 @@ export default function DashboardContent() {
 
   return (
     <div className="space-y-8">
+      {/* Dashboard Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+            Dashboard
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">
+            Overview of your business performance
+          </p>
+        </div>
+        <SyncButton 
+          dataType="dashboard"
+          variant="outline"
+          className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+        />
+      </div>
       {/* Bank Balance (Wallet Simulator) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>

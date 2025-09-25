@@ -16,6 +16,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Customer, Piutang, insertPiutangSchema, type InsertPiutang } from "@shared/schema";
+import { SyncButton } from "@/components/ui/sync-button";
 import { formatRupiah } from "@/lib/utils";
 
 interface CustomerWithPiutang {
@@ -259,14 +260,20 @@ export default function PiutangPage() {
             </p>
           </div>
         </div>
-        <Dialog open={isAddModalOpen} onOpenChange={(open) => open ? setIsAddModalOpen(true) : setIsAddModalOpen(false)}>
-          <DialogTrigger asChild>
-            <Button className="flex items-center gap-2" data-testid="button-add-piutang">
-              <Plus className="h-4 w-4" />
-              Add Debt Record
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
+        <div className="flex items-center gap-3">
+          <SyncButton 
+            dataType="piutang"
+            variant="outline"
+            className="text-orange-600 border-orange-200 hover:bg-orange-50"
+          />
+          <Dialog open={isAddModalOpen} onOpenChange={(open) => open ? setIsAddModalOpen(true) : setIsAddModalOpen(false)}>
+            <DialogTrigger asChild>
+              <Button className="flex items-center gap-2" data-testid="button-add-piutang">
+                <Plus className="h-4 w-4" />
+                Add Debt Record
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Receipt className="h-5 w-5" />
@@ -384,6 +391,7 @@ export default function PiutangPage() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Search */}

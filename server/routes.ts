@@ -3749,6 +3749,243 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Setup organized worksheets automatically
+  app.post("/api/google-sheets/setup-organized", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      const result = await sheetsService.setupOrganizedWorksheets();
+
+      res.json({ 
+        message: result.success ? "Organized worksheets setup completed" : "Setup failed",
+        worksheets: result.worksheets,
+        details: result.errorMessage
+      });
+    } catch (error: any) {
+      console.error('Setup organized worksheets error:', error);
+      res.status(500).json({ 
+        message: "Failed to setup organized worksheets",
+        details: error.message 
+      });
+    }
+  });
+
+  // Universal sync endpoint for all data types
+  app.post("/api/google-sheets/sync-data", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const { dataType, worksheetName, storeIds } = req.body;
+      
+      if (!dataType || !worksheetName) {
+        return res.status(400).json({ message: "Data type and worksheet name are required" });
+      }
+
+      const validDataTypes = ['sales', 'attendance', 'cashflow', 'piutang', 'dashboard'];
+      if (!validDataTypes.includes(dataType)) {
+        return res.status(400).json({ message: `Invalid data type. Must be one of: ${validDataTypes.join(', ')}` });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      let data: any[] = [];
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      const targetStoreIds = storeIds && Array.isArray(storeIds) && storeIds.length > 0 
+        ? storeIds.filter(id => accessibleStoreIds.includes(id))
+        : accessibleStoreIds;
+
+      // Get data based on type
+      switch (dataType) {
+        case 'sales':
+          for (const storeId of targetStoreIds) {
+            const storeSales = await storage.getSalesByStore(storeId);
+            data = data.concat(storeSales);
+          }
+          break;
+
+        case 'attendance':
+          for (const storeId of targetStoreIds) {
+            const storeAttendance = await storage.getAttendanceByStore(storeId);
+            // Add user and store names for cleaner display
+            const enrichedAttendance = await Promise.all(storeAttendance.map(async (att) => {
+              const user = await storage.getUserById(att.userId);
+              const store = await storage.getStoreById(storeId);
+              return {
+                ...att,
+                userName: user?.name || '',
+                storeName: store?.name || ''
+              };
+            }));
+            data = data.concat(enrichedAttendance);
+          }
+          break;
+
+        case 'cashflow':
+          for (const storeId of targetStoreIds) {
+            const storeCashflow = await storage.getCashflowByStore(storeId);
+            // Add store names for cleaner display
+            const enrichedCashflow = await Promise.all(storeCashflow.map(async (cf) => {
+              const store = await storage.getStoreById(storeId);
+              return {
+                ...cf,
+                storeName: store?.name || ''
+              };
+            }));
+            data = data.concat(enrichedCashflow);
+          }
+          break;
+
+        case 'piutang':
+          for (const storeId of targetStoreIds) {
+            const storePiutang = await storage.getPiutangByStore(storeId);
+            // Add customer and store names for cleaner display
+            const enrichedPiutang = await Promise.all(storePiutang.map(async (piutang) => {
+              const customer = await storage.getCustomerById(piutang.customerId);
+              const store = await storage.getStoreById(storeId);
+              return {
+                ...piutang,
+                customerName: customer?.name || '',
+                storeName: store?.name || ''
+              };
+            }));
+            data = data.concat(enrichedPiutang);
+          }
+          break;
+
+        case 'dashboard':
+          // Generate dashboard summary for each store
+          for (const storeId of targetStoreIds) {
+            const store = await storage.getStoreById(storeId);
+            const sales = await storage.getSalesByStore(storeId);
+            const cashflow = await storage.getCashflowByStore(storeId);
+            const piutang = await storage.getPiutangByStore(storeId);
+            const attendance = await storage.getAttendanceByStore(storeId);
+            
+            const totalSales = sales.reduce((sum, s) => sum + parseFloat(s.totalSales || '0'), 0);
+            const totalIncome = cashflow.filter(c => c.category === 'Income').reduce((sum, c) => sum + parseFloat(c.amount || '0'), 0);
+            const totalExpenses = cashflow.filter(c => c.category === 'Expense').reduce((sum, c) => sum + parseFloat(c.amount || '0'), 0);
+            const totalPiutang = piutang.reduce((sum, p) => sum + parseFloat(p.amount || '0'), 0);
+            const paidPiutang = piutang.filter(p => p.status === 'lunas').reduce((sum, p) => sum + parseFloat(p.amount || '0'), 0);
+            
+            // Count today's attendance
+            const today = new Date().toDateString();
+            const todayAttendance = attendance.filter(a => new Date(a.date || '').toDateString() === today);
+            const presentToday = todayAttendance.filter(a => a.attendanceStatus === 'hadir').length;
+            const lateToday = todayAttendance.filter(a => (a.latenessMinutes || 0) > 0).length;
+            
+            const activeUsers = await storage.getUsersByStore(storeId);
+
+            data.push({
+              storeId,
+              storeName: store?.name || '',
+              totalSales,
+              totalIncome,
+              totalExpenses,
+              totalCashflow: totalIncome - totalExpenses,
+              totalPiutang,
+              paidPiutang,
+              outstandingPiutang: totalPiutang - paidPiutang,
+              activeUsers: activeUsers.length,
+              presentToday,
+              lateToday,
+              month: new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long' })
+            });
+          }
+          break;
+      }
+
+      // Sync to worksheet
+      const result = await sheetsService.syncToWorksheet(worksheetName, data, dataType);
+
+      if (result.success) {
+        res.json({ 
+          message: `Successfully synced ${result.recordCount} ${dataType} records`,
+          dataType,
+          worksheetName,
+          recordCount: result.recordCount,
+          syncedAt: new Date().toISOString()
+        });
+      } else {
+        res.status(500).json({ 
+          message: "Sync failed",
+          details: result.errorMessage,
+          dataType,
+          worksheetName
+        });
+      }
+    } catch (error: any) {
+      console.error('Universal sync error:', error);
+      res.status(500).json({ 
+        message: "Sync failed",
+        details: error.message 
+      });
+    }
+  });
+
+  // Read data from worksheet
+  app.post("/api/google-sheets/read-data", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const { worksheetName } = req.body;
+      if (!worksheetName) {
+        return res.status(400).json({ message: "Worksheet name is required" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      const result = await sheetsService.readFromWorksheet(worksheetName);
+
+      if (result.success) {
+        res.json({ 
+          message: `Successfully read ${result.data.length} records from worksheet`,
+          worksheetName,
+          data: result.data,
+          recordCount: result.data.length,
+          readAt: new Date().toISOString()
+        });
+      } else {
+        res.status(500).json({ 
+          message: "Read failed",
+          details: result.errorMessage,
+          worksheetName
+        });
+      }
+    } catch (error: any) {
+      console.error('Read data error:', error);
+      res.status(500).json({ 
+        message: "Read failed",
+        details: error.message 
+      });
+    }
+  });
+
   // Customer routes
   app.get("/api/customers", async (req, res) => {
     try {

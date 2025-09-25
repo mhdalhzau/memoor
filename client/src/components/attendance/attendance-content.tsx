@@ -11,6 +11,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { type User, type Attendance } from "@shared/schema";
 import { UserCheck, ChevronLeft, ChevronRight, Save, Download, RotateCcw, Edit2 } from "lucide-react";
+import { SyncButton } from "@/components/ui/sync-button";
 import { detectShift, calculateLateness, calculateOvertime } from "@shared/attendance-utils";
 
 // Types untuk attendance record
@@ -556,6 +557,11 @@ Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
               <Download className="h-4 w-4 mr-2" />
               Export CSV
             </Button>
+            <SyncButton 
+              dataType="attendance"
+              variant="outline"
+              className="text-purple-600 border-purple-200 hover:bg-purple-50"
+            />
             <Button 
               variant="outline" 
               onClick={backToList}
