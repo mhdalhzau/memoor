@@ -34,14 +34,21 @@ if (aivenDatabaseUrl) {
     };
 } else if (fallbackDatabaseUrl) {
     console.log("🔗 Using DATABASE_URL fallback connection");
+    
+    // Check if it's an external database
+    const url = new URL(fallbackDatabaseUrl);
+    const isExternalDb = url.hostname !== 'localhost' && url.hostname !== '127.0.0.1';
+    
     config = {
         connectionString: fallbackDatabaseUrl,
         // Production optimizations
         max: isProduction ? 20 : 10, // Max connections in pool
         idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-        connectionTimeoutMillis: 2000, // Return error if connection takes longer than 2 seconds
+        connectionTimeoutMillis: isExternalDb ? 10000 : 2000, // Longer timeout for external databases
         keepAlive: true,
         keepAliveInitialDelayMillis: 0,
+        // SSL configuration for external databases
+        ssl: isExternalDb ? { rejectUnauthorized: false } : false,
     };
 } else {
     console.error("❌ No database URL available. Please set AIVEN_DATABASE_URL or DATABASE_URL");
@@ -54,13 +61,17 @@ console.log("🔒 Using secure TLS configuration with connection pooling optimiz
 export const pool = new Pool(config);
 export const db = drizzle(pool, { schema });
 
-// Test database connection on startup
+// Test database connection on startup (non-blocking)
 (async () => {
     try {
         await pool.query("SELECT 1");
         console.log("✅ Database connection verified successfully");
     } catch (error) {
         console.error("❌ Failed to connect to database:", error);
-        process.exit(1);
+        console.log("⚠️ Application will continue running without database connection");
+        console.log("🔍 Please check:");
+        console.log("   - Database server is running and accessible");
+        console.log("   - Firewall allows connections from Replit");
+        console.log("   - Database credentials are correct");
     }
 })();

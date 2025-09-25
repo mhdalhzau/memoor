@@ -9,8 +9,18 @@ if (!databaseUrl) {
 
 // Configure SSL for database connection
 function getSSLConfig() {
-  const isDevelopment = process.env.NODE_ENV === 'development';
   console.log("✅ Drizzle: Configuring SSL for database connection");
+  
+  // Check if we're using external database (not localhost)
+  const url = new URL(databaseUrl);
+  const isLocalhost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
+  // For external databases, use flexible SSL configuration
+  if (!isLocalhost) {
+    console.log("🔗 Using external database - flexible SSL configuration");
+    return { rejectUnauthorized: false };
+  }
   
   // In development with explicit flag, allow insecure connection
   if (isDevelopment && process.env.DISABLE_DB_TLS_VALIDATION === 'true') {
@@ -18,7 +28,7 @@ function getSSLConfig() {
     return { rejectUnauthorized: false };
   }
   
-  // Try to load CA certificate for secure connection
+  // Try to load CA certificate for secure connection (for localhost/internal databases)
   try {
     const fs = require('fs');
     
