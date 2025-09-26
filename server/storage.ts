@@ -212,20 +212,19 @@ import {
 } from "@shared/schema";
 import { eq, and, gte, lte, like, or, desc, asc } from "drizzle-orm";
 import { sql } from "drizzle-orm";
-import pgSession from "connect-pg-simple";
+// import pgSession from "connect-pg-simple"; // PostgreSQL-specific, not compatible with MySQL
+import MemoryStore from "memorystore";
 import { pool } from "./db";
 
-const PgSession = pgSession(session);
+const MemSession = MemoryStore(session);
 
 export class DatabaseStorage implements IStorage {
   public sessionStore: SessionStore;
 
   constructor() {
-    // Use the existing pool from db.ts for session storage
-    this.sessionStore = new PgSession({
-      pool: pool,
-      tableName: 'session',
-      createTableIfMissing: true
+    // Use memory-based session storage (compatible with any database)
+    this.sessionStore = new MemSession({
+      checkPeriod: 86400000 // prune expired entries every 24h
     });
     
     // Initialize sample data if database is empty
