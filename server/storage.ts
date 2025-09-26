@@ -980,10 +980,13 @@ export class DatabaseStorage implements IStorage {
 
   async createOvertime(overtimeData: InsertOvertime): Promise<Overtime> {
     try {
-      const result = await db.insert(overtime).values({
-        id: randomUUID(),
+      const overtimeId = randomUUID();
+      await db.insert(overtime).values({
+        id: overtimeId,
         ...overtimeData
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created overtime
+      const result = await db.select().from(overtime).where(eq(overtime.id, overtimeId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating overtime:', error);
@@ -1039,10 +1042,13 @@ export class DatabaseStorage implements IStorage {
 
   async createSetoran(setoranData: InsertSetoran): Promise<Setoran> {
     try {
-      const result = await db.insert(setoran).values({
-        id: randomUUID(),
+      const setoranId = randomUUID();
+      await db.insert(setoran).values({
+        id: setoranId,
         ...setoranData
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created setoran
+      const result = await db.select().from(setoran).where(eq(setoran.id, setoranId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating setoran:', error);
@@ -1097,7 +1103,9 @@ export class DatabaseStorage implements IStorage {
 
   async updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer | undefined> {
     try {
-      const result = await db.update(customers).set(data).where(eq(customers.id, id)).returning();
+      await db.update(customers).set(data).where(eq(customers.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated customer
+      const result = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating customer:', error);
@@ -1683,7 +1691,7 @@ export class DatabaseStorage implements IStorage {
           }
         })
         .from(inventory)
-        .innerJoin(products, eq(inventory.productId, products.id))
+        .leftJoin(products, eq(inventory.productId, products.id))
         .where(eq(inventory.storeId, storeId));
       return result;
     } catch (error) {
