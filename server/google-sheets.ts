@@ -177,6 +177,19 @@ export class GoogleSheetsService {
           "Bulan",
           "Terakhir Update",
         ];
+      case "payroll":
+        return [
+          "ID",
+          "Nama Karyawan",
+          "Nama Toko",
+          "Gaji Pokok",
+          "Lembur",
+          "Bonus",
+          "Potongan",
+          "Gaji Bersih",
+          "Periode",
+          "Tanggal Bayar",
+        ];
       default:
         return ["", "Data", "Tanggal Dibuat"];
     }
@@ -1428,6 +1441,120 @@ export class GoogleSheetsService {
       return {
         success: false,
         worksheets: [],
+        errorMessage: error.message,
+      };
+    }
+  }
+  // Create new worksheet with timestamp and sync data
+  async syncToNewWorksheet(
+    pageType: string,
+    data: any[],
+    dataType: "sales" | "attendance" | "cashflow" | "piutang" | "dashboard" | "payroll",
+    storeNames?: string[]
+  ): Promise<{ success: boolean; worksheetName: string; recordCount: number; errorMessage?: string }> {
+    try {
+      // Generate unique worksheet name with timestamp
+      const now = new Date();
+      const timestamp = now.toISOString()
+        .replace(/[:.]/g, '-')
+        .replace('T', '_')
+        .slice(0, -5); // Format: 2025-09-26_17-30-45
+      const storeInfo = storeNames && storeNames.length > 0 ? ` (${storeNames.join(', ')})` : '';
+      let worksheetName = `${pageType} ${timestamp}${storeInfo}`;
+      
+      // Ensure worksheet name doesn't exceed Google Sheets limit (100 chars)
+      if (worksheetName.length > 95) {
+        const baseLength = `${pageType} ${timestamp}`.length;
+        const allowedStoreLength = 95 - baseLength - 4; // Reserve space for " (...)"
+        if (allowedStoreLength > 0 && storeNames && storeNames.length > 0) {
+          const truncatedStores = storeNames.join(', ').substring(0, allowedStoreLength);
+          worksheetName = `${pageType} ${timestamp} (${truncatedStores}...)`;
+        } else {
+          worksheetName = `${pageType} ${timestamp}`;
+        }
+      }
+
+      // Create the new worksheet
+      console.log(`Creating new worksheet: ${worksheetName}`);
+      await this.createWorksheet(worksheetName);
+
+      // Switch to the new worksheet and sync data
+      await this.switchWorksheet(worksheetName);
+      
+      // Ensure headers exist for the data type
+      await this.ensureHeadersExist(dataType);
+
+      // Sync data based on type
+      switch (dataType) {
+        case "sales":
+          await this.syncAllSalesData(data);
+          break;
+        case "attendance":
+          await this.syncAllAttendanceData(data);
+          break;
+        case "cashflow":
+          await this.syncAllCashflowData(data);
+          break;
+        case "piutang":
+          await this.syncAllPiutangData(data);
+          break;
+        case "dashboard":
+          await this.syncDashboardData(data);
+          break;
+        case "payroll":
+          // For payroll, use a generic sync method
+          const payrollRows = data.map((item: any) => {
+            return [
+              item.id || "",
+              item.employeeName || "",
+              item.storeName || "",
+              item.baseSalary || 0,
+              item.overtime || 0,
+              item.bonus || 0,
+              item.deductions || 0,
+              item.netPay || 0,
+              item.payPeriod || "",
+              item.payDate ? new Date(item.payDate).toLocaleDateString("id-ID") : "",
+            ];
+          });
+          
+          const payrollHeaders = [
+            "ID", "Nama Karyawan", "Nama Toko", "Gaji Pokok", "Lembur", 
+            "Bonus", "Potongan", "Gaji Bersih", "Periode", "Tanggal Bayar"
+          ];
+          
+          // Clear existing data and add headers
+          await this.clearWorksheetData();
+          if (payrollRows.length > 0) {
+            await this.sheets.spreadsheets.values.update({
+              spreadsheetId: this.config.spreadsheetId,
+              range: `${this.config.worksheetName}!A1:${String.fromCharCode(64 + payrollHeaders.length)}${payrollRows.length + 1}`,
+              valueInputOption: "RAW",
+              resource: {
+                values: [payrollHeaders, ...payrollRows],
+              },
+            });
+          }
+          break;
+        default:
+          throw new Error(`Unsupported data type: ${dataType}`);
+      }
+
+      console.log(
+        `Successfully synced ${data.length} ${dataType} records to new worksheet "${worksheetName}"`
+      );
+      
+      return {
+        success: true,
+        worksheetName,
+        recordCount: data.length,
+      };
+    } catch (error: any) {
+      console.error("Failed to sync to new worksheet:", error);
+      return {
+        success: false,
+        worksheetName: "",
+        recordCount: 0,
         errorMessage: error.message,
       };
     }

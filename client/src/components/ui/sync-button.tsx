@@ -22,6 +22,15 @@ const dataTypeLabels = {
   payroll: "Payroll"
 };
 
+const pageTypeLabels = {
+  sales: "Halaman Penjualan",
+  attendance: "Halaman Absensi", 
+  cashflow: "Halaman Cashflow",
+  piutang: "Halaman Piutang",
+  dashboard: "Dashboard",
+  payroll: "Halaman Payroll"
+};
+
 const worksheetNames = {
   sales: "Sales Per Toko",
   attendance: "Absensi Per User",
@@ -169,6 +178,31 @@ export function SyncButton({ dataType, storeIds, className, variant = "outline" 
     }
   });
 
+  // NEW: Sync to new worksheet with timestamp (per user request)
+  const syncToNewWorksheetMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/google-sheets/sync-to-new-worksheet", {
+      dataType,
+      pageType: pageTypeLabels[dataType],
+      storeIds
+    }),
+    onSuccess: (data) => {
+      toast({
+        title: "🆕 Worksheet Baru Berhasil!",
+        description: `Data ${dataTypeLabels[dataType]} berhasil disimpan ke worksheet baru: "${data.worksheetName}"`,
+        duration: 5000,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/google-sheets"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "❌ Gagal Buat Worksheet Baru",
+        description: error.message || "Terjadi kesalahan saat membuat worksheet baru",
+        variant: "destructive",
+        duration: 4000,
+      });
+    }
+  });
+
   // Read data mutation
   const readMutation = useMutation({
     mutationFn: (worksheetName: string) => apiRequest("POST", "/api/google-sheets/read-data", {
@@ -246,9 +280,18 @@ export function SyncButton({ dataType, storeIds, className, variant = "outline" 
     }
   };
 
+  const handleSyncToNewWorksheet = async () => {
+    setIsLoading(true);
+    try {
+      await syncToNewWorksheetMutation.mutateAsync();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const isPending = setupWorksheetsMutation.isPending || syncMutation.isPending || readMutation.isPending || 
                    enhancedSyncMutation.isPending || createManualWorksheetMutation.isPending || 
-                   autoCreateStoreWorksheetsMutation.isPending || isLoading;
+                   autoCreateStoreWorksheetsMutation.isPending || syncToNewWorksheetMutation.isPending || isLoading;
 
   return (
     <DropdownMenu>
@@ -276,6 +319,21 @@ export function SyncButton({ dataType, storeIds, className, variant = "outline" 
         >
           <Table className="h-4 w-4 mr-2" />
           Siapkan Worksheet Otomatis
+        </DropdownMenuItem>
+        
+        <DropdownMenuSeparator />
+        
+        {/* NEW: Sync to New Worksheet Section (Main Request) */}
+        <div className="px-2 py-1.5 text-xs font-medium text-primary">🆕 Sync ke Worksheet Baru (Per Halaman)</div>
+        
+        <DropdownMenuItem 
+          onClick={handleSyncToNewWorksheet}
+          disabled={isPending}
+          data-testid={`sync-new-worksheet-${dataType}`}
+          className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800"
+        >
+          <Zap className="h-4 w-4 mr-2 text-blue-600" />
+          ✨ Buat Worksheet Baru + Sync Data {dataTypeLabels[dataType]}
         </DropdownMenuItem>
         
         <DropdownMenuSeparator />

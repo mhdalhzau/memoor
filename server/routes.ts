@@ -4723,6 +4723,206 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // New endpoint: Sync to new worksheet with timestamp (per user request)
+  app.post("/api/google-sheets/sync-to-new-worksheet", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const { dataType, pageType, storeIds } = req.body;
+      
+      if (!dataType || !pageType) {
+        return res.status(400).json({ message: "Data type and page type are required" });
+      }
+
+      const validDataTypes = ['sales', 'attendance', 'cashflow', 'piutang', 'dashboard', 'payroll'];
+      if (!validDataTypes.includes(dataType)) {
+        return res.status(400).json({ message: `Invalid data type. Must be one of: ${validDataTypes.join(', ')}` });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      let data: any[] = [];
+      const storeNames: string[] = [];
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      const targetStoreIds = storeIds && Array.isArray(storeIds) && storeIds.length > 0 
+        ? storeIds.filter(id => accessibleStoreIds.includes(id))
+        : accessibleStoreIds;
+
+      // Get data based on type
+      switch (dataType) {
+        case 'sales':
+          for (const storeId of targetStoreIds) {
+            const storeSales = await storage.getSalesByStore(storeId);
+            const store = await storage.getStore(storeId);
+            if (store) storeNames.push(store.name);
+            
+            // Add user and store names for cleaner display
+            const enrichedSales = await Promise.all(storeSales.map(async (sale) => {
+              const user = await storage.getUser(sale.userId);
+              return {
+                ...sale,
+                userName: user?.name || '',
+                storeName: store?.name || ''
+              };
+            }));
+            data = data.concat(enrichedSales);
+          }
+          break;
+
+        case 'attendance':
+          for (const storeId of targetStoreIds) {
+            const storeAttendance = await storage.getAttendanceByStore(storeId);
+            const store = await storage.getStore(storeId);
+            if (store) storeNames.push(store.name);
+            
+            // Add user and store names for cleaner display
+            const enrichedAttendance = await Promise.all(storeAttendance.map(async (att) => {
+              const user = await storage.getUser(att.userId);
+              return {
+                ...att,
+                userName: user?.name || '',
+                storeName: store?.name || ''
+              };
+            }));
+            data = data.concat(enrichedAttendance);
+          }
+          break;
+
+        case 'cashflow':
+          for (const storeId of targetStoreIds) {
+            const storeCashflow = await storage.getCashflowByStore(storeId);
+            const store = await storage.getStore(storeId);
+            if (store) storeNames.push(store.name);
+            
+            // Add user and store names for cleaner display
+            const enrichedCashflow = await Promise.all(storeCashflow.map(async (cf) => {
+              const user = await storage.getUser(cf.userId);
+              return {
+                ...cf,
+                userName: user?.name || '',
+                storeName: store?.name || ''
+              };
+            }));
+            data = data.concat(enrichedCashflow);
+          }
+          break;
+
+        case 'piutang':
+          for (const storeId of targetStoreIds) {
+            const storePiutang = await storage.getPiutangByStore(storeId);
+            const store = await storage.getStore(storeId);
+            if (store) storeNames.push(store.name);
+            
+            // Add customer and store names for cleaner display
+            const enrichedPiutang = await Promise.all(storePiutang.map(async (p) => {
+              const customer = await storage.getCustomer(p.customerId);
+              return {
+                ...p,
+                customerName: customer?.name || '',
+                storeName: store?.name || ''
+              };
+            }));
+            data = data.concat(enrichedPiutang);
+          }
+          break;
+
+        case 'dashboard':
+          // Get dashboard summary data for selected stores
+          const dashboardData = [];
+          for (const storeId of targetStoreIds) {
+            const store = await storage.getStore(storeId);
+            if (!store) continue;
+            
+            if (store) storeNames.push(store.name);
+            
+            // Calculate dashboard metrics
+            const sales = await storage.getSalesByStore(storeId);
+            const cashflow = await storage.getCashflowByStore(storeId);
+            const piutang = await storage.getPiutangByStore(storeId);
+            const attendance = await storage.getAttendanceByStore(storeId);
+            
+            const totalSales = sales.reduce((sum, s) => sum + parseFloat(s.totalSales || '0'), 0);
+            const totalIncome = cashflow.filter(c => c.type === 'income').reduce((sum, c) => sum + parseFloat(c.amount || '0'), 0);
+            const totalExpense = cashflow.filter(c => c.type === 'expense').reduce((sum, c) => sum + parseFloat(c.amount || '0'), 0);
+            const totalPiutang = piutang.reduce((sum, p) => sum + parseFloat(p.amount || '0'), 0);
+            const paidPiutang = piutang.filter(p => p.status === 'paid').reduce((sum, p) => sum + parseFloat(p.amount || '0'), 0);
+            const unpaidPiutang = totalPiutang - paidPiutang;
+            
+            // Today's attendance
+            const today = new Date().toISOString().split('T')[0];
+            const todayAttendance = attendance.filter(a => a.date?.startsWith(today));
+            const lateToday = todayAttendance.filter(a => a.lateMinutes && parseInt(a.lateMinutes) > 0).length;
+            
+            dashboardData.push({
+              storeName: store.name,
+              totalSales,
+              totalIncome,
+              totalExpense,
+              totalCashflow: totalIncome - totalExpense,
+              totalPiutang,
+              paidPiutang,
+              unpaidPiutang,
+              activeEmployees: attendance.length,
+              presentToday: todayAttendance.length,
+              lateToday,
+              month: new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long' }),
+              lastUpdated: new Date().toISOString()
+            });
+          }
+          data = dashboardData;
+          break;
+
+        case 'payroll':
+          // Get payroll data - this would need to be implemented based on your payroll schema
+          data = []; // Placeholder - implement based on your payroll data structure
+          break;
+
+        default:
+          return res.status(400).json({ message: `Unsupported data type: ${dataType}` });
+      }
+
+      if (data.length === 0) {
+        return res.status(404).json({ message: `No ${dataType} data found for the selected stores` });
+      }
+
+      // Sync to new worksheet
+      const result = await sheetsService.syncToNewWorksheet(pageType, data, dataType as any, storeNames);
+      
+      if (result.success) {
+        res.status(200).json({ 
+          message: `Successfully synced ${result.recordCount} ${dataType} records to new worksheet`,
+          worksheetName: result.worksheetName,
+          recordCount: result.recordCount,
+          dataType,
+          pageType,
+          storeNames: storeNames.length > 0 ? storeNames : null,
+          createdAt: new Date().toISOString()
+        });
+      } else {
+        console.error('Sync to new worksheet failed:', result.errorMessage);
+        res.status(500).json({ 
+          message: "Failed to sync to new worksheet",
+          details: result.errorMessage
+        });
+      }
+
+    } catch (error: any) {
+      console.error('Sync to new worksheet error:', error);
+      res.status(500).json({ 
+        message: "Failed to sync to new worksheet",
+        details: error.message 
+      });
+    }
+  });
+
   // Customer routes
   app.get("/api/customers", async (req, res) => {
     try {
