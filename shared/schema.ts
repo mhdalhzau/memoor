@@ -218,6 +218,62 @@ export const piutang = mysqlTable("piutang", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Suppliers table - Map TypeScript 'id' property to database 'supplier_id' column
+export const suppliers = mysqlTable("suppliers", {
+  id: varchar("supplier_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  contactPerson: text("contact_person"),
+  phone: text("phone"),
+  email: text("email"),
+  address: text("address"),
+  description: text("description"),
+  status: text("status").default("active"), // 'active', 'inactive'
+  storeId: int("store_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Products table - Map TypeScript 'id' property to database 'product_id' column
+export const products = mysqlTable("products", {
+  id: varchar("product_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  description: text("description"),
+  sku: text("sku"),
+  category: text("category"),
+  unit: text("unit").notNull(),
+  buyingPrice: decimal("buying_price", { precision: 12, scale: 2 }),
+  sellingPrice: decimal("selling_price", { precision: 12, scale: 2 }),
+  supplierId: varchar("supplier_id", { length: 36 }),
+  status: text("status").default("active"), // 'active', 'inactive'
+  storeId: int("store_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Inventory table - Map TypeScript 'id' property to database 'inventory_id' column
+export const inventory = mysqlTable("inventory", {
+  id: varchar("inventory_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  productId: varchar("product_id", { length: 36 }).notNull(),
+  storeId: int("store_id").notNull(),
+  currentStock: decimal("current_stock", { precision: 10, scale: 3 }).default("0"),
+  minimumStock: decimal("minimum_stock", { precision: 10, scale: 3 }).default("0"),
+  maximumStock: decimal("maximum_stock", { precision: 10, scale: 3 }),
+  lastUpdated: timestamp("last_updated").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Inventory Transactions table - Map TypeScript 'id' property to database 'inventory_transaction_id' column
+export const inventoryTransactions = mysqlTable("inventory_transactions", {
+  id: varchar("inventory_transaction_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  productId: varchar("product_id", { length: 36 }).notNull(),
+  storeId: int("store_id").notNull(),
+  type: text("type").notNull(), // 'in', 'out', 'adjustment'
+  quantity: decimal("quantity", { precision: 10, scale: 3 }).notNull(),
+  referenceType: text("reference_type"), // 'sale', 'purchase', 'adjustment', etc.
+  referenceId: varchar("reference_id", { length: 36 }),
+  notes: text("notes"),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Wallets table - Map TypeScript 'id' property to database 'wallet_id' column
 export const wallets = mysqlTable("wallets", {
   id: varchar("wallet_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -418,63 +474,7 @@ export type InsertWallet = z.infer<typeof insertWalletSchema>;
 export type PayrollConfig = typeof payrollConfig.$inferSelect;
 export type InsertPayrollConfig = z.infer<typeof insertPayrollConfigSchema>;
 
-// Suppliers table
-export const suppliers = mysqlTable("suppliers", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
-  name: text("name").notNull(),
-  contactPerson: text("contact_person"),
-  phone: text("phone"),
-  email: text("email"),
-  address: text("address"),
-  description: text("description"),
-  status: text("status").default("active"), // 'active', 'inactive'
-  storeId: int("store_id").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-// Products table
-export const products = mysqlTable("products", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
-  name: text("name").notNull(),
-  description: text("description"),
-  sku: text("sku"), // Stock Keeping Unit
-  category: text("category"),
-  unit: text("unit").notNull(), // 'pieces', 'liters', 'kg', 'boxes', etc.
-  buyingPrice: decimal("buying_price", { precision: 12, scale: 2 }),
-  sellingPrice: decimal("selling_price", { precision: 12, scale: 2 }),
-  supplierId: varchar("supplier_id", { length: 36 }),
-  status: text("status").default("active"), // 'active', 'inactive'
-  storeId: int("store_id").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-// Inventory table (current stock levels)
-export const inventory = mysqlTable("inventory", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
-  productId: varchar("product_id", { length: 36 }).notNull(),
-  storeId: int("store_id").notNull(),
-  currentStock: decimal("current_stock", { precision: 10, scale: 3 }).default("0"),
-  minimumStock: decimal("minimum_stock", { precision: 10, scale: 3 }).default("0"),
-  maximumStock: decimal("maximum_stock", { precision: 10, scale: 3 }),
-  lastUpdated: timestamp("last_updated").defaultNow(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-// Inventory transactions table (stock movement history)
-export const inventoryTransactions = mysqlTable("inventory_transactions", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
-  productId: varchar("product_id", { length: 36 }).notNull(),
-  storeId: int("store_id").notNull(),
-  type: text("type").notNull(), // 'in' (stock masuk), 'out' (stock keluar), 'adjustment' (penyesuaian)
-  quantity: decimal("quantity", { precision: 10, scale: 3 }).notNull(),
-  referenceType: text("reference_type"), // 'purchase' (pembelian), 'sale' (penjualan), 'adjustment' (penyesuaian), 'return' (retur)
-  referenceId: varchar("reference_id", { length: 36 }), // ID of related transaction if any
-  notes: text("notes"),
-  userId: varchar("user_id", { length: 36 }).notNull(), // Who performed the transaction
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-// Insert schemas for new tables
+// Insert schemas for inventory management tables
 export const insertSupplierSchema = createInsertSchema(suppliers).omit({
   id: true,
   createdAt: true,
@@ -496,13 +496,7 @@ export const insertInventoryTransactionSchema = createInsertSchema(inventoryTran
   createdAt: true,
 });
 
-// Extended types with related data
-export type AttendanceWithEmployee = Attendance & {
-  employeeName: string;
-  employeeRole: string;
-};
-
-// New types for inventory management
+// Types for inventory management tables
 export type Supplier = typeof suppliers.$inferSelect;
 export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
 export type Product = typeof products.$inferSelect;
@@ -526,3 +520,10 @@ export type InventoryTransactionWithProduct = InventoryTransaction & {
   product: Product;
   user?: User;
 };
+
+// Extended types with related data
+export type AttendanceWithEmployee = Attendance & {
+  employeeName: string;
+  employeeRole: string;
+};
+
