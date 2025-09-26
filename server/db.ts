@@ -3,8 +3,8 @@ import mysql from 'mysql2/promise';
 import fs from 'fs';
 import * as schema from '@shared/schema';
 
-// Get MySQL database URL from environment variables
-const databaseUrl = process.env.MYSQL_DATABASE_URL || process.env.DATABASE_URL;
+// Get MySQL database URL - prioritize the new MySQL URL
+const databaseUrl = "mysql://avnadmin:AVNS_Woo6_cb4krTtGU7mJQi@marlokk-mhdalhzau.j.aivencloud.com:18498/defaultdb?ssl-mode=REQUIRED" || process.env.MYSQL_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!databaseUrl) {
   throw new Error('MYSQL_DATABASE_URL environment variable is required for MySQL connection');
