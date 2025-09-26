@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, serial, decimal, timestamp, boolean } from "drizzle-orm/pg-core";
+import { mysqlTable, text, varchar, int, decimal, timestamp, boolean } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -14,8 +14,8 @@ export const TRANSACTION_TYPES = {
 } as const;
 
 // Users table
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const users = mysqlTable("users", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
@@ -26,16 +26,16 @@ export const users = pgTable("users", {
 });
 
 // User-Store assignment table (many-to-many relationship)
-export const userStores = pgTable("user_stores", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  storeId: integer("store_id").notNull(),
+export const userStores = mysqlTable("user_stores", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  storeId: int("store_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Stores table
-export const stores = pgTable("stores", {
-  id: integer("id").primaryKey(),
+export const stores = mysqlTable("stores", {
+  id: int("id").primaryKey(),
   name: text("name").notNull(),
   address: text("address"),
   phone: text("phone"),
@@ -52,17 +52,17 @@ export const stores = pgTable("stores", {
 });
 
 // Attendance table
-export const attendance = pgTable("attendance", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  storeId: integer("store_id").notNull(),
+export const attendance = mysqlTable("attendance", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  storeId: int("store_id").notNull(),
   date: timestamp("date").defaultNow(),
   checkIn: text("check_in"),
   checkOut: text("check_out"),
   shift: text("shift"), // auto-detected: 'pagi', 'siang', 'malam'
-  latenessMinutes: integer("lateness_minutes").default(0), // telat berapa menit
-  overtimeMinutes: integer("overtime_minutes").default(0), // lembur berapa menit
-  breakDuration: integer("break_duration").default(0), // in minutes
+  latenessMinutes: int("lateness_minutes").default(0), // telat berapa menit
+  overtimeMinutes: int("overtime_minutes").default(0), // lembur berapa menit
+  breakDuration: int("break_duration").default(0), // in minutes
   overtime: decimal("overtime", { precision: 4, scale: 2 }).default("0"), // in hours (kept for compatibility)
   notes: text("notes"),
   attendanceStatus: text("attendance_status").default("belum_diatur"), // 'belum_diatur', 'hadir', 'cuti', 'alpha'
@@ -71,13 +71,13 @@ export const attendance = pgTable("attendance", {
 });
 
 // Sales table with detailed breakdown
-export const sales = pgTable("sales", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  storeId: integer("store_id").notNull(),
-  userId: varchar("user_id"), // Staff who submitted the data
+export const sales = mysqlTable("sales", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  storeId: int("store_id").notNull(),
+  userId: varchar("user_id", { length: 36 }), // Staff who submitted the data
   date: timestamp("date").defaultNow(),
   totalSales: decimal("total_sales", { precision: 12, scale: 2 }).notNull(),
-  transactions: integer("transactions").notNull(),
+  transactions: int("transactions").notNull(),
   averageTicket: decimal("average_ticket", { precision: 8, scale: 2 }),
   // Payment breakdown
   totalQris: decimal("total_qris", { precision: 12, scale: 2 }).default("0"),
@@ -101,16 +101,16 @@ export const sales = pgTable("sales", {
 });
 
 // Cashflow table
-export const cashflow = pgTable("cashflow", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  storeId: integer("store_id").notNull(),
+export const cashflow = mysqlTable("cashflow", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  storeId: int("store_id").notNull(),
   category: text("category").notNull(), // 'Income', 'Expense', 'Investment'
   type: text("type").notNull(), // 'Sales', 'Inventory', 'Utilities', 'Salary', 'Other', 'Pembelian Minyak', 'Transfer Rekening'
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   description: text("description"),
   // Customer and payment tracking fields
-  customerId: varchar("customer_id"), // Link to customers table
-  piutangId: varchar("piutang_id"), // Link to piutang table
+  customerId: varchar("customer_id", { length: 36 }), // Link to customers table
+  piutangId: varchar("piutang_id", { length: 36 }), // Link to piutang table
   paymentStatus: text("payment_status").default("lunas"), // 'lunas', 'belum_lunas'
   // Fields for Pembelian Minyak
   jumlahGalon: decimal("jumlah_galon", { precision: 8, scale: 2 }), // Number of gallons
@@ -126,10 +126,10 @@ export const cashflow = pgTable("cashflow", {
 });
 
 // Payroll table
-export const payroll = pgTable("payroll", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  storeId: integer("store_id").notNull(),
+export const payroll = mysqlTable("payroll", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  storeId: int("store_id").notNull(),
   month: text("month").notNull(), // 'YYYY-MM'
   baseSalary: decimal("base_salary", { precision: 10, scale: 2 }).notNull(),
   overtimePay: decimal("overtime_pay", { precision: 10, scale: 2 }).default("0"),
@@ -142,39 +142,39 @@ export const payroll = pgTable("payroll", {
 });
 
 // Proposals table
-export const proposals = pgTable("proposals", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  storeId: integer("store_id").notNull(),
+export const proposals = mysqlTable("proposals", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  storeId: int("store_id").notNull(),
   title: text("title").notNull(),
   category: text("category").notNull(), // 'Equipment', 'Process Improvement', 'Training', 'Other'
   estimatedCost: decimal("estimated_cost", { precision: 10, scale: 2 }),
   description: text("description").notNull(),
   status: text("status").default("pending"), // 'pending', 'approved', 'rejected'
-  reviewedBy: varchar("reviewed_by"),
+  reviewedBy: varchar("reviewed_by", { length: 36 }),
   reviewedAt: timestamp("reviewed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Overtime table
-export const overtime = pgTable("overtime", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  storeId: integer("store_id").notNull(),
+export const overtime = mysqlTable("overtime", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  storeId: int("store_id").notNull(),
   date: timestamp("date").notNull(),
   hours: decimal("hours", { precision: 4, scale: 2 }).notNull(),
   reason: text("reason").notNull(),
   status: text("status").default("pending"), // 'pending', 'approved', 'rejected'
-  approvedBy: varchar("approved_by"),
+  approvedBy: varchar("approved_by", { length: 36 }),
   approvedAt: timestamp("approved_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Setoran table
-export const setoran = pgTable("setoran", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const setoran = mysqlTable("setoran", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
   employeeName: text("employee_name").notNull(),
-  employeeId: varchar("employee_id"), // Add employee ID reference
+  employeeId: varchar("employee_id", { length: 36 }), // Add employee ID reference
   jamMasuk: text("jam_masuk").notNull(),
   jamKeluar: text("jam_keluar").notNull(),
   nomorAwal: decimal("nomor_awal", { precision: 10, scale: 3 }).notNull(),
@@ -192,36 +192,36 @@ export const setoran = pgTable("setoran", {
 });
 
 // Customers table
-export const customers = pgTable("customers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const customers = mysqlTable("customers", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
   address: text("address"),
   type: text("type").default("customer"), // 'customer', 'employee'
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Piutang table (debt/receivables)
-export const piutang = pgTable("piutang", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  customerId: varchar("customer_id").notNull(),
-  storeId: integer("store_id").notNull(),
+export const piutang = mysqlTable("piutang", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  customerId: varchar("customer_id", { length: 36 }).notNull(),
+  storeId: int("store_id").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   description: text("description").notNull(),
   dueDate: timestamp("due_date"),
   status: text("status").default("belum_lunas"), // 'lunas', 'belum_lunas'
   paidAmount: decimal("paid_amount", { precision: 10, scale: 2 }).default("0"),
   paidAt: timestamp("paid_at"),
-  createdBy: varchar("created_by").notNull(),
+  createdBy: varchar("created_by", { length: 36 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Wallets table for Bank Balance (Wallet Simulator)
-export const wallets = pgTable("wallets", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  storeId: integer("store_id").notNull(),
+export const wallets = mysqlTable("wallets", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  storeId: int("store_id").notNull(),
   name: text("name").notNull(), // 'Bank BCA', 'Bank BRI', 'Cash', 'E-Wallet'
   type: text("type").notNull(), // 'bank', 'cash', 'ewallet'
   balance: decimal("balance", { precision: 15, scale: 2 }).default("0"),
@@ -233,8 +233,8 @@ export const wallets = pgTable("wallets", {
 });
 
 // Payroll Configuration table
-export const payrollConfig = pgTable("payroll_config", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const payrollConfig = mysqlTable("payroll_config", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
   payrollCycle: text("payroll_cycle").notNull().default("30"), // '28' or '30' days
   overtimeRate: decimal("overtime_rate", { precision: 10, scale: 2 }).notNull().default("10000"), // Rate per hour
   startDate: text("start_date").notNull(), // ISO date string
@@ -418,8 +418,8 @@ export type PayrollConfig = typeof payrollConfig.$inferSelect;
 export type InsertPayrollConfig = z.infer<typeof insertPayrollConfigSchema>;
 
 // Suppliers table
-export const suppliers = pgTable("suppliers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const suppliers = mysqlTable("suppliers", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
   name: text("name").notNull(),
   contactPerson: text("contact_person"),
   phone: text("phone"),
@@ -427,13 +427,13 @@ export const suppliers = pgTable("suppliers", {
   address: text("address"),
   description: text("description"),
   status: text("status").default("active"), // 'active', 'inactive'
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Products table
-export const products = pgTable("products", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const products = mysqlTable("products", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
   name: text("name").notNull(),
   description: text("description"),
   sku: text("sku"), // Stock Keeping Unit
@@ -441,17 +441,17 @@ export const products = pgTable("products", {
   unit: text("unit").notNull(), // 'pieces', 'liters', 'kg', 'boxes', etc.
   buyingPrice: decimal("buying_price", { precision: 12, scale: 2 }),
   sellingPrice: decimal("selling_price", { precision: 12, scale: 2 }),
-  supplierId: varchar("supplier_id"),
+  supplierId: varchar("supplier_id", { length: 36 }),
   status: text("status").default("active"), // 'active', 'inactive'
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Inventory table (current stock levels)
-export const inventory = pgTable("inventory", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  productId: varchar("product_id").notNull(),
-  storeId: integer("store_id").notNull(),
+export const inventory = mysqlTable("inventory", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  productId: varchar("product_id", { length: 36 }).notNull(),
+  storeId: int("store_id").notNull(),
   currentStock: decimal("current_stock", { precision: 10, scale: 3 }).default("0"),
   minimumStock: decimal("minimum_stock", { precision: 10, scale: 3 }).default("0"),
   maximumStock: decimal("maximum_stock", { precision: 10, scale: 3 }),
@@ -460,16 +460,16 @@ export const inventory = pgTable("inventory", {
 });
 
 // Inventory transactions table (stock movement history)
-export const inventoryTransactions = pgTable("inventory_transactions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  productId: varchar("product_id").notNull(),
-  storeId: integer("store_id").notNull(),
+export const inventoryTransactions = mysqlTable("inventory_transactions", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  productId: varchar("product_id", { length: 36 }).notNull(),
+  storeId: int("store_id").notNull(),
   type: text("type").notNull(), // 'in' (stock masuk), 'out' (stock keluar), 'adjustment' (penyesuaian)
   quantity: decimal("quantity", { precision: 10, scale: 3 }).notNull(),
   referenceType: text("reference_type"), // 'purchase' (pembelian), 'sale' (penjualan), 'adjustment' (penyesuaian), 'return' (retur)
-  referenceId: varchar("reference_id"), // ID of related transaction if any
+  referenceId: varchar("reference_id", { length: 36 }), // ID of related transaction if any
   notes: text("notes"),
-  userId: varchar("user_id").notNull(), // Who performed the transaction
+  userId: varchar("user_id", { length: 36 }).notNull(), // Who performed the transaction
   createdAt: timestamp("created_at").defaultNow(),
 });
 
