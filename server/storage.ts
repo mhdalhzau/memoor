@@ -265,7 +265,7 @@ export class DatabaseStorage implements IStorage {
           description: "Branch store location",
           status: "active",
         }
-      ]).onConflictDoNothing();
+      ]);
 
       // Create default accounts
       const managerId = randomUUID();
@@ -315,7 +315,7 @@ export class DatabaseStorage implements IStorage {
           role: "staff",
           salary: "8000000",
         }
-      ]).onConflictDoNothing();
+      ]);
 
       // Assign users to stores
       await db.insert(userStores).values([
@@ -329,7 +329,7 @@ export class DatabaseStorage implements IStorage {
         { id: randomUUID(), userId: putriId, storeId: 1 },
         { id: randomUUID(), userId: hafizId, storeId: 1 },
         { id: randomUUID(), userId: endangId, storeId: 1 },
-      ]).onConflictDoNothing();
+      ]);
 
       console.log('Sample data initialized in database');
     } catch (error) {
