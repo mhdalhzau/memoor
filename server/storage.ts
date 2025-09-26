@@ -130,6 +130,7 @@ export interface IStorage {
   // Helper methods for QRIS management
   findOrCreatePiutangManager(storeId: number): Promise<Customer>;
   createQrisExpenseForManager(salesRecord: Sales): Promise<void>;
+  createQrisPiutangForImport(storeId: number, qrisAmount: number, description: string, userId?: string, date?: Date): Promise<void>;
   
   // Piutang methods
   getPiutang(id: string): Promise<Piutang | undefined>;
@@ -1261,6 +1262,46 @@ export class DatabaseStorage implements IStorage {
 
     } catch (error) {
       console.error('Error creating QRIS expense for manager:', error);
+      throw error;
+    }
+  }
+
+  // Simplified QRIS piutang creation for imports (doesn't require full sales record)
+  async createQrisPiutangForImport(storeId: number, qrisAmount: number, description: string, userId?: string, date?: Date): Promise<void> {
+    try {
+      if (!qrisAmount || qrisAmount <= 0) {
+        return;
+      }
+
+      const manager = await this.findOrCreatePiutangManager(storeId);
+      const importDate = date || new Date();
+
+      // Create piutang record for FULL QRIS amount to manager
+      await db.insert(piutang).values({
+        id: randomUUID(),
+        customerId: manager.id,
+        storeId: storeId,
+        amount: qrisAmount.toString(),
+        description: description,
+        type: "pemberian_utang", // Manager owes this amount to the store
+        status: "pending",
+        userId: userId
+      });
+
+      // Also create QRIS fee expense entry for the store
+      const feeAmount = qrisAmount * 0.027; // 2.7% fee
+      await this.createCashflow({
+        storeId: storeId,
+        category: 'Expense',
+        type: 'QRIS Fee',
+        amount: feeAmount.toString(),
+        description: `QRIS processing fee 2.7% - ${description}`,
+        date: importDate
+      }, userId);
+
+      console.log(`✅ Created QRIS piutang (${qrisAmount}) and fee expense (${feeAmount}) for import`);
+    } catch (error) {
+      console.error('Error creating QRIS piutang for import:', error);
       throw error;
     }
   }

@@ -76,19 +76,19 @@ export const sales = mysqlTable("sales", {
   storeId: int("store_id").notNull(),
   userId: varchar("user_id", { length: 36 }), // Staff who submitted the data
   date: timestamp("date").defaultNow(),
-  totalSales: decimal("total_sales", { precision: 12, scale: 2 }).notNull(),
+  totalSales: decimal("total_sales", { precision: 15, scale: 2 }).notNull(),
   transactions: int("transactions").notNull(),
-  averageTicket: decimal("average_ticket", { precision: 12, scale: 2 }),
+  averageTicket: decimal("average_ticket", { precision: 15, scale: 2 }),
   // Payment breakdown
-  totalQris: decimal("total_qris", { precision: 12, scale: 2 }).default("0"),
-  totalCash: decimal("total_cash", { precision: 12, scale: 2 }).default("0"),
+  totalQris: decimal("total_qris", { precision: 15, scale: 2 }).default("0"),
+  totalCash: decimal("total_cash", { precision: 15, scale: 2 }).default("0"),
   // Meter readings
   meterStart: decimal("meter_start", { precision: 10, scale: 3 }),
   meterEnd: decimal("meter_end", { precision: 10, scale: 3 }),
   totalLiters: decimal("total_liters", { precision: 10, scale: 3 }),
   // PU (Income/Expenses)
-  totalIncome: decimal("total_income", { precision: 12, scale: 2 }).default("0"),
-  totalExpenses: decimal("total_expenses", { precision: 12, scale: 2 }).default("0"),
+  totalIncome: decimal("total_income", { precision: 15, scale: 2 }).default("0"),
+  totalExpenses: decimal("total_expenses", { precision: 15, scale: 2 }).default("0"),
   incomeDetails: text("income_details"), // JSON string
   expenseDetails: text("expense_details"), // JSON string
   // Shift information

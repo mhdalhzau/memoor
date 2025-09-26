@@ -1746,19 +1746,39 @@ export function registerRoutes(app: Express): Server {
           }
           
           if (incomeEntries.length > 0) {
-            // Create individual income entries
+            // Create individual income entries, but skip QRIS payments (they should go to manager piutang)
             for (const incomeItem of incomeEntries) {
-              const incomeCashflow = {
-                storeId: targetStoreId,
-                category: 'Income',
-                type: 'Other',
-                amount: incomeItem.amount,
-                description: `${incomeItem.description} (Auto-imported from sales data)`,
-                date: importDate
-              };
+              // Skip QRIS-related income entries - they should be handled by createQrisExpenseForManager
+              const description = (incomeItem.description || '').toLowerCase();
+              const isQrisPayment = description.includes('qris') || description.includes('qr') || 
+                                  incomeItem.paymentMethod === 'qris' || incomeItem.paymentMethod === 'QRIS';
               
-              const newIncomeCashflow = await storage.createCashflow(incomeCashflow);
-              cashflowEntries.push(newIncomeCashflow);
+              if (!isQrisPayment) {
+                const incomeCashflow = {
+                  storeId: targetStoreId,
+                  category: 'Income',
+                  type: 'Other',
+                  amount: incomeItem.amount,
+                  description: `${incomeItem.description} (Auto-imported from sales data)`,
+                  date: importDate
+                };
+                
+                const newIncomeCashflow = await storage.createCashflow(incomeCashflow);
+                cashflowEntries.push(newIncomeCashflow);
+              } else {
+                // Handle QRIS payment properly - create manager piutang instead of store cashflow
+                console.log(`Processing QRIS income entry: ${incomeItem.description} - routing through manager piutang flow`);
+                const qrisAmount = parseFloat(incomeItem.amount.toString());
+                
+                // Use the simplified QRIS piutang creation for imports
+                await storage.createQrisPiutangForImport(
+                  targetStoreId,
+                  qrisAmount,
+                  `${incomeItem.description} (Auto-imported from sales data) - awaiting transfer to store`,
+                  salesRecord.userId,
+                  importDate
+                );
+              }
             }
           } else {
             // Create single income entry as fallback
