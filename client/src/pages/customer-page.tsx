@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatRupiah } from "@/lib/utils";
 import { Customer, insertCustomerSchema, type InsertCustomer, type User } from "@shared/schema";
 
 export default function CustomerPage() {
@@ -467,7 +468,7 @@ export default function CustomerPage() {
                               )}
                               {staff.salary && (
                                 <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                  <span className="font-medium">Salary: Rp {Number(staff.salary).toLocaleString("id-ID")}</span>
+                                  <span className="font-medium">Salary: {formatRupiah(staff.salary)}</span>
                                 </div>
                               )}
                             </div>

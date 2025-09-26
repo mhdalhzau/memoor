@@ -15,7 +15,7 @@ import { FileDown, FileSpreadsheet, TrendingUp, Upload, Loader2, Eye, Clock, Gau
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, formatLiters } from "@/lib/utils";
 import { type Sales } from "@shared/schema";
 import { SyncButton } from "@/components/ui/sync-button";
 import { z } from "zod";
@@ -398,19 +398,19 @@ Total Pemasukan: Rp 100.000
                   <div className="flex justify-between">
                     <span className="font-medium">Cash:</span>
                     <span className={parsedData?.totalCash ? "text-green-600" : "text-red-500"}>
-                      {parsedData?.totalCash ? `Rp ${parsedData.totalCash.toLocaleString('id-ID')}` : "Not detected"}
+                      {parsedData?.totalCash ? formatRupiah(parsedData.totalCash) : "Not detected"}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="font-medium">QRIS:</span>
                     <span className={parsedData?.totalQris ? "text-green-600" : "text-red-500"}>
-                      {parsedData?.totalQris ? `Rp ${parsedData.totalQris.toLocaleString('id-ID')}` : "Not detected"}
+                      {parsedData?.totalQris ? formatRupiah(parsedData.totalQris) : "Not detected"}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="font-medium">Total Sales:</span>
                     <span className={parsedData?.totalSales ? "text-green-600 font-bold" : "text-red-500"}>
-                      {parsedData?.totalSales ? `Rp ${parsedData.totalSales.toLocaleString('id-ID')}` : "Not detected"}
+                      {parsedData?.totalSales ? formatRupiah(parsedData.totalSales) : "Not detected"}
                     </span>
                   </div>
                 </CardContent>
@@ -425,13 +425,13 @@ Total Pemasukan: Rp 100.000
                   <div className="flex justify-between">
                     <span className="font-medium">Total Income:</span>
                     <span className={parsedData?.totalIncome ? "text-green-600" : "text-gray-400"}>
-                      {parsedData?.totalIncome ? `Rp ${parsedData.totalIncome.toLocaleString('id-ID')}` : "Rp 0"}
+                      {parsedData?.totalIncome ? formatRupiah(parsedData.totalIncome) : "Rp 0"}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="font-medium">Total Expenses:</span>
                     <span className={parsedData?.totalExpenses ? "text-red-600" : "text-gray-400"}>
-                      {parsedData?.totalExpenses ? `Rp ${parsedData.totalExpenses.toLocaleString('id-ID')}` : "Rp 0"}
+                      {parsedData?.totalExpenses ? formatRupiah(parsedData.totalExpenses) : "Rp 0"}
                     </span>
                   </div>
                   
@@ -441,7 +441,7 @@ Total Pemasukan: Rp 100.000
                       {parsedData.expenseDetails.map((item: any, index: number) => (
                         <div key={index} className="text-sm flex justify-between ml-2">
                           <span>{item.description}:</span>
-                          <span>Rp {item.amount.toLocaleString('id-ID')}</span>
+                          <span>{formatRupiah(item.amount)}</span>
                         </div>
                       ))}
                     </div>
@@ -453,7 +453,7 @@ Total Pemasukan: Rp 100.000
                       {parsedData.incomeDetails.map((item: any, index: number) => (
                         <div key={index} className="text-sm flex justify-between ml-2">
                           <span>{item.description}:</span>
-                          <span>Rp {item.amount.toLocaleString('id-ID')}</span>
+                          <span>{formatRupiah(item.amount)}</span>
                         </div>
                       ))}
                     </div>
@@ -1033,7 +1033,7 @@ export default function SalesContent() {
                     <span className="text-sm font-medium">Total Liters</span>
                   </div>
                   <p className="text-2xl font-bold text-purple-700">
-                    {totalLiters.toLocaleString('id-ID', { maximumFractionDigits: 2 })} L
+                    {formatLiters(totalLiters)} L
                   </p>
                 </CardContent>
               </Card>
@@ -1149,7 +1149,7 @@ function SalesRecordsTable({
                     {formatRupiah(record.totalQris || 0)}
                   </TableCell>
                   <TableCell className="text-purple-600">
-                    {parseFloat(record.totalLiters || "0").toLocaleString('id-ID', { maximumFractionDigits: 2 })} L
+                    {formatLiters(record.totalLiters)} L
                   </TableCell>
                   <TableCell>
                     <SalesDetailModal record={record} />

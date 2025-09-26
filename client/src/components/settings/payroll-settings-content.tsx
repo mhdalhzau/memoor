@@ -14,6 +14,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatRupiah } from "@/lib/utils";
 import { 
   Calendar, 
   Calculator, 
@@ -256,13 +257,13 @@ export default function PayrollSettingsContent() {
                 </h3>
                 <div className="text-green-800 dark:text-green-200 space-y-2">
                   <p className="font-mono text-sm bg-white dark:bg-green-900 p-2 rounded">
-                    Total Salary = (Total Working Days × Daily Salary) + (Total Overtime Hours × Rp {configForm.watch("overtimeRate")?.toLocaleString("id-ID") || "10,000"})
+                    Total Salary = (Total Working Days × Daily Salary) + (Total Overtime Hours × {formatRupiah(configForm.watch("overtimeRate") || 10000)})
                   </p>
                   <div className="text-sm space-y-1">
                     <p>• <strong>Daily Salary</strong> = Monthly Salary ÷ {configForm.watch("payrollCycle") || "30"} days</p>
                     <p>• <strong>Working Days</strong> = Days with attendance records</p>
                     <p>• <strong>Overtime Hours</strong> = Total approved overtime hours</p>
-                    <p>• <strong>Overtime Rate</strong> = Rp {configForm.watch("overtimeRate")?.toLocaleString("id-ID") || "10,000"} per hour</p>
+                    <p>• <strong>Overtime Rate</strong> = {formatRupiah(configForm.watch("overtimeRate") || 10000)} per hour</p>
                   </div>
                 </div>
               </div>
@@ -298,7 +299,7 @@ export default function PayrollSettingsContent() {
                             </div>
                             <div>
                               <span className="text-muted-foreground">Overtime Rate:</span>
-                              <p className="font-medium">Rp {configForm.watch("overtimeRate")?.toLocaleString("id-ID") || "10,000"}/hour</p>
+                              <p className="font-medium">{formatRupiah(configForm.watch("overtimeRate") || 10000)}/hour</p>
                             </div>
                           </div>
                         </CardContent>
@@ -324,10 +325,10 @@ export default function PayrollSettingsContent() {
                   <p><strong>Working Days:</strong> 25 days</p>
                   <p><strong>Overtime Hours:</strong> 8 hours</p>
                   <hr className="my-2" />
-                  <p><strong>Daily Salary:</strong> Rp 3,000,000 ÷ {configForm.watch("payrollCycle") || "30"} = Rp {Math.round(3000000 / (parseInt(configForm.watch("payrollCycle") || "30"))).toLocaleString("id-ID")}</p>
-                  <p><strong>Base Pay:</strong> Rp {Math.round(3000000 / (parseInt(configForm.watch("payrollCycle") || "30"))).toLocaleString("id-ID")} × 25 = Rp {(Math.round(3000000 / (parseInt(configForm.watch("payrollCycle") || "30"))) * 25).toLocaleString("id-ID")}</p>
-                  <p><strong>Overtime Pay:</strong> Rp {configForm.watch("overtimeRate")?.toLocaleString("id-ID") || "10,000"} × 8 = Rp {((configForm.watch("overtimeRate") || 10000) * 8).toLocaleString("id-ID")}</p>
-                  <p className="font-bold text-green-600"><strong>Total Salary:</strong> Rp {((Math.round(3000000 / (parseInt(configForm.watch("payrollCycle") || "30"))) * 25) + ((configForm.watch("overtimeRate") || 10000) * 8)).toLocaleString("id-ID")}</p>
+                  <p><strong>Daily Salary:</strong> Rp 3,000,000 ÷ {configForm.watch("payrollCycle") || "30"} = {formatRupiah(Math.round(3000000 / (parseInt(configForm.watch("payrollCycle") || "30"))))}</p>
+                  <p><strong>Base Pay:</strong> {formatRupiah(Math.round(3000000 / (parseInt(configForm.watch("payrollCycle") || "30"))))} × 25 = {formatRupiah(Math.round(3000000 / (parseInt(configForm.watch("payrollCycle") || "30"))) * 25)}</p>
+                  <p><strong>Overtime Pay:</strong> {formatRupiah(configForm.watch("overtimeRate") || 10000)} × 8 = {formatRupiah((configForm.watch("overtimeRate") || 10000) * 8)}</p>
+                  <p className="font-bold text-green-600"><strong>Total Salary:</strong> {formatRupiah((Math.round(3000000 / (parseInt(configForm.watch("payrollCycle") || "30"))) * 25) + ((configForm.watch("overtimeRate") || 10000) * 8))}</p>
                 </div>
               </div>
             </CardContent>

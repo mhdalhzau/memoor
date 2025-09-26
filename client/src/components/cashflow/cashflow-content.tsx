@@ -34,6 +34,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatRupiah, formatNumber } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import {
   type Cashflow,
@@ -596,7 +597,7 @@ export default function CashflowContent() {
                     className="text-2xl font-bold text-green-600"
                     data-testid="text-grand-total-income"
                   >
-                    Rp {grandTotals.totalIncome.toLocaleString("id-ID")}
+                    {formatRupiah(grandTotals.totalIncome)}
                   </p>
                 </div>
                 <div className="text-center p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
@@ -610,7 +611,7 @@ export default function CashflowContent() {
                     className="text-2xl font-bold text-red-600"
                     data-testid="text-grand-total-expense"
                   >
-                    Rp {grandTotals.totalExpense.toLocaleString("id-ID")}
+                    {formatRupiah(grandTotals.totalExpense)}
                   </p>
                 </div>
                 <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
@@ -624,7 +625,7 @@ export default function CashflowContent() {
                     className="text-2xl font-bold text-blue-600"
                     data-testid="text-grand-total-investment"
                   >
-                    Rp {grandTotals.totalInvestment.toLocaleString("id-ID")}
+                    {formatRupiah(grandTotals.totalInvestment)}
                   </p>
                 </div>
                 <div
@@ -660,7 +661,7 @@ export default function CashflowContent() {
                     }`}
                     data-testid="text-grand-net-flow"
                   >
-                    Rp {grandTotals.netFlow.toLocaleString("id-ID")}
+                    {formatRupiah(grandTotals.netFlow)}
                   </p>
                 </div>
               </div>
@@ -690,7 +691,7 @@ export default function CashflowContent() {
                   className="font-bold text-green-600"
                   data-testid="text-store1-income"
                 >
-                  Rp {(storeTotals[stores[0]?.id] || {totalIncome: 0}).totalIncome.toLocaleString("id-ID")}
+                  {formatRupiah((storeTotals[stores[0]?.id] || {totalIncome: 0}).totalIncome)}
                 </span>
               </div>
               <div className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded">
@@ -701,7 +702,7 @@ export default function CashflowContent() {
                   className="font-bold text-red-600"
                   data-testid="text-store1-expense"
                 >
-                  Rp {(storeTotals[stores[0]?.id] || {totalExpense: 0}).totalExpense.toLocaleString("id-ID")}
+                  {formatRupiah((storeTotals[stores[0]?.id] || {totalExpense: 0}).totalExpense)}
                 </span>
               </div>
               <div className="flex justify-between items-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
@@ -712,7 +713,7 @@ export default function CashflowContent() {
                   className="font-bold text-blue-600"
                   data-testid="text-store1-investment"
                 >
-                  Rp {(storeTotals[stores[0]?.id] || {totalInvestment: 0}).totalInvestment.toLocaleString("id-ID")}
+                  {formatRupiah((storeTotals[stores[0]?.id] || {totalInvestment: 0}).totalInvestment)}
                 </span>
               </div>
               <div
@@ -724,7 +725,7 @@ export default function CashflowContent() {
               >
                 <span className="text-sm font-medium">Net Cashflow</span>
                 <span data-testid="text-store1-net">
-                  Rp {(storeTotals[stores[0]?.id] || {netFlow: 0}).netFlow.toLocaleString("id-ID")}
+                  {formatRupiah((storeTotals[stores[0]?.id] || {netFlow: 0}).netFlow)}
                 </span>
               </div>
             </CardContent>
@@ -1234,13 +1235,12 @@ export default function CashflowContent() {
                                   : "text-red-600"
                               }`}
                             >
-                              {entry.category === "Income" ? "+" : "-"}Rp{" "}
-                              {parseInt(
+                              {entry.category === "Income" ? "+" : "-"}{formatRupiah(
                                 entry.category === "Expense" &&
                                   entry.totalPengeluaran
                                   ? entry.totalPengeluaran
-                                  : entry.amount,
-                              ).toLocaleString("id-ID")}
+                                  : entry.amount
+                              )}
                             </span>
                             <Eye className="h-4 w-4 text-muted-foreground" />
                           </div>
@@ -1293,7 +1293,7 @@ export default function CashflowContent() {
                   className="font-bold text-green-600"
                   data-testid="text-store2-income"
                 >
-                  Rp {(storeTotals[stores[1]?.id] || {totalIncome: 0}).totalIncome.toLocaleString("id-ID")}
+                  {formatRupiah((storeTotals[stores[1]?.id] || {totalIncome: 0}).totalIncome)}
                 </span>
               </div>
               <div className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded">
@@ -1304,7 +1304,7 @@ export default function CashflowContent() {
                   className="font-bold text-red-600"
                   data-testid="text-store2-expense"
                 >
-                  Rp {(storeTotals[stores[1]?.id] || {totalExpense: 0}).totalExpense.toLocaleString("id-ID")}
+                  {formatRupiah((storeTotals[stores[1]?.id] || {totalExpense: 0}).totalExpense)}
                 </span>
               </div>
               <div className="flex justify-between items-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
@@ -1315,7 +1315,7 @@ export default function CashflowContent() {
                   className="font-bold text-blue-600"
                   data-testid="text-store2-investment"
                 >
-                  Rp {(storeTotals[stores[1]?.id] || {totalInvestment: 0}).totalInvestment.toLocaleString("id-ID")}
+                  {formatRupiah((storeTotals[stores[1]?.id] || {totalInvestment: 0}).totalInvestment)}
                 </span>
               </div>
               <div
@@ -1327,7 +1327,7 @@ export default function CashflowContent() {
               >
                 <span className="text-sm font-medium">Net Cashflow</span>
                 <span data-testid="text-store2-net">
-                  Rp {(storeTotals[stores[1]?.id] || {netFlow: 0}).netFlow.toLocaleString("id-ID")}
+                  {formatRupiah((storeTotals[stores[1]?.id] || {netFlow: 0}).netFlow)}
                 </span>
               </div>
             </CardContent>
@@ -1839,13 +1839,12 @@ export default function CashflowContent() {
                                   : "text-red-600"
                               }`}
                             >
-                              {entry.category === "Income" ? "+" : "-"}Rp{" "}
-                              {parseInt(
+                              {entry.category === "Income" ? "+" : "-"}{formatRupiah(
                                 entry.category === "Expense" &&
                                   entry.totalPengeluaran
                                   ? entry.totalPengeluaran
-                                  : entry.amount,
-                              ).toLocaleString("id-ID")}
+                                  : entry.amount
+                              )}
                             </span>
                             <Eye className="h-4 w-4 text-muted-foreground" />
                           </div>
@@ -1903,13 +1902,12 @@ export default function CashflowContent() {
                         : "text-red-600"
                     }`}
                   >
-                    {selectedEntry.category === "Income" ? "+" : "-"}Rp{" "}
-                    {parseInt(
+                    {selectedEntry.category === "Income" ? "+" : "-"}{formatRupiah(
                       selectedEntry.category === "Expense" &&
                         selectedEntry.totalPengeluaran
                         ? selectedEntry.totalPengeluaran
-                        : selectedEntry.amount,
-                    ).toLocaleString("id-ID")}
+                        : selectedEntry.amount
+                    )}
                   </p>
                 </div>
                 <div>
@@ -1953,10 +1951,7 @@ export default function CashflowContent() {
                         Pajak Ongkos:
                       </span>
                       <span className="ml-2">
-                        Rp{" "}
-                        {parseInt(
-                          selectedEntry.pajakOngkos || "0",
-                        ).toLocaleString("id-ID")}
+                        {formatRupiah(selectedEntry.pajakOngkos || "0")}
                       </span>
                     </div>
                     <div>
@@ -1964,10 +1959,7 @@ export default function CashflowContent() {
                         Pajak Transfer:
                       </span>
                       <span className="ml-2">
-                        Rp{" "}
-                        {parseInt(
-                          selectedEntry.pajakTransfer || "0",
-                        ).toLocaleString("id-ID")}
+                        {formatRupiah(selectedEntry.pajakTransfer || "0")}
                       </span>
                     </div>
                     <div>
@@ -1975,10 +1967,7 @@ export default function CashflowContent() {
                         Total Pengeluaran:
                       </span>
                       <span className="ml-2 font-medium">
-                        Rp{" "}
-                        {parseInt(
-                          selectedEntry.totalPengeluaran || "0",
-                        ).toLocaleString("id-ID")}
+                        {formatRupiah(selectedEntry.totalPengeluaran || "0")}
                       </span>
                     </div>
                   </div>
@@ -2003,19 +1992,13 @@ export default function CashflowContent() {
                         Pajak Transfer:
                       </span>
                       <span className="ml-2">
-                        Rp{" "}
-                        {parseInt(
-                          selectedEntry.pajakTransferRekening || "0",
-                        ).toLocaleString("id-ID")}
+                        {formatRupiah(selectedEntry.pajakTransferRekening || "0")}
                       </span>
                     </div>
                     <div className="col-span-2">
                       <span className="text-muted-foreground">Hasil:</span>
                       <span className="ml-2 font-medium">
-                        Rp{" "}
-                        {parseInt(selectedEntry.hasil || "0").toLocaleString(
-                          "id-ID",
-                        )}
+                        {formatRupiah(selectedEntry.hasil || "0")}
                       </span>
                     </div>
                   </div>

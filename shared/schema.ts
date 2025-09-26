@@ -78,7 +78,7 @@ export const sales = mysqlTable("sales", {
   date: timestamp("date").defaultNow(),
   totalSales: decimal("total_sales", { precision: 12, scale: 2 }).notNull(),
   transactions: int("transactions").notNull(),
-  averageTicket: decimal("average_ticket", { precision: 8, scale: 2 }),
+  averageTicket: decimal("average_ticket", { precision: 12, scale: 2 }),
   // Payment breakdown
   totalQris: decimal("total_qris", { precision: 12, scale: 2 }).default("0"),
   totalCash: decimal("total_cash", { precision: 12, scale: 2 }).default("0"),
@@ -106,14 +106,14 @@ export const cashflow = mysqlTable("cashflow", {
   storeId: int("store_id").notNull(),
   category: text("category").notNull(), // 'Income', 'Expense', 'Investment'
   type: text("type").notNull(), // 'Sales', 'Inventory', 'Utilities', 'Salary', 'Other', 'Pembelian Minyak', 'Transfer Rekening'
-  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
   description: text("description"),
   // Customer and payment tracking fields
   customerId: varchar("customer_id", { length: 36 }), // Link to customers table
   piutangId: varchar("piutang_id", { length: 36 }), // Link to piutang table
   paymentStatus: text("payment_status").default("lunas"), // 'lunas', 'belum_lunas'
   // Fields for Pembelian Minyak
-  jumlahGalon: decimal("jumlah_galon", { precision: 8, scale: 2 }), // Number of gallons
+  jumlahGalon: decimal("jumlah_galon", { precision: 12, scale: 2 }), // Number of gallons
   pajakOngkos: decimal("pajak_ongkos", { precision: 10, scale: 2 }), // Tax fee (calculated)
   pajakTransfer: decimal("pajak_transfer", { precision: 10, scale: 2 }).default("2500"), // Transfer tax (fixed 2500)
   totalPengeluaran: decimal("total_pengeluaran", { precision: 12, scale: 2 }), // Total expenses
@@ -208,11 +208,11 @@ export const piutang = mysqlTable("piutang", {
   id: varchar("piutang_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   customerId: varchar("customer_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
-  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
   description: text("description").notNull(),
   dueDate: timestamp("due_date"),
   status: text("status").default("belum_lunas"), // 'lunas', 'belum_lunas'
-  paidAmount: decimal("paid_amount", { precision: 10, scale: 2 }).default("0"),
+  paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).default("0"),
   paidAt: timestamp("paid_at"),
   createdBy: varchar("created_by", { length: 36 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
