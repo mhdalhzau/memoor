@@ -1244,9 +1244,8 @@ export class DatabaseStorage implements IStorage {
         storeId: salesRecord.storeId,
         amount: qrisAmount.toString(),
         description: `QRIS payment from sales ${new Date(salesRecord.date).toISOString().split('T')[0]} - awaiting transfer to store`,
-        type: "pemberian_utang", // Manager owes this amount to the store
         status: "pending",
-        userId: salesRecord.userId
+        createdBy: salesRecord.userId || "system"
       });
 
       // Also create QRIS fee expense entry for the store
@@ -1283,9 +1282,8 @@ export class DatabaseStorage implements IStorage {
         storeId: storeId,
         amount: qrisAmount.toString(),
         description: description,
-        type: "pemberian_utang", // Manager owes this amount to the store
         status: "pending",
-        userId: userId
+        createdBy: userId || "system"
       });
 
       // Also create QRIS fee expense entry for the store

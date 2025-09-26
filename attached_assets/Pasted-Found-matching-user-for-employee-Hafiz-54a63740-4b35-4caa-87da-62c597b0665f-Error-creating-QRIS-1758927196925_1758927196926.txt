@@ -1,0 +1,25 @@
+Found matching user for employee: Hafiz -> 54a63740-4b35-4caa-87da-62c597b0665f
+Error creating QRIS expense for manager: Error: Field 'created_by' doesn't have a default value
+    at PromisePool.query (/home/runner/workspace/node_modules/mysql2/lib/promise/pool.js:36:22)
+    at MySql2PreparedQuery.execute (/home/runner/workspace/node_modules/src/mysql2/session.ts:92:29)
+    at QueryPromise.execute (/home/runner/workspace/node_modules/src/mysql-core/query-builders/insert.ts:315:25)
+    at QueryPromise.then (/home/runner/workspace/node_modules/src/query-promise.ts:31:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+  code: 'ER_NO_DEFAULT_FOR_FIELD',
+  errno: 1364,
+  sql: "insert into `piutang` (`piutang_id`, `customer_id`, `store_id`, `amount`, `description`, `due_date`, `status`, `paid_amount`, `paid_at`, `created_by`, `created_at`) values ('2ef1ac86-16c4-42c1-9e97-4d8c6afef7a0', '897e37b9-1102-4ec6-a916-8e0efe4633e5', 2, '2000000', 'QRIS payment from sales 2025-09-27 - awaiting transfer to store', default, 'pending', default, default, default, default)",
+  sqlState: 'HY000',
+  sqlMessage: "Field 'created_by' doesn't have a default value"
+}
+Error creating QRIS piutang and expense: Error: Field 'created_by' doesn't have a default value
+    at PromisePool.query (/home/runner/workspace/node_modules/mysql2/lib/promise/pool.js:36:22)
+    at MySql2PreparedQuery.execute (/home/runner/workspace/node_modules/src/mysql2/session.ts:92:29)
+    at QueryPromise.execute (/home/runner/workspace/node_modules/src/mysql-core/query-builders/insert.ts:315:25)
+    at QueryPromise.then (/home/runner/workspace/node_modules/src/query-promise.ts:31:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+  code: 'ER_NO_DEFAULT_FOR_FIELD',
+  errno: 1364,
+  sql: "insert into `piutang` (`piutang_id`, `customer_id`, `store_id`, `amount`, `description`, `due_date`, `status`, `paid_amount`, `paid_at`, `created_by`, `created_at`) values ('2ef1ac86-16c4-42c1-9e97-4d8c6afef7a0', '897e37b9-1102-4ec6-a916-8e0efe4633e5', 2, '2000000', 'QRIS payment from sales 2025-09-27 - awaiting transfer to store', default, 'pending', default, default, default, default)",
+  sqlState: 'HY000',
+  sqlMessage: "Field 'created_by' doesn't have a default value"
+}
