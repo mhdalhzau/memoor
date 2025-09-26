@@ -1748,7 +1748,7 @@ export function registerRoutes(app: Express): Server {
           if (incomeEntries.length > 0) {
             // Create individual income entries, but skip QRIS payments (they should go to manager piutang)
             for (const incomeItem of incomeEntries) {
-              // Skip QRIS-related income entries - they should be handled by createQrisExpenseForManager
+              // Skip QRIS-related income entries - they should be handled by createQrisPiutangForManager
               const description = (incomeItem.description || '').toLowerCase();
               const isQrisPayment = description.includes('qris') || description.includes('qr') || 
                                   incomeItem.paymentMethod === 'qris' || incomeItem.paymentMethod === 'QRIS';

@@ -128,8 +128,8 @@ export interface IStorage {
   searchCustomers(storeId: number, query: string): Promise<Customer[]>;
   
   // Helper methods for QRIS management
-  findOrCreatePiutangManager(storeId: number): Promise<Customer>;
-  createQrisExpenseForManager(salesRecord: Sales): Promise<void>;
+  findOrCreateCustomerForManagerUser(storeId: number): Promise<Customer | undefined>;
+  createQrisPiutangForManager(salesRecord: Sales): Promise<void>;
   createQrisPiutangForImport(storeId: number, qrisAmount: number, description: string, userId?: string, date?: Date): Promise<void>;
   
   // Piutang methods
@@ -780,7 +780,7 @@ export class DatabaseStorage implements IStorage {
           if (salesData.totalQris && parseFloat(salesData.totalQris.toString()) > 0) {
             try {
               // Create piutang for QRIS amount to manager and QRIS fee expense
-              await this.createQrisExpenseForManager(createdSales);
+              await this.createQrisPiutangForManager(createdSales);
             } catch (qrisError) {
               console.error('Error creating QRIS piutang and expense:', qrisError);
               // Continue with other cashflow operations
@@ -1192,55 +1192,102 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Helper methods for QRIS management
-  async findOrCreatePiutangManager(storeId: number): Promise<Customer> {
+  // Find actual manager user and create/get corresponding customer record
+  async findOrCreateCustomerForManagerUser(storeId: number): Promise<Customer | undefined> {
     try {
-      // Look for existing QRIS Manager
-      const existing = await db.select().from(customers).where(
+      // First, try to find manager or admin users assigned to this store
+      const storeUsers = await db.select({
+        userId: userStores.userId,
+        user: users
+      })
+      .from(userStores)
+      .innerJoin(users, eq(userStores.userId, users.id))
+      .where(
         and(
-          eq(customers.storeId, storeId),
-          eq(customers.name, "QRIS Manager")
+          eq(userStores.storeId, storeId),
+          or(
+            eq(users.role, 'manager'),
+            eq(users.role, 'administrasi')
+          )
         )
       );
 
-      if (existing.length > 0) {
-        return existing[0];
+      let managerUser: User;
+      if (storeUsers.length > 0) {
+        managerUser = storeUsers[0].user;
+      } else {
+        // If no manager assigned to this store, find any manager/admin user
+        const anyManager = await db.select().from(users).where(
+          or(
+            eq(users.role, 'manager'),
+            eq(users.role, 'administrasi')
+          )
+        ).limit(1);
+
+        if (anyManager.length === 0) {
+          console.warn(`No manager user found for store ${storeId} or in system`);
+          return undefined;
+        }
+        
+        managerUser = anyManager[0];
+        console.log(`Using general manager user ${managerUser.name} for QRIS piutang in store ${storeId}`);
       }
 
-      // Create new QRIS Manager - MySQL compatible way
-      const managerId = randomUUID();
+      // Check if customer record already exists for this manager user
+      const existingCustomer = await db.select().from(customers).where(
+        and(
+          eq(customers.storeId, storeId),
+          eq(customers.email, managerUser.email),
+          eq(customers.type, "employee")
+        )
+      );
+
+      if (existingCustomer.length > 0) {
+        return existingCustomer[0];
+      }
+
+      // Create customer record for manager user
+      const customerId = randomUUID();
       await db.insert(customers).values({
-        id: managerId,
+        id: customerId,
         storeId,
-        name: "QRIS Manager",
-        phone: "",
-        email: "",
+        name: managerUser.name,
+        email: managerUser.email,
+        phone: managerUser.phone || "",
         address: "",
-        notes: "Auto-created for QRIS transaction management"
+        type: "employee", // Mark as employee type
+        notes: `Auto-created customer record for manager user: ${managerUser.name} (${managerUser.role})`
       });
 
-      // Fetch the created record since MySQL doesn't support .returning()
-      const result = await db.select().from(customers).where(eq(customers.id, managerId)).limit(1);
+      // Fetch the created record
+      const result = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
       return result[0];
     } catch (error) {
-      console.error('Error finding/creating QRIS manager:', error);
-      throw error;
+      console.error('Error finding/creating customer for manager user:', error);
+      return undefined;
     }
   }
 
-  async createQrisExpenseForManager(salesRecord: Sales): Promise<void> {
+  async createQrisPiutangForManager(salesRecord: Sales): Promise<void> {
     try {
       if (!salesRecord.totalQris || Number(salesRecord.totalQris) <= 0) {
         return;
       }
 
-      const manager = await this.findOrCreatePiutangManager(salesRecord.storeId);
+      // Find manager user and create/get corresponding customer record
+      const managerCustomer = await this.findOrCreateCustomerForManagerUser(salesRecord.storeId);
+      if (!managerCustomer) {
+        console.warn('No manager user found for QRIS piutang - skipping QRIS piutang creation');
+        return;
+      }
+
       const qrisAmount = Number(salesRecord.totalQris);
 
-      // Create piutang record for FULL QRIS amount to manager (not just fee)
+      // Create piutang record for FULL QRIS amount to manager customer record
       // Manager gets the QRIS money first, then pays it to store later
       await db.insert(piutang).values({
         id: randomUUID(),
-        customerId: manager.id,
+        customerId: managerCustomer.id, // Use manager's customer record ID
         storeId: salesRecord.storeId,
         amount: qrisAmount.toString(),
         description: `QRIS payment from sales ${new Date(salesRecord.date).toISOString().split('T')[0]} - awaiting transfer to store`,
@@ -1248,19 +1295,11 @@ export class DatabaseStorage implements IStorage {
         createdBy: salesRecord.userId || "system"
       });
 
-      // Also create QRIS fee expense entry for the store
-      const feeAmount = qrisAmount * 0.027; // 2.7% fee
-      await this.createCashflow({
-        storeId: salesRecord.storeId,
-        category: 'Expense',
-        type: 'QRIS Fee',
-        amount: feeAmount.toString(),
-        description: `QRIS processing fee 2.7% from sales ${new Date(salesRecord.date).toISOString().split('T')[0]}`,
-        date: salesRecord.date
-      }, salesRecord.userId || undefined);
+      // NO LONGER CREATE QRIS FEE - as requested by user
+      // Removed: QRIS fee expense entry creation
 
     } catch (error) {
-      console.error('Error creating QRIS expense for manager:', error);
+      console.error('Error creating QRIS piutang for manager:', error);
       throw error;
     }
   }
@@ -1272,13 +1311,17 @@ export class DatabaseStorage implements IStorage {
         return;
       }
 
-      const manager = await this.findOrCreatePiutangManager(storeId);
-      const importDate = date || new Date();
+      // Find manager user and create/get corresponding customer record
+      const managerCustomer = await this.findOrCreateCustomerForManagerUser(storeId);
+      if (!managerCustomer) {
+        console.warn('No manager user found for QRIS piutang - skipping QRIS piutang creation');
+        return;
+      }
 
-      // Create piutang record for FULL QRIS amount to manager
+      // Create piutang record for FULL QRIS amount to manager customer record
       await db.insert(piutang).values({
         id: randomUUID(),
-        customerId: manager.id,
+        customerId: managerCustomer.id, // Use manager's customer record ID
         storeId: storeId,
         amount: qrisAmount.toString(),
         description: description,
@@ -1286,18 +1329,10 @@ export class DatabaseStorage implements IStorage {
         createdBy: userId || "system"
       });
 
-      // Also create QRIS fee expense entry for the store
-      const feeAmount = qrisAmount * 0.027; // 2.7% fee
-      await this.createCashflow({
-        storeId: storeId,
-        category: 'Expense',
-        type: 'QRIS Fee',
-        amount: feeAmount.toString(),
-        description: `QRIS processing fee 2.7% - ${description}`,
-        date: importDate
-      }, userId);
+      // NO LONGER CREATE QRIS FEE - as requested by user
+      // Removed: QRIS fee expense entry creation
 
-      console.log(`✅ Created QRIS piutang (${qrisAmount}) and fee expense (${feeAmount}) for import`);
+      console.log(`✅ Created QRIS piutang (${qrisAmount}) for import - no fee created`);
     } catch (error) {
       console.error('Error creating QRIS piutang for import:', error);
       throw error;
