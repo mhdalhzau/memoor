@@ -180,14 +180,14 @@ export const setoran = mysqlTable("setoran", {
   nomorAwal: decimal("nomor_awal", { precision: 10, scale: 3 }).notNull(),
   nomorAkhir: decimal("nomor_akhir", { precision: 10, scale: 3 }).notNull(),
   totalLiter: decimal("total_liter", { precision: 10, scale: 3 }).notNull(),
-  totalSetoran: decimal("total_setoran", { precision: 12, scale: 2 }).notNull(),
-  qrisSetoran: decimal("qris_setoran", { precision: 12, scale: 2 }).notNull(),
-  cashSetoran: decimal("cash_setoran", { precision: 12, scale: 2 }).notNull(),
+  totalSetoran: decimal("total_setoran", { precision: 15, scale: 2 }).notNull(),
+  qrisSetoran: decimal("qris_setoran", { precision: 15, scale: 2 }).notNull(),
+  cashSetoran: decimal("cash_setoran", { precision: 15, scale: 2 }).notNull(),
   expensesData: text("expenses_data"), // JSON string
-  totalExpenses: decimal("total_expenses", { precision: 12, scale: 2 }).notNull(),
+  totalExpenses: decimal("total_expenses", { precision: 15, scale: 2 }).notNull(),
   incomeData: text("income_data"), // JSON string  
-  totalIncome: decimal("total_income", { precision: 12, scale: 2 }).notNull(),
-  totalKeseluruhan: decimal("total_keseluruhan", { precision: 12, scale: 2 }).notNull(),
+  totalIncome: decimal("total_income", { precision: 15, scale: 2 }).notNull(),
+  totalKeseluruhan: decimal("total_keseluruhan", { precision: 15, scale: 2 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

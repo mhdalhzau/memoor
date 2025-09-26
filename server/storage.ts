@@ -1205,17 +1205,20 @@ export class DatabaseStorage implements IStorage {
         return existing[0];
       }
 
-      // Create new QRIS Manager
-      const result = await db.insert(customers).values({
-        id: randomUUID(),
+      // Create new QRIS Manager - MySQL compatible way
+      const managerId = randomUUID();
+      await db.insert(customers).values({
+        id: managerId,
         storeId,
         name: "QRIS Manager",
         phone: "",
         email: "",
         address: "",
         notes: "Auto-created for QRIS transaction management"
-      }).returning();
+      });
 
+      // Fetch the created record since MySQL doesn't support .returning()
+      const result = await db.select().from(customers).where(eq(customers.id, managerId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error finding/creating QRIS manager:', error);
@@ -1230,21 +1233,32 @@ export class DatabaseStorage implements IStorage {
       }
 
       const manager = await this.findOrCreatePiutangManager(salesRecord.storeId);
-
-      // Create piutang record for QRIS fee (2.7% of QRIS sales)
       const qrisAmount = Number(salesRecord.totalQris);
-      const feeAmount = qrisAmount * 0.027; // 2.7% fee
 
+      // Create piutang record for FULL QRIS amount to manager (not just fee)
+      // Manager gets the QRIS money first, then pays it to store later
       await db.insert(piutang).values({
         id: randomUUID(),
         customerId: manager.id,
         storeId: salesRecord.storeId,
-        amount: feeAmount.toString(),
-        description: `QRIS fee 2.7% from sales ${salesRecord.date}`,
-        type: "pemberian_utang",
+        amount: qrisAmount.toString(),
+        description: `QRIS payment from sales ${new Date(salesRecord.date).toISOString().split('T')[0]} - awaiting transfer to store`,
+        type: "pemberian_utang", // Manager owes this amount to the store
         status: "pending",
         userId: salesRecord.userId
       });
+
+      // Also create QRIS fee expense entry for the store
+      const feeAmount = qrisAmount * 0.027; // 2.7% fee
+      await this.createCashflow({
+        storeId: salesRecord.storeId,
+        category: 'Expense',
+        type: 'QRIS Fee',
+        amount: feeAmount.toString(),
+        description: `QRIS processing fee 2.7% from sales ${new Date(salesRecord.date).toISOString().split('T')[0]}`,
+        date: salesRecord.date
+      }, salesRecord.userId || undefined);
+
     } catch (error) {
       console.error('Error creating QRIS expense for manager:', error);
       throw error;
