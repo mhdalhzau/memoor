@@ -15,8 +15,8 @@ export const TRANSACTION_TYPES = {
 
 // Users table
 export const users = mysqlTable("users", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
-  email: text("email").notNull().unique(),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  email: varchar("email", { length: 255 }).notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
   role: text("role").notNull(), // 'staff', 'manager', 'administrasi'
@@ -27,7 +27,7 @@ export const users = mysqlTable("users", {
 
 // User-Store assignment table (many-to-many relationship)
 export const userStores = mysqlTable("user_stores", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: varchar("user_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -53,7 +53,7 @@ export const stores = mysqlTable("stores", {
 
 // Attendance table
 export const attendance = mysqlTable("attendance", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: varchar("user_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   date: timestamp("date").defaultNow(),
@@ -72,7 +72,7 @@ export const attendance = mysqlTable("attendance", {
 
 // Sales table with detailed breakdown
 export const sales = mysqlTable("sales", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   storeId: int("store_id").notNull(),
   userId: varchar("user_id", { length: 36 }), // Staff who submitted the data
   date: timestamp("date").defaultNow(),
@@ -102,7 +102,7 @@ export const sales = mysqlTable("sales", {
 
 // Cashflow table
 export const cashflow = mysqlTable("cashflow", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   storeId: int("store_id").notNull(),
   category: text("category").notNull(), // 'Income', 'Expense', 'Investment'
   type: text("type").notNull(), // 'Sales', 'Inventory', 'Utilities', 'Salary', 'Other', 'Pembelian Minyak', 'Transfer Rekening'
@@ -127,7 +127,7 @@ export const cashflow = mysqlTable("cashflow", {
 
 // Payroll table
 export const payroll = mysqlTable("payroll", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: varchar("user_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   month: text("month").notNull(), // 'YYYY-MM'
@@ -143,7 +143,7 @@ export const payroll = mysqlTable("payroll", {
 
 // Proposals table
 export const proposals = mysqlTable("proposals", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: varchar("user_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   title: text("title").notNull(),
@@ -158,7 +158,7 @@ export const proposals = mysqlTable("proposals", {
 
 // Overtime table
 export const overtime = mysqlTable("overtime", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: varchar("user_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   date: timestamp("date").notNull(),
@@ -172,7 +172,7 @@ export const overtime = mysqlTable("overtime", {
 
 // Setoran table
 export const setoran = mysqlTable("setoran", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   employeeName: text("employee_name").notNull(),
   employeeId: varchar("employee_id", { length: 36 }), // Add employee ID reference
   jamMasuk: text("jam_masuk").notNull(),
@@ -193,7 +193,7 @@ export const setoran = mysqlTable("setoran", {
 
 // Customers table
 export const customers = mysqlTable("customers", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
@@ -205,7 +205,7 @@ export const customers = mysqlTable("customers", {
 
 // Piutang table (debt/receivables)
 export const piutang = mysqlTable("piutang", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   customerId: varchar("customer_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
@@ -220,7 +220,7 @@ export const piutang = mysqlTable("piutang", {
 
 // Wallets table for Bank Balance (Wallet Simulator)
 export const wallets = mysqlTable("wallets", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   storeId: int("store_id").notNull(),
   name: text("name").notNull(), // 'Bank BCA', 'Bank BRI', 'Cash', 'E-Wallet'
   type: text("type").notNull(), // 'bank', 'cash', 'ewallet'
@@ -234,7 +234,7 @@ export const wallets = mysqlTable("wallets", {
 
 // Payroll Configuration table
 export const payrollConfig = mysqlTable("payroll_config", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   payrollCycle: text("payroll_cycle").notNull().default("30"), // '28' or '30' days
   overtimeRate: decimal("overtime_rate", { precision: 10, scale: 2 }).notNull().default("10000"), // Rate per hour
   startDate: text("start_date").notNull(), // ISO date string
@@ -419,7 +419,7 @@ export type InsertPayrollConfig = z.infer<typeof insertPayrollConfigSchema>;
 
 // Suppliers table
 export const suppliers = mysqlTable("suppliers", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   contactPerson: text("contact_person"),
   phone: text("phone"),
@@ -433,7 +433,7 @@ export const suppliers = mysqlTable("suppliers", {
 
 // Products table
 export const products = mysqlTable("products", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   description: text("description"),
   sku: text("sku"), // Stock Keeping Unit
@@ -449,7 +449,7 @@ export const products = mysqlTable("products", {
 
 // Inventory table (current stock levels)
 export const inventory = mysqlTable("inventory", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   productId: varchar("product_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   currentStock: decimal("current_stock", { precision: 10, scale: 3 }).default("0"),
@@ -461,7 +461,7 @@ export const inventory = mysqlTable("inventory", {
 
 // Inventory transactions table (stock movement history)
 export const inventoryTransactions = mysqlTable("inventory_transactions", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`UUID()`),
+  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   productId: varchar("product_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   type: text("type").notNull(), // 'in' (stock masuk), 'out' (stock keluar), 'adjustment' (penyesuaian)
