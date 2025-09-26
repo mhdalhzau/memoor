@@ -73,6 +73,7 @@ export interface IStorage {
   getAttendanceByStore(storeId: number, date?: string): Promise<Attendance[]>;
   getAttendanceByStoreWithEmployees(storeId: number, date?: string): Promise<AttendanceWithEmployee[]>;
   getAttendanceByUser(userId: string): Promise<Attendance[]>;
+  getAttendanceByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<Attendance[]>;
   createAttendance(attendance: InsertAttendance): Promise<Attendance>;
   updateAttendance(id: string, data: Partial<InsertAttendance>): Promise<Attendance | undefined>;
   updateAttendanceStatus(id: string, status: string): Promise<Attendance | undefined>;
@@ -92,6 +93,7 @@ export interface IStorage {
   // Payroll methods
   getPayroll(id: string): Promise<Payroll | undefined>;
   getPayrollByUser(userId: string): Promise<Payroll[]>;
+  getPayrollByUserStoreMonth(userId: string, storeId: number, month: string): Promise<Payroll | undefined>;
   getAllPayroll(): Promise<Payroll[]>;
   createPayroll(payroll: InsertPayroll): Promise<Payroll>;
   updatePayrollStatus(id: string, status: string): Promise<Payroll | undefined>;
@@ -637,6 +639,25 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async getAttendanceByUserAndDateRange(userId: string, startDate: string, endDate: string): Promise<Attendance[]> {
+    try {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1); // Include the end date
+      
+      return await db.select().from(attendance).where(
+        and(
+          eq(attendance.userId, userId),
+          gte(attendance.date, start),
+          lte(attendance.date, end)
+        )
+      );
+    } catch (error) {
+      console.error('Error getting attendance by user and date range:', error);
+      return [];
+    }
+  }
+
   async createAttendance(attendanceData: InsertAttendance): Promise<Attendance> {
     try {
       const attendanceId = randomUUID();
@@ -780,11 +801,14 @@ export class DatabaseStorage implements IStorage {
 
   async createCashflow(cashflowData: InsertCashflow, createdBy?: string): Promise<Cashflow> {
     try {
-      const result = await db.insert(cashflow).values({
-        id: randomUUID(),
+      const cashflowId = randomUUID();
+      await db.insert(cashflow).values({
+        id: cashflowId,
         ...cashflowData,
         createdBy
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created cashflow
+      const result = await db.select().from(cashflow).where(eq(cashflow.id, cashflowId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating cashflow:', error);
@@ -812,6 +836,22 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async getPayrollByUserStoreMonth(userId: string, storeId: number, month: string): Promise<Payroll | undefined> {
+    try {
+      const result = await db.select().from(payroll).where(
+        and(
+          eq(payroll.userId, userId),
+          eq(payroll.storeId, storeId),
+          eq(payroll.period, month)
+        )
+      ).limit(1);
+      return result[0];
+    } catch (error) {
+      console.error('Error getting payroll by user, store and month:', error);
+      return undefined;
+    }
+  }
+
   async getAllPayroll(): Promise<Payroll[]> {
     try {
       return await db.select().from(payroll).orderBy(desc(payroll.createdAt));
@@ -823,10 +863,13 @@ export class DatabaseStorage implements IStorage {
 
   async createPayroll(payrollData: InsertPayroll): Promise<Payroll> {
     try {
-      const result = await db.insert(payroll).values({
-        id: randomUUID(),
+      const payrollId = randomUUID();
+      await db.insert(payroll).values({
+        id: payrollId,
         ...payrollData
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created payroll
+      const result = await db.select().from(payroll).where(eq(payroll.id, payrollId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating payroll:', error);
@@ -836,7 +879,9 @@ export class DatabaseStorage implements IStorage {
 
   async updatePayrollStatus(id: string, status: string): Promise<Payroll | undefined> {
     try {
-      const result = await db.update(payroll).set({ status }).where(eq(payroll.id, id)).returning();
+      await db.update(payroll).set({ status }).where(eq(payroll.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated payroll
+      const result = await db.select().from(payroll).where(eq(payroll.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating payroll status:', error);
@@ -875,10 +920,13 @@ export class DatabaseStorage implements IStorage {
 
   async createProposal(proposalData: InsertProposal): Promise<Proposal> {
     try {
-      const result = await db.insert(proposals).values({
-        id: randomUUID(),
+      const proposalId = randomUUID();
+      await db.insert(proposals).values({
+        id: proposalId,
         ...proposalData
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created proposal
+      const result = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating proposal:', error);
@@ -888,10 +936,12 @@ export class DatabaseStorage implements IStorage {
 
   async updateProposalStatus(id: string, status: string, reviewedBy: string): Promise<Proposal | undefined> {
     try {
-      const result = await db.update(proposals).set({ 
+      await db.update(proposals).set({ 
         status, 
         reviewedBy 
-      }).where(eq(proposals.id, id)).returning();
+      }).where(eq(proposals.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated proposal
+      const result = await db.select().from(proposals).where(eq(proposals.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating proposal status:', error);
@@ -1031,10 +1081,13 @@ export class DatabaseStorage implements IStorage {
 
   async createCustomer(customerData: InsertCustomer): Promise<Customer> {
     try {
-      const result = await db.insert(customers).values({
-        id: randomUUID(),
+      const customerId = randomUUID();
+      await db.insert(customers).values({
+        id: customerId,
         ...customerData
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created customer
+      const result = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating customer:', error);
