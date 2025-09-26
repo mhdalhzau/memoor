@@ -173,6 +173,7 @@ export const overtime = mysqlTable("overtime", {
 // Setoran table
 export const setoran = mysqlTable("setoran", {
   id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  storeId: int("store_id"), // Made nullable for safe migration
   employeeName: text("employee_name").notNull(),
   employeeId: varchar("employee_id", { length: 36 }), // Add employee ID reference
   jamMasuk: text("jam_masuk").notNull(),
