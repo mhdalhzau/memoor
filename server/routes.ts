@@ -1,10 +1,12 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { promises as fs } from "fs";
+import path from "path";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { initializeRealtimeService, getRealtimeService } from "./websocket";
 import { testDatabaseConnection, ensureDatabaseConnection } from "./db";
-import { createDatabaseBackup, restoreDatabaseFromBackup, startAutoBackup } from "./backup";
+import { createDatabaseBackup, restoreDatabaseFromBackup } from "./backup";
 import { realtimeMiddleware } from "./middleware/realtime";
 import { 
   initializeGoogleSheetsService, 
@@ -59,6 +61,15 @@ async function getAccessibleStoreIds(user: any): Promise<number[]> {
 export function registerRoutes(app: Express): Server {
   // MySQL Connection Health Check Middleware
   const mysqlHealthCheck = async (req: any, res: any, next: any) => {
+    // Skip health check for database settings routes to allow testing new connections
+    const skipHealthCheck = req.originalUrl === '/api/settings/database' || 
+                           req.originalUrl === '/api/settings/database/test' ||
+                           req.originalUrl.startsWith('/api/backup/');
+    
+    if (skipHealthCheck) {
+      return next();
+    }
+    
     try {
       await ensureDatabaseConnection();
       next();
@@ -103,7 +114,7 @@ export function registerRoutes(app: Express): Server {
 
   // Database backup routes
   app.post('/api/backup/create', async (req: any, res: any) => {
-    if (!req.isAuthenticated() || req.user.role !== 'administrasi') {
+    if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
       return res.status(403).json({ error: 'Hanya administrator yang dapat membuat backup database' });
     }
     
@@ -120,7 +131,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.post('/api/backup/restore', async (req: any, res: any) => {
-    if (!req.isAuthenticated() || req.user.role !== 'administrasi') {
+    if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
       return res.status(403).json({ error: 'Hanya administrator yang dapat restore database' });
     }
     
@@ -129,8 +140,21 @@ export function registerRoutes(app: Express): Server {
       return res.status(400).json({ error: 'Nama file backup diperlukan' });
     }
     
+    // Validate filename for security (no path traversal)
+    const filename = String(backupFile);
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\') || !filename.endsWith('.sql')) {
+      return res.status(400).json({ error: 'Nama file tidak valid' });
+    }
+    
     try {
-      const fullPath = `database_backup/${backupFile}`;
+      const fullPath = path.join('database_backup', filename);
+      
+      // Verify file exists and is within the backup directory
+      const stat = await fs.stat(fullPath);
+      if (!stat.isFile()) {
+        return res.status(404).json({ error: 'File backup tidak ditemukan' });
+      }
+      
       await restoreDatabaseFromBackup(fullPath);
       res.json({ 
         success: true, 
@@ -141,26 +165,153 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Start automatic backup scheduler
-  startAutoBackup();
-  
+  // Manual export endpoint (alias for create)
+  app.post('/api/backup/export', async (req: any, res: any) => {
+    if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
+      return res.status(403).json({ error: 'Hanya administrator yang dapat export database' });
+    }
+    
+    try {
+      const backupFile = await createDatabaseBackup();
+      const filename = backupFile.split('/').pop();
+      res.json({ 
+        success: true, 
+        message: 'Database export berhasil dibuat',
+        backupFile: filename,
+        downloadUrl: `/api/backup/download?file=${encodeURIComponent(filename || '')}`
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Gagal export database', details: error.message });
+    }
+  });
+
+  // Download backup file endpoint
+  app.get('/api/backup/download', async (req: any, res: any) => {
+    if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
+      return res.status(403).json({ error: 'Hanya administrator yang dapat download backup' });
+    }
+    
+    const { file } = req.query;
+    if (!file) {
+      return res.status(400).json({ error: 'Parameter file diperlukan' });
+    }
+    
+    // Validate filename for security (no path traversal)
+    const filename = String(file);
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\') || !filename.endsWith('.sql')) {
+      return res.status(400).json({ error: 'Nama file tidak valid' });
+    }
+    
+    try {
+      const filePath = path.join('database_backup', filename);
+      const stat = await fs.stat(filePath);
+      
+      if (!stat.isFile()) {
+        return res.status(404).json({ error: 'File tidak ditemukan' });
+      }
+      
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', 'application/sql');
+      res.setHeader('Content-Length', stat.size);
+      
+      const fileStream = await fs.readFile(filePath);
+      res.send(fileStream);
+    } catch (error: any) {
+      console.error('Error downloading backup:', error);
+      res.status(500).json({ error: 'Gagal download backup', details: error.message });
+    }
+  });
+
+  // List available backups endpoint
+  app.get('/api/backup/list', async (req: any, res: any) => {
+    if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
+      return res.status(403).json({ error: 'Hanya administrator yang dapat melihat daftar backup' });
+    }
+    
+    try {
+      const backupDir = 'database_backup';
+      const files = await fs.readdir(backupDir);
+      const sqlFiles = files.filter(file => file.endsWith('.sql'));
+      
+      const backups = await Promise.all(sqlFiles.map(async (filename) => {
+        const filePath = path.join(backupDir, filename);
+        const stat = await fs.stat(filePath);
+        
+        return {
+          filename,
+          size: stat.size,
+          createdAt: stat.birthtime,
+          modifiedAt: stat.mtime
+        };
+      }));
+      
+      // Sort by creation date, newest first
+      backups.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      
+      res.json({ success: true, backups });
+    } catch (error: any) {
+      console.error('Error listing backups:', error);
+      res.status(500).json({ error: 'Gagal mendapatkan daftar backup', details: error.message });
+    }
+  });
+
+  // Manual import endpoint
+  app.post('/api/backup/import', async (req: any, res: any) => {
+    if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
+      return res.status(403).json({ error: 'Hanya administrator yang dapat import database' });
+    }
+    
+    const sqlContent = req.body;
+    if (!sqlContent || typeof sqlContent !== 'string') {
+      return res.status(400).json({ error: 'Konten SQL diperlukan' });
+    }
+    
+    if (sqlContent.length > 50 * 1024 * 1024) { // 50MB limit
+      return res.status(400).json({ error: 'File terlalu besar (maksimal 50MB)' });
+    }
+    
+    try {
+      // Write SQL content to temporary file
+      const tempDir = 'database_backup';
+      const tempFilename = `temp_import_${Date.now()}.sql`;
+      const tempFilePath = path.join(tempDir, tempFilename);
+      
+      await fs.writeFile(tempFilePath, sqlContent);
+      
+      // Restore from temporary file
+      await restoreDatabaseFromBackup(tempFilePath);
+      
+      // Clean up temporary file
+      await fs.unlink(tempFilePath);
+      
+      res.json({ 
+        success: true, 
+        message: 'Database berhasil di-import'
+      });
+    } catch (error: any) {
+      console.error('Error importing database:', error);
+      res.status(500).json({ error: 'Gagal import database', details: error.message });
+    }
+  });
+
   // Setup real-time middleware for automatic event broadcasting
   app.use(realtimeMiddleware);
   
   // Database settings routes
   app.get("/api/settings/database", async (req, res) => {
     try {
-      if (!req.user || req.user.role !== 'manager') {
-        return res.status(403).json({ message: "Access denied. Manager role required." });
+      if (!req.user || (req.user.role !== 'manager' && req.user.role !== 'administrasi')) {
+        return res.status(403).json({ message: "Access denied. Manager or Administrator role required." });
       }
       
       // Return current database configuration (sanitized for security)
       const databaseUrl = process.env.DATABASE_URL || "";
-      let provider = "PostgreSQL";
+      let provider = "MySQL";
       
-      if (databaseUrl.includes('neon.tech')) provider = 'Neon';
-      else if (databaseUrl.includes('aivencloud.com')) provider = 'Aiven';
-      else if (databaseUrl.includes('supabase.com')) provider = 'Supabase';
+      if (databaseUrl.includes('neon.tech')) provider = 'Neon PostgreSQL';
+      else if (databaseUrl.includes('aivencloud.com')) provider = 'Aiven MySQL';
+      else if (databaseUrl.includes('supabase.com')) provider = 'Supabase PostgreSQL';
+      else if (databaseUrl.includes('mysql')) provider = 'MySQL';
       
       // Mask sensitive information in URL
       const maskUrl = (url: string) => {
@@ -200,21 +351,21 @@ export function registerRoutes(app: Express): Server {
 
   app.post("/api/settings/database", async (req, res) => {
     try {
-      if (!req.user || req.user.role !== 'manager') {
-        return res.status(403).json({ message: "Access denied. Manager role required." });
+      if (!req.user || (req.user.role !== 'manager' && req.user.role !== 'administrasi')) {
+        return res.status(403).json({ message: "Access denied. Manager or Administrator role required." });
       }
       
       const { databaseUrl, connectionPool, ssl } = req.body;
       
-      // SECURITY: Only allow Aiven databases
-      if (!databaseUrl || (!databaseUrl.startsWith('postgresql://') && !databaseUrl.startsWith('postgres://'))) {
-        return res.status(400).json({ message: "Invalid database URL format. Must start with postgresql:// or postgres://" });
+      // SECURITY: Only allow Aiven MySQL databases
+      if (!databaseUrl || !databaseUrl.startsWith('mysql://')) {
+        return res.status(400).json({ message: "Invalid database URL format. Must start with mysql://" });
       }
       
       if (!databaseUrl.includes('aivencloud.com')) {
         return res.status(403).json({ 
-          message: "Security restriction: Only Aiven PostgreSQL databases are allowed",
-          details: "Please use a valid Aiven database connection string (*.aivencloud.com)"
+          message: "Security restriction: Only Aiven MySQL databases are allowed",
+          details: "Please use a valid Aiven MySQL connection string (*.aivencloud.com)"
         });
       }
       
@@ -237,8 +388,8 @@ export function registerRoutes(app: Express): Server {
 
   app.post("/api/settings/database/test", async (req, res) => {
     try {
-      if (!req.user || req.user.role !== 'manager') {
-        return res.status(403).json({ message: "Access denied. Manager role required." });
+      if (!req.user || (req.user.role !== 'manager' && req.user.role !== 'administrasi')) {
+        return res.status(403).json({ message: "Access denied. Manager or Administrator role required." });
       }
       
       const { databaseUrl } = req.body;
@@ -247,21 +398,21 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Database URL is required" });
       }
       
-      // SECURITY: Only allow Aiven databases
-      if (!databaseUrl.startsWith('postgresql://') && !databaseUrl.startsWith('postgres://')) {
-        return res.status(400).json({ message: "Invalid database URL format. Must start with postgresql:// or postgres://" });
+      // SECURITY: Only allow Aiven MySQL databases
+      if (!databaseUrl.startsWith('mysql://')) {
+        return res.status(400).json({ message: "Invalid database URL format. Must start with mysql://" });
       }
       
       if (!databaseUrl.includes('aivencloud.com')) {
         return res.status(403).json({ 
-          message: "Security restriction: Only Aiven PostgreSQL databases are allowed",
-          details: "Please use a valid Aiven database connection string (*.aivencloud.com)"
+          message: "Security restriction: Only Aiven MySQL databases are allowed",
+          details: "Please use a valid Aiven MySQL connection string (*.aivencloud.com)"
         });
       }
       
       // Test connection with timeout
-      const { Pool } = await import('pg');
-      let testPool: any = null;
+      const mysql = await import('mysql2/promise');
+      let testConnection: any = null;
       
       try {
         // Determine SSL config based on URL
@@ -277,46 +428,31 @@ export function registerRoutes(app: Express): Server {
           } else {
             sslConfig = { rejectUnauthorized: false }; // Fallback for testing
           }
-        } else if (databaseUrl.includes('neon.tech')) {
-          sslConfig = { rejectUnauthorized: true };
         } else {
           sslConfig = { rejectUnauthorized: false }; // Default for other providers
         }
         
-        testPool = new Pool({
-          connectionString: databaseUrl,
+        testConnection = await mysql.createConnection({
+          uri: databaseUrl,
           ssl: sslConfig,
-          max: 1, // Only one connection for testing
-          idleTimeoutMillis: 5000,
-          connectionTimeoutMillis: 10000
+          connectTimeout: 10000
         });
         
         // Test query with timeout
-        const client = await testPool.connect();
+        const [rows] = await testConnection.execute('SELECT VERSION() as version, DATABASE() as database_name');
+        const dbInfo = rows[0] as any;
         
-        try {
-          const result = await client.query('SELECT version() as version, current_database() as database');
-          const dbInfo = result.rows[0];
-          
-          client.release();
-          
-          res.json({ 
-            success: true,
-            message: "Database connection successful!",
-            details: {
-              version: dbInfo.version.split(' ').slice(0, 2).join(' '), // PostgreSQL version only
-              database: dbInfo.database,
-              provider: databaseUrl.includes('aivencloud.com') ? 'Aiven' : 
-                       databaseUrl.includes('neon.tech') ? 'Neon' : 
-                       databaseUrl.includes('supabase.com') ? 'Supabase' : 'PostgreSQL',
-              ssl: sslConfig.rejectUnauthorized ? 'Secure' : 'Insecure',
-              timestamp: new Date().toISOString()
-            }
-          });
-          
-        } finally {
-          client.release();
-        }
+        res.json({ 
+          success: true,
+          message: "Database connection successful!",
+          details: {
+            version: dbInfo.version.split('-')[0], // MySQL version only
+            database: dbInfo.database_name,
+            provider: databaseUrl.includes('aivencloud.com') ? 'Aiven MySQL' : 'MySQL',
+            ssl: sslConfig.rejectUnauthorized ? 'Secure' : 'Insecure',
+            timestamp: new Date().toISOString()
+          }
+        });
         
       } catch (connectionError: any) {
         console.error("Database connection test failed:", connectionError.message);
@@ -326,9 +462,9 @@ export function registerRoutes(app: Express): Server {
           errorMessage = "Database host not found. Please check the hostname.";
         } else if (connectionError.code === 'ECONNREFUSED') {
           errorMessage = "Connection refused. Please check the port and firewall settings.";
-        } else if (connectionError.code === '28P01') {
+        } else if (connectionError.code === 'ER_ACCESS_DENIED_ERROR') {
           errorMessage = "Authentication failed. Please check username and password.";
-        } else if (connectionError.code === '3D000') {
+        } else if (connectionError.code === 'ER_BAD_DB_ERROR') {
           errorMessage = "Database does not exist.";
         } else if (connectionError.message.includes('certificate')) {
           errorMessage = "SSL certificate error. Please check CA certificate configuration.";
@@ -345,8 +481,8 @@ export function registerRoutes(app: Express): Server {
           timestamp: new Date().toISOString()
         });
       } finally {
-        if (testPool) {
-          await testPool.end();
+        if (testConnection) {
+          await testConnection.end();
         }
       }
       

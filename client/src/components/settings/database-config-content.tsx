@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Database, CheckCircle, AlertCircle, Loader2, TestTube, Eye, EyeOff } from "lucide-react";
+import { Database, CheckCircle, AlertCircle, Loader2, TestTube, Eye, EyeOff, Download, Upload, FileText, Trash2 } from "lucide-react";
 
 const databaseConfigSchema = z.object({
   databaseUrl: z.string()
@@ -146,6 +146,89 @@ I7eWAg==
     }
   });
 
+  // Backup functionality state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Load backup list query
+  const { data: backupList, refetch: refetchBackups, error: backupListError } = useQuery({
+    queryKey: ['/api/backup/list'],
+    staleTime: 30 * 1000, // 30 seconds
+    retry: false, // Don't retry on 403 errors
+    onError: (error: any) => {
+      // Check for 403 status code more robustly
+      const is403 = error.status === 403 || 
+                   error.response?.status === 403 || 
+                   (error.message && error.message.includes('403'));
+      
+      if (!is403) {
+        toast({
+          variant: "destructive",
+          title: "Failed to load backup list",
+          description: error.message || "Unable to fetch available backups"
+        });
+      }
+    }
+  });
+
+  // Export database mutation
+  const exportMutation = useMutation({
+    mutationFn: () => apiRequest('POST', '/api/backup/export'),
+    onSuccess: (response: any) => {
+      // Trigger download
+      const downloadUrl = response.downloadUrl;
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = response.backupFile;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      refetchBackups();
+      toast({
+        title: "Export successful",
+        description: `Database exported as ${response.backupFile}`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Export failed",
+        description: error.message || "Failed to export database"
+      });
+    }
+  });
+
+  // Import database mutation
+  const importMutation = useMutation({
+    mutationFn: (sqlContent: string) => 
+      fetch('/api/backup/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: sqlContent,
+        credentials: 'include'
+      }).then(async (res) => {
+        if (!res.ok) {
+          const error = await res.json();
+          throw new Error(error.error || 'Import failed');
+        }
+        return res.json();
+      }),
+    onSuccess: () => {
+      setSelectedFile(null);
+      toast({
+        title: "Import successful",
+        description: "Database restored successfully"
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Import failed",
+        description: error.message || "Failed to import database"
+      });
+    }
+  });
+
   const handleSubmit = (data: DatabaseConfig) => {
     // Validate pool configuration
     if (data.connectionPool.max <= data.connectionPool.min) {
@@ -183,6 +266,60 @@ I7eWAg==
 
     setConnectionStatus('testing');
     testConnectionMutation.mutate(url);
+  };
+
+  // Backup handler functions
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.name.endsWith('.sql')) {
+      setSelectedFile(file);
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Invalid file",
+        description: "Please select a valid .sql file"
+      });
+    }
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) {
+      toast({
+        variant: "destructive",
+        title: "No file selected",
+        description: "Please select a SQL file to import"
+      });
+      return;
+    }
+
+    try {
+      const sqlContent = await selectedFile.text();
+      importMutation.mutate(sqlContent);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "File read error",
+        description: "Failed to read the selected file"
+      });
+    }
+  };
+
+  const handleDownloadBackup = (filename: string) => {
+    const downloadUrl = `/api/backup/download?file=${encodeURIComponent(filename)}`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   const getDatabaseProvider = (url: string) => {
@@ -435,6 +572,132 @@ MIIEUDCCArigAwIBAgIUFwqE9MW2mEfLCdNnl...
                       </FormItem>
                     )}
                   />
+                </CardContent>
+              </Card>
+
+              {/* Database Backup & Import */}
+              <Card className="border-orange-200 dark:border-orange-900">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-orange-600 dark:text-orange-400">
+                    <Database className="h-5 w-5" />
+                    Database Backup & Import
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Manual database export and import operations. Only available to administrators.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Export Section */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium">Export Database</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Create a complete backup of your database that can be downloaded.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => exportMutation.mutate()}
+                      disabled={exportMutation.isPending}
+                      data-testid="button-export-db"
+                      className="w-full sm:w-auto"
+                    >
+                      {exportMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Exporting...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="mr-2 h-4 w-4" />
+                          Export Database
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Import Section */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium">Import Database</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Restore database from a SQL backup file. This will replace all current data.
+                    </p>
+                    <div className="flex flex-col space-y-2">
+                      <Input
+                        type="file"
+                        accept=".sql"
+                        onChange={handleFileSelect}
+                        data-testid="input-import-file"
+                        className="cursor-pointer"
+                      />
+                      {selectedFile && (
+                        <p className="text-xs text-muted-foreground">
+                          Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})
+                        </p>
+                      )}
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={handleImport}
+                        disabled={!selectedFile || importMutation.isPending}
+                        data-testid="button-import-db"
+                        className="w-full sm:w-auto"
+                      >
+                        {importMutation.isPending ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Importing...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="mr-2 h-4 w-4" />
+                            Import Database
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Existing Backups */}
+                  {backupList?.backups && backupList.backups.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium">Available Backups</h4>
+                      <div className="space-y-2">
+                        {backupList.backups.slice(0, 5).map((backup: any) => (
+                          <div
+                            key={backup.filename}
+                            className="flex items-center justify-between p-3 border rounded-lg"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <FileText className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <p className="text-sm font-medium">{backup.filename}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatFileSize(backup.size)} • {new Date(backup.createdAt).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDownloadBackup(backup.filename)}
+                              data-testid={`button-download-${backup.filename}`}
+                            >
+                              <Download className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <Alert className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950">
+                    <AlertCircle className="h-4 w-4 text-orange-600" />
+                    <AlertDescription className="text-orange-700 dark:text-orange-300">
+                      <strong>Warning:</strong> Importing a database will completely replace all existing data. 
+                      Make sure to create a backup before importing. This action cannot be undone.
+                    </AlertDescription>
+                  </Alert>
                 </CardContent>
               </Card>
 

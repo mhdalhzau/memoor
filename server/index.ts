@@ -6,6 +6,11 @@ import { setupDatabaseMiddleware } from "./middleware/integration";
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+// Add text parser for database import endpoint
+app.use('/api/backup/import', express.text({ 
+  type: ['text/plain', 'application/sql', 'text/sql'], 
+  limit: '50mb' 
+}));
 
 app.use((req, res, next) => {
   const start = Date.now();
