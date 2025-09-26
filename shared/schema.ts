@@ -13,9 +13,9 @@ export const TRANSACTION_TYPES = {
   PENJUALAN_TRANSFER: "Penjualan (Transfer rekening)"
 } as const;
 
-// Users table
+// Users table - Map TypeScript 'id' property to database 'user_id' column
 export const users = mysqlTable("users", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: varchar("user_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   email: varchar("email", { length: 255 }).notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
@@ -25,17 +25,17 @@ export const users = mysqlTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// User-Store assignment table (many-to-many relationship)
+// User-Store assignment table - Map TypeScript 'id' property to database 'user_store_id' column
 export const userStores = mysqlTable("user_stores", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: varchar("user_store_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: varchar("user_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Stores table
+// Stores table - Map TypeScript 'id' property to database 'store_id' column
 export const stores = mysqlTable("stores", {
-  id: int("id").primaryKey().autoincrement(),
+  id: int("store_id").primaryKey(),
   name: text("name").notNull(),
   address: text("address"),
   phone: text("phone"),
@@ -51,9 +51,9 @@ export const stores = mysqlTable("stores", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Attendance table
+// Attendance table - Map TypeScript 'id' property to database 'attendance_id' column
 export const attendance = mysqlTable("attendance", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: varchar("attendance_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: varchar("user_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   date: timestamp("date").defaultNow(),
@@ -70,25 +70,25 @@ export const attendance = mysqlTable("attendance", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Sales table with detailed breakdown
+// Sales table - Map TypeScript 'id' property to database 'sales_id' column
 export const sales = mysqlTable("sales", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: varchar("sales_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   storeId: int("store_id").notNull(),
   userId: varchar("user_id", { length: 36 }), // Staff who submitted the data
   date: timestamp("date").defaultNow(),
-  totalSales: decimal("total_sales", { precision: 15, scale: 2 }).notNull(),
+  totalSales: decimal("total_sales", { precision: 12, scale: 2 }).notNull(),
   transactions: int("transactions").notNull(),
-  averageTicket: decimal("average_ticket", { precision: 15, scale: 2 }),
+  averageTicket: decimal("average_ticket", { precision: 8, scale: 2 }),
   // Payment breakdown
-  totalQris: decimal("total_qris", { precision: 15, scale: 2 }).default("0"),
-  totalCash: decimal("total_cash", { precision: 15, scale: 2 }).default("0"),
+  totalQris: decimal("total_qris", { precision: 12, scale: 2 }).default("0"),
+  totalCash: decimal("total_cash", { precision: 12, scale: 2 }).default("0"),
   // Meter readings
   meterStart: decimal("meter_start", { precision: 10, scale: 3 }),
   meterEnd: decimal("meter_end", { precision: 10, scale: 3 }),
   totalLiters: decimal("total_liters", { precision: 10, scale: 3 }),
   // PU (Income/Expenses)
-  totalIncome: decimal("total_income", { precision: 15, scale: 2 }).default("0"),
-  totalExpenses: decimal("total_expenses", { precision: 15, scale: 2 }).default("0"),
+  totalIncome: decimal("total_income", { precision: 12, scale: 2 }).default("0"),
+  totalExpenses: decimal("total_expenses", { precision: 12, scale: 2 }).default("0"),
   incomeDetails: text("income_details"), // JSON string
   expenseDetails: text("expense_details"), // JSON string
   // Shift information
@@ -100,9 +100,9 @@ export const sales = mysqlTable("sales", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Cashflow table
+// Cashflow table - Map TypeScript 'id' property to database 'cashflow_id' column
 export const cashflow = mysqlTable("cashflow", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: varchar("cashflow_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   storeId: int("store_id").notNull(),
   category: text("category").notNull(), // 'Income', 'Expense', 'Investment'
   type: text("type").notNull(), // 'Sales', 'Inventory', 'Utilities', 'Salary', 'Other', 'Pembelian Minyak', 'Transfer Rekening'
@@ -125,9 +125,9 @@ export const cashflow = mysqlTable("cashflow", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Payroll table
+// Payroll table - Map TypeScript 'id' property to database 'payroll_id' column
 export const payroll = mysqlTable("payroll", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: varchar("payroll_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: varchar("user_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   month: text("month").notNull(), // 'YYYY-MM'
@@ -141,9 +141,9 @@ export const payroll = mysqlTable("payroll", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Proposals table
+// Proposals table - Map TypeScript 'id' property to database 'proposal_id' column
 export const proposals = mysqlTable("proposals", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: varchar("proposal_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: varchar("user_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   title: text("title").notNull(),
@@ -156,9 +156,9 @@ export const proposals = mysqlTable("proposals", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Overtime table
+// Overtime table - Map TypeScript 'id' property to database 'overtime_id' column
 export const overtime = mysqlTable("overtime", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: varchar("overtime_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: varchar("user_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   date: timestamp("date").notNull(),
@@ -170,10 +170,9 @@ export const overtime = mysqlTable("overtime", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Setoran table
+// Setoran table - Map TypeScript 'id' property to database 'setoran_id' column
 export const setoran = mysqlTable("setoran", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
-  storeId: int("store_id"), // Made nullable for safe migration
+  id: varchar("setoran_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   employeeName: text("employee_name").notNull(),
   employeeId: varchar("employee_id", { length: 36 }), // Add employee ID reference
   jamMasuk: text("jam_masuk").notNull(),
@@ -181,20 +180,20 @@ export const setoran = mysqlTable("setoran", {
   nomorAwal: decimal("nomor_awal", { precision: 10, scale: 3 }).notNull(),
   nomorAkhir: decimal("nomor_akhir", { precision: 10, scale: 3 }).notNull(),
   totalLiter: decimal("total_liter", { precision: 10, scale: 3 }).notNull(),
-  totalSetoran: decimal("total_setoran", { precision: 15, scale: 2 }).notNull(),
-  qrisSetoran: decimal("qris_setoran", { precision: 15, scale: 2 }).notNull(),
-  cashSetoran: decimal("cash_setoran", { precision: 15, scale: 2 }).notNull(),
+  totalSetoran: decimal("total_setoran", { precision: 12, scale: 2 }).notNull(),
+  qrisSetoran: decimal("qris_setoran", { precision: 12, scale: 2 }).notNull(),
+  cashSetoran: decimal("cash_setoran", { precision: 12, scale: 2 }).notNull(),
   expensesData: text("expenses_data"), // JSON string
-  totalExpenses: decimal("total_expenses", { precision: 15, scale: 2 }).notNull(),
+  totalExpenses: decimal("total_expenses", { precision: 12, scale: 2 }).notNull(),
   incomeData: text("income_data"), // JSON string  
-  totalIncome: decimal("total_income", { precision: 15, scale: 2 }).notNull(),
-  totalKeseluruhan: decimal("total_keseluruhan", { precision: 15, scale: 2 }).notNull(),
+  totalIncome: decimal("total_income", { precision: 12, scale: 2 }).notNull(),
+  totalKeseluruhan: decimal("total_keseluruhan", { precision: 12, scale: 2 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Customers table
+// Customers table - Map TypeScript 'id' property to database 'customer_id' column
 export const customers = mysqlTable("customers", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: varchar("customer_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
@@ -204,9 +203,9 @@ export const customers = mysqlTable("customers", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Piutang table (debt/receivables)
+// Piutang table - Map TypeScript 'id' property to database 'piutang_id' column
 export const piutang = mysqlTable("piutang", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: varchar("piutang_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   customerId: varchar("customer_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
@@ -219,9 +218,9 @@ export const piutang = mysqlTable("piutang", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Wallets table for Bank Balance (Wallet Simulator)
+// Wallets table - Map TypeScript 'id' property to database 'wallet_id' column
 export const wallets = mysqlTable("wallets", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: varchar("wallet_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   storeId: int("store_id").notNull(),
   name: text("name").notNull(), // 'Bank BCA', 'Bank BRI', 'Cash', 'E-Wallet'
   type: text("type").notNull(), // 'bank', 'cash', 'ewallet'
@@ -233,9 +232,9 @@ export const wallets = mysqlTable("wallets", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Payroll Configuration table
+// Payroll Configuration table - Map TypeScript 'id' property to database 'payroll_config_id' column
 export const payrollConfig = mysqlTable("payroll_config", {
-  id: varchar("id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: varchar("payroll_config_id", { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   payrollCycle: text("payroll_cycle").notNull().default("30"), // '28' or '30' days
   overtimeRate: decimal("overtime_rate", { precision: 10, scale: 2 }).notNull().default("10000"), // Rate per hour
   startDate: text("start_date").notNull(), // ISO date string
