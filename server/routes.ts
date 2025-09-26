@@ -3,7 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { initializeRealtimeService, getRealtimeService } from "./websocket";
-import { testDatabaseConnection } from "./db";
+import { testDatabaseConnection, ensureDatabaseConnection } from "./db";
+import { createDatabaseBackup, restoreDatabaseFromBackup, startAutoBackup } from "./backup";
 import { realtimeMiddleware } from "./middleware/realtime";
 import { 
   initializeGoogleSheetsService, 
@@ -56,6 +57,22 @@ async function getAccessibleStoreIds(user: any): Promise<number[]> {
 }
 
 export function registerRoutes(app: Express): Server {
+  // MySQL Connection Health Check Middleware
+  const mysqlHealthCheck = async (req: any, res: any, next: any) => {
+    try {
+      await ensureDatabaseConnection();
+      next();
+    } catch (error) {
+      console.error('❌ MySQL connection failed:', error);
+      return res.status(503).json({ 
+        error: 'Database tidak terhubung',
+        message: 'Tidak dapat mengakses data tanpa koneksi MySQL yang stabil'
+      });
+    }
+  };
+
+  // Apply MySQL health check to all API routes
+  app.use('/api', mysqlHealthCheck);
   // Initialize Google Sheets Service if credentials are available
   const initializeGoogleSheets = () => {
     try {
@@ -83,6 +100,49 @@ export function registerRoutes(app: Express): Server {
 
   // Setup authentication routes
   setupAuth(app);
+
+  // Database backup routes
+  app.post('/api/backup/create', async (req: any, res: any) => {
+    if (!req.isAuthenticated() || req.user.role !== 'administrasi') {
+      return res.status(403).json({ error: 'Hanya administrator yang dapat membuat backup database' });
+    }
+    
+    try {
+      const backupFile = await createDatabaseBackup();
+      res.json({ 
+        success: true, 
+        message: 'Database backup berhasil dibuat',
+        backupFile: backupFile.split('/').pop() // Only return filename for security
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Gagal membuat backup database', details: error.message });
+    }
+  });
+
+  app.post('/api/backup/restore', async (req: any, res: any) => {
+    if (!req.isAuthenticated() || req.user.role !== 'administrasi') {
+      return res.status(403).json({ error: 'Hanya administrator yang dapat restore database' });
+    }
+    
+    const { backupFile } = req.body;
+    if (!backupFile) {
+      return res.status(400).json({ error: 'Nama file backup diperlukan' });
+    }
+    
+    try {
+      const fullPath = `database_backup/${backupFile}`;
+      await restoreDatabaseFromBackup(fullPath);
+      res.json({ 
+        success: true, 
+        message: 'Database berhasil di-restore dari backup'
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Gagal restore database', details: error.message });
+    }
+  });
+
+  // Start automatic backup scheduler
+  startAutoBackup();
   
   // Setup real-time middleware for automatic event broadcasting
   app.use(realtimeMiddleware);
