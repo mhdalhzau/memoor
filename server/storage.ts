@@ -735,13 +735,63 @@ export class DatabaseStorage implements IStorage {
   async createSales(salesData: InsertSales): Promise<Sales> {
     try {
       const salesId = randomUUID();
+      
+      // Calculate average ticket with guard against division by zero
+      const transactions = salesData.transactions || 0;
+      let averageTicket = null;
+      if (transactions > 0 && salesData.totalSales) {
+        const avgTicket = parseFloat(salesData.totalSales.toString()) / transactions;
+        // Ensure the value fits in DECIMAL(12,2)
+        averageTicket = Math.min(avgTicket, 9999999999.99).toFixed(2);
+      }
+
+      // Prepare sales data with calculated fields
+      const salesDataWithCalc = {
+        ...salesData,
+        averageTicket: averageTicket
+      };
+
       await db.insert(sales).values({
         id: salesId,
-        ...salesData
+        ...salesDataWithCalc
       });
+      
       // MySQL doesn't support .returning(), so fetch the created sales
       const result = await db.select().from(sales).where(eq(sales.id, salesId)).limit(1);
-      return result[0];
+      const createdSales = result[0];
+      
+      // Auto-create cashflow records and QRIS integration
+      if (createdSales && salesData.totalSales && parseFloat(salesData.totalSales.toString()) > 0) {
+        try {
+          // Create cashflow record for cash sales (if any)
+          if (salesData.totalCash && parseFloat(salesData.totalCash.toString()) > 0) {
+            await this.createCashflow({
+              storeId: createdSales.storeId,
+              category: 'Income',
+              type: 'Sales',
+              amount: salesData.totalCash,
+              description: `Cash Sales ${new Date(createdSales.date).toISOString().split('T')[0]}`,
+              date: createdSales.date
+            }, createdSales.userId || undefined);
+          }
+
+          // Handle QRIS payments - create piutang for manager and QRIS fee expense
+          if (salesData.totalQris && parseFloat(salesData.totalQris.toString()) > 0) {
+            try {
+              // Create piutang for QRIS amount to manager and QRIS fee expense
+              await this.createQrisExpenseForManager(createdSales);
+            } catch (qrisError) {
+              console.error('Error creating QRIS piutang and expense:', qrisError);
+              // Continue with other cashflow operations
+            }
+          }
+        } catch (cashflowError) {
+          console.error('Error creating automatic cashflow records:', cashflowError);
+          // Don't throw error, sales record is more important
+        }
+      }
+
+      return createdSales;
     } catch (error) {
       console.error('Error creating sales:', error);
       throw error;
@@ -842,7 +892,7 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(payroll.userId, userId),
           eq(payroll.storeId, storeId),
-          eq(payroll.period, month)
+          eq(payroll.month, month)
         )
       ).limit(1);
       return result[0];

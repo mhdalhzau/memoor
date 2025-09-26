@@ -2,8 +2,28 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    const contentType = res.headers.get('content-type');
+    let errorMessage = res.statusText;
+    
+    try {
+      if (contentType && contentType.includes('application/json')) {
+        const jsonError = await res.json();
+        errorMessage = jsonError.message || jsonError.error || res.statusText;
+      } else {
+        const textError = await res.text();
+        // Check if we got HTML instead of JSON (common server error)
+        if (textError.includes('<!DOCTYPE') || textError.includes('<html')) {
+          errorMessage = `Server error (${res.status}): Received HTML instead of JSON. This usually indicates a server-side error.`;
+        } else {
+          errorMessage = textError || res.statusText;
+        }
+      }
+    } catch (parseError) {
+      // If we can't parse the error response, use the status text
+      errorMessage = `Server error (${res.status}): ${res.statusText}`;
+    }
+    
+    throw new Error(`${res.status}: ${errorMessage}`);
   }
 }
 
@@ -55,6 +75,17 @@ export const getQueryFn: <T>(options: {
     }
 
     await throwIfResNotOk(res);
+    
+    // Ensure we're getting JSON response
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await res.text();
+      if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+        throw new Error('Server returned HTML instead of JSON. This indicates a server-side error.');
+      }
+      return text; // Return as text if not JSON
+    }
+    
     return await res.json();
   };
 

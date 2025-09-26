@@ -78,7 +78,7 @@ export const sales = mysqlTable("sales", {
   date: timestamp("date").defaultNow(),
   totalSales: decimal("total_sales", { precision: 12, scale: 2 }).notNull(),
   transactions: int("transactions").notNull(),
-  averageTicket: decimal("average_ticket", { precision: 8, scale: 2 }),
+  averageTicket: decimal("average_ticket", { precision: 12, scale: 2 }),
   // Payment breakdown
   totalQris: decimal("total_qris", { precision: 12, scale: 2 }).default("0"),
   totalCash: decimal("total_cash", { precision: 12, scale: 2 }).default("0"),
@@ -261,6 +261,7 @@ export const insertUserStoreSchema = createInsertSchema(userStores).omit({
 });
 
 export const insertStoreSchema = createInsertSchema(stores).omit({
+  id: true, // Omit auto-increment ID field
   createdAt: true,
 });
 

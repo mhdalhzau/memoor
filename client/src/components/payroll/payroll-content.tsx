@@ -116,10 +116,18 @@ export default function PayrollContent() {
   // Filter attendance records for the current month
   const attendanceRecords =
     allAttendanceRecords?.filter((record) => {
-      if (!record.date && !record.createdAt) return false;
-      const recordDate = new Date(record.date || record.createdAt);
-      const recordMonth = recordDate.toISOString().slice(0, 7); // YYYY-MM
-      return recordMonth === selectedPayroll?.month;
+      if (!record?.date && !record?.createdAt) return false;
+      if (!selectedPayroll?.month) return false;
+      
+      try {
+        const recordDate = new Date(record.date || record.createdAt);
+        if (isNaN(recordDate.getTime())) return false;
+        const recordMonth = recordDate.toISOString().slice(0, 7); // YYYY-MM
+        return recordMonth === selectedPayroll.month;
+      } catch (error) {
+        console.warn('Error processing attendance record date:', error);
+        return false;
+      }
     }) || [];
 
   const generatePayrollMutation = useMutation({

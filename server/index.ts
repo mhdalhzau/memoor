@@ -48,12 +48,30 @@ app.use((req, res, next) => {
   // Setup database middleware untuk operasi CRUD yang dioptimalkan
   setupDatabaseMiddleware(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  // Global error handler - ensure all errors return JSON for API routes
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
+    let message = err.message || "Internal Server Error";
+    
+    // For API routes, ensure we always return JSON
+    if (req.path.startsWith('/api')) {
+      res.set('Content-Type', 'application/json');
+      
+      // Enhanced error information for development
+      const errorResponse: any = { message };
+      if (app.get("env") === "development") {
+        errorResponse.error = err.name;
+        errorResponse.details = err.code || err.errno;
+      }
+      
+      res.status(status).json(errorResponse);
+    } else {
+      // For non-API routes, fall back to default error handling
+      res.status(status).send(message);
+    }
+    
+    // Log error for debugging (don't throw as it breaks the response)
+    console.error(`Error ${status} on ${req.method} ${req.path}:`, err.message);
   });
 
   // importantly only setup vite in development and after
