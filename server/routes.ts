@@ -3712,13 +3712,13 @@ export function registerRoutes(app: Express): Server {
       const sheetsService = getGoogleSheetsService();
       const config = {
         id: "default",
-        spreadsheetId: process.env.GOOGLE_SHEET_ID?.trim() || googleSheetsConfig?.spreadsheetId || "",
-        worksheetName: googleSheetsConfig?.worksheetName || "Sales Data",
-        syncEnabled: googleSheetsConfig?.syncEnabled || !!process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS,
-        autoSync: googleSheetsConfig?.autoSync || false,
-        lastSyncAt: googleSheetsConfig?.lastSyncAt,
+        spreadsheetId: process.env.GOOGLE_SHEET_ID?.trim() || "",
+        worksheetName: "Sales Data",
+        syncEnabled: !!process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS,
+        autoSync: false,
+        lastSyncAt: null,
         status: sheetsService ? "connected" : "disconnected" as "connected" | "disconnected" | "error",
-        errorMessage: googleSheetsConfig?.errorMessage
+        errorMessage: null
       };
 
       res.json(config);
@@ -3751,7 +3751,7 @@ export function registerRoutes(app: Express): Server {
         worksheetName,
         syncEnabled,
         autoSync,
-        lastSyncAt: googleSheetsConfig?.lastSyncAt,
+        lastSyncAt: null,
         errorMessage: null
       };
 
@@ -3817,7 +3817,7 @@ export function registerRoutes(app: Express): Server {
         console.warn('Could not fetch worksheet details:', error);
         // Fallback to default worksheet info
         worksheets = [{
-          name: googleSheetsConfig?.worksheetName || "Sales Data",
+          name: "Sales Data",
           id: 0,
           rowCount: 100,
           columnCount: 21

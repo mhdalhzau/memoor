@@ -19,6 +19,17 @@ export async function createDatabaseBackup(): Promise<string> {
     
     // Get database name from connection
     const connection = await pool.getConnection();
+    
+    // Ensure MySQL-compatible SQL mode (remove ANSI_QUOTES if present)
+    const [sqlModeBeforeResult] = await connection.execute('SELECT @@sql_mode as current_mode');
+    console.log('📋 SQL mode before fix:', (sqlModeBeforeResult as any)[0]?.current_mode);
+    
+    // Set explicit SQL mode without ANSI_QUOTES
+    await connection.execute("SET SESSION sql_mode='REAL_AS_FLOAT,PIPES_AS_CONCAT,IGNORE_SPACE,ONLY_FULL_GROUP_BY,STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'");
+    
+    const [sqlModeAfterResult] = await connection.execute('SELECT @@sql_mode as current_mode');
+    console.log('📋 SQL mode after fix:', (sqlModeAfterResult as any)[0]?.current_mode);
+    
     const [dbNameResult] = await connection.execute('SELECT DATABASE() as db_name');
     const dbName = (dbNameResult as any)[0]?.db_name;
     
@@ -37,7 +48,7 @@ export async function createDatabaseBackup(): Promise<string> {
     for (const tableName of tables) {
       console.log(`📋 Backing up table: ${tableName}`);
       
-      // Get table structure
+      // Get table structure - MySQL SHOW CREATE TABLE should return proper backtick syntax
       const [createTableResult] = await connection.execute(`SHOW CREATE TABLE \`${tableName}\``);
       const createTableSQL = (createTableResult as any)[0]['Create Table'];
       
@@ -54,9 +65,8 @@ export async function createDatabaseBackup(): Promise<string> {
         for (const row of rows as any[]) {
           const values = Object.values(row).map(value => {
             if (value === null) return 'NULL';
-            if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`;
-            if (value instanceof Date) return `'${value.toISOString().slice(0, 19).replace('T', ' ')}'`;
-            return value;
+            // Use mysql2's built-in escaping for proper handling of all data types
+            return connection.escape(value);
           }).join(', ');
           
           const columns = Object.keys(row).map(col => `\`${col}\``).join(', ');
@@ -68,7 +78,7 @@ export async function createDatabaseBackup(): Promise<string> {
     
     connection.release();
     
-    // Write backup file
+    // Write backup file with proper MySQL syntax
     fs.writeFileSync(backupFile, backupContent);
     
     console.log(`✅ Database backup completed: ${backupFile}`);
@@ -90,18 +100,26 @@ export async function restoreDatabaseFromBackup(backupFile: string): Promise<voi
     console.log('🔄 Starting database restore...');
     
     const backupContent = fs.readFileSync(backupFile, 'utf8');
-    const statements = backupContent.split(';').filter(stmt => stmt.trim());
+    const statements = splitSqlStatements(backupContent);
     
     const connection = await pool.getConnection();
     
-    for (const statement of statements) {
-      const trimmedStmt = statement.trim();
-      if (trimmedStmt && !trimmedStmt.startsWith('--')) {
-        await connection.execute(trimmedStmt);
-      }
-    }
+    // Ensure MySQL-compatible SQL mode and disable foreign key checks for restore
+    await connection.execute("SET SESSION sql_mode='REAL_AS_FLOAT,PIPES_AS_CONCAT,IGNORE_SPACE,ONLY_FULL_GROUP_BY,STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'");
+    await connection.execute('SET FOREIGN_KEY_CHECKS=0');
     
-    connection.release();
+    try {
+      for (const statement of statements) {
+        const trimmedStmt = statement.trim();
+        if (trimmedStmt && !trimmedStmt.startsWith('--')) {
+          await connection.execute(trimmedStmt);
+        }
+      }
+    } finally {
+      // Re-enable foreign key checks
+      await connection.execute('SET FOREIGN_KEY_CHECKS=1');
+      connection.release();
+    }
     
     console.log('✅ Database restore completed');
     
@@ -109,6 +127,57 @@ export async function restoreDatabaseFromBackup(backupFile: string): Promise<voi
     console.error('❌ Database restore failed:', error);
     throw error;
   }
+}
+
+// Safely split SQL statements - handles semicolons inside string literals
+function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = '';
+  let inString = false;
+  let stringChar = '';
+  let escaped = false;
+  
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    
+    if (escaped) {
+      escaped = false;
+      current += char;
+      continue;
+    }
+    
+    if (char === '\\') {
+      escaped = true;
+      current += char;
+      continue;
+    }
+    
+    if (!inString && (char === '"' || char === "'" || char === '`')) {
+      inString = true;
+      stringChar = char;
+      current += char;
+    } else if (inString && char === stringChar) {
+      inString = false;
+      stringChar = '';
+      current += char;
+    } else if (!inString && char === ';') {
+      const stmt = current.trim();
+      if (stmt && !stmt.startsWith('--')) {
+        statements.push(stmt);
+      }
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  // Add final statement if exists
+  const finalStmt = current.trim();
+  if (finalStmt && !finalStmt.startsWith('--')) {
+    statements.push(finalStmt);
+  }
+  
+  return statements;
 }
 
 // Auto-backup scheduler (daily)

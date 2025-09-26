@@ -359,16 +359,19 @@ export class DatabaseStorage implements IStorage {
 
   async createUser(user: InsertUser): Promise<User> {
     try {
-      const result = await db.insert(users).values({
-        id: randomUUID(),
+      const userId = randomUUID();
+      await db.insert(users).values({
+        id: userId,
         ...user
-      }).returning();
+      });
       
       // Assign user to stores if provided
       if (user.storeIds && user.storeIds.length > 0) {
-        await this.assignUserToStores(result[0].id, user.storeIds);
+        await this.assignUserToStores(userId, user.storeIds);
       }
       
+      // MySQL doesn't support .returning(), so fetch the created user
+      const result = await db.select().from(users).where(eq(users.id, userId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating user:', error);
@@ -387,7 +390,9 @@ export class DatabaseStorage implements IStorage {
 
   async updateUser(id: string, data: Partial<Omit<InsertUser, 'storeIds'>>): Promise<User | undefined> {
     try {
-      const result = await db.update(users).set(data).where(eq(users.id, id)).returning();
+      await db.update(users).set(data).where(eq(users.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated user
+      const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating user:', error);
@@ -505,7 +510,9 @@ export class DatabaseStorage implements IStorage {
 
   async createStore(store: InsertStore): Promise<Store> {
     try {
-      const result = await db.insert(stores).values(store).returning();
+      await db.insert(stores).values(store);
+      // MySQL doesn't support .returning(), so fetch the created store
+      const result = await db.select().from(stores).where(eq(stores.id, store.id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating store:', error);
@@ -524,7 +531,9 @@ export class DatabaseStorage implements IStorage {
 
   async updateStore(id: number, data: Partial<InsertStore>): Promise<Store | undefined> {
     try {
-      const result = await db.update(stores).set(data).where(eq(stores.id, id)).returning();
+      await db.update(stores).set(data).where(eq(stores.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated store
+      const result = await db.select().from(stores).where(eq(stores.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating store:', error);
@@ -630,10 +639,13 @@ export class DatabaseStorage implements IStorage {
 
   async createAttendance(attendanceData: InsertAttendance): Promise<Attendance> {
     try {
-      const result = await db.insert(attendance).values({
-        id: randomUUID(),
+      const attendanceId = randomUUID();
+      await db.insert(attendance).values({
+        id: attendanceId,
         ...attendanceData
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created attendance
+      const result = await db.select().from(attendance).where(eq(attendance.id, attendanceId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating attendance:', error);
@@ -643,7 +655,9 @@ export class DatabaseStorage implements IStorage {
 
   async updateAttendance(id: string, data: Partial<InsertAttendance>): Promise<Attendance | undefined> {
     try {
-      const result = await db.update(attendance).set(data).where(eq(attendance.id, id)).returning();
+      await db.update(attendance).set(data).where(eq(attendance.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated attendance
+      const result = await db.select().from(attendance).where(eq(attendance.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating attendance:', error);
@@ -653,7 +667,9 @@ export class DatabaseStorage implements IStorage {
 
   async updateAttendanceStatus(id: string, status: string): Promise<Attendance | undefined> {
     try {
-      const result = await db.update(attendance).set({ status }).where(eq(attendance.id, id)).returning();
+      await db.update(attendance).set({ status }).where(eq(attendance.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated attendance
+      const result = await db.select().from(attendance).where(eq(attendance.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating attendance status:', error);
@@ -697,10 +713,13 @@ export class DatabaseStorage implements IStorage {
 
   async createSales(salesData: InsertSales): Promise<Sales> {
     try {
-      const result = await db.insert(sales).values({
-        id: randomUUID(),
+      const salesId = randomUUID();
+      await db.insert(sales).values({
+        id: salesId,
         ...salesData
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created sales
+      const result = await db.select().from(sales).where(eq(sales.id, salesId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating sales:', error);
