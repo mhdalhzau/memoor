@@ -20,7 +20,7 @@ const proposalSchema = z.object({
   category: z.enum(["Equipment", "Process Improvement", "Training", "Other"], {
     errorMap: () => ({ message: "Please select a category" })
   }),
-  estimatedCost: z.coerce.number().positive("Cost must be positive"),
+  estimatedCost: z.coerce.number().positive("Cost must be positive").transform((val) => val.toString()),
   description: z.string().min(1, "Description is required"),
 });
 

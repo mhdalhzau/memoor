@@ -35,7 +35,7 @@ export const userStores = mysqlTable("user_stores", {
 
 // Stores table
 export const stores = mysqlTable("stores", {
-  id: int("id").primaryKey(),
+  id: int("id").primaryKey().autoincrement(),
   name: text("name").notNull(),
   address: text("address"),
   phone: text("phone"),
