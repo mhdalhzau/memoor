@@ -4290,6 +4290,412 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Enhanced Google Sheets sync endpoints as requested by user
+  
+  // Sales sync - separate worksheet per store
+  app.post("/api/google-sheets/sync-sales-per-store", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      // Get all stores that user has access to
+      const stores = await storage.getAllStores();
+      const accessibleStores = [];
+      
+      for (const store of stores) {
+        if (await hasStoreAccess(req.user, store.id)) {
+          accessibleStores.push(store);
+        }
+      }
+
+      if (accessibleStores.length === 0) {
+        return res.status(400).json({ message: "No accessible stores found" });
+      }
+
+      // Get sales data for all accessible stores
+      const allSalesData = [];
+      for (const store of accessibleStores) {
+        const sales = await storage.getSalesByStore(store.id);
+        const salesWithStoreInfo = sales.map(s => ({
+          ...s,
+          storeName: store.name
+        }));
+        allSalesData.push(...salesWithStoreInfo);
+      }
+
+      await sheetsService.syncSalesDataPerStore(allSalesData, accessibleStores);
+      
+      res.json({
+        success: true,
+        message: `Successfully synced sales data to ${accessibleStores.length} separate worksheets`,
+        storesProcessed: accessibleStores.map(s => s.name),
+        totalRecords: allSalesData.length,
+        syncedAt: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('Sales per store sync error:', error);
+      res.status(500).json({ 
+        message: "Failed to sync sales per store",
+        details: error.message 
+      });
+    }
+  });
+
+  // Cashflow sync - separate worksheet per store
+  app.post("/api/google-sheets/sync-cashflow-per-store", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      // Get all stores that user has access to
+      const stores = await storage.getAllStores();
+      const accessibleStores = [];
+      
+      for (const store of stores) {
+        if (await hasStoreAccess(req.user, store.id)) {
+          accessibleStores.push(store);
+        }
+      }
+
+      if (accessibleStores.length === 0) {
+        return res.status(400).json({ message: "No accessible stores found" });
+      }
+
+      // Get cashflow data for all accessible stores
+      const allCashflowData = [];
+      for (const store of accessibleStores) {
+        const cashflow = await storage.getCashflowByStore(store.id);
+        const cashflowWithStoreInfo = cashflow.map(c => ({
+          ...c,
+          storeName: store.name
+        }));
+        allCashflowData.push(...cashflowWithStoreInfo);
+      }
+
+      await sheetsService.syncCashflowDataPerStore(allCashflowData, accessibleStores);
+      
+      res.json({
+        success: true,
+        message: `Successfully synced cashflow data to ${accessibleStores.length} separate worksheets`,
+        storesProcessed: accessibleStores.map(s => s.name),
+        totalRecords: allCashflowData.length,
+        syncedAt: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('Cashflow per store sync error:', error);
+      res.status(500).json({ 
+        message: "Failed to sync cashflow per store",
+        details: error.message 
+      });
+    }
+  });
+
+  // Attendance sync - side by side tables with 5 column gap and 5 row offset
+  app.post("/api/google-sheets/sync-attendance-side-by-side", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      // Get all stores that user has access to
+      const stores = await storage.getAllStores();
+      const accessibleStores = [];
+      
+      for (const store of stores) {
+        if (await hasStoreAccess(req.user, store.id)) {
+          accessibleStores.push(store);
+        }
+      }
+
+      if (accessibleStores.length === 0) {
+        return res.status(400).json({ message: "No accessible stores found" });
+      }
+
+      // Get attendance data for all accessible stores
+      const allAttendanceData = [];
+      for (const store of accessibleStores) {
+        const attendance = await storage.getAttendanceByStore(store.id);
+        const attendanceWithStoreInfo = attendance.map(a => ({
+          ...a,
+          storeName: store.name
+        }));
+        allAttendanceData.push(...attendanceWithStoreInfo);
+      }
+
+      await sheetsService.syncAttendanceSideBySide(allAttendanceData, accessibleStores);
+      
+      res.json({
+        success: true,
+        message: "Successfully synced attendance data in side-by-side format",
+        storesProcessed: accessibleStores.map(s => s.name),
+        totalRecords: allAttendanceData.length,
+        layout: "2 tables side by side with 5 column gap and 5 row offset",
+        syncedAt: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('Attendance side-by-side sync error:', error);
+      res.status(500).json({ 
+        message: "Failed to sync attendance side-by-side",
+        details: error.message 
+      });
+    }
+  });
+
+  // Payroll sync - auto-generate without overwriting
+  app.post("/api/google-sheets/sync-payroll-auto-generate", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      // Get all payroll data - currently no getPayrollByStore method, so get all
+      const allPayroll = await storage.getAllPayroll();
+      
+      // Get all staff members
+      const allUsers = await storage.getAllUsers();
+      const staff = allUsers.filter(u => u.role === 'staff').map(u => ({
+        id: u.id,
+        name: u.name
+      }));
+
+      // Format payroll data with staff names
+      const payrollWithStaffInfo = allPayroll.map(p => {
+        const staffMember = allUsers.find(u => u.id === p.userId);
+        return {
+          ...p,
+          staffName: staffMember?.name || 'Unknown'
+        };
+      });
+
+      await sheetsService.syncPayrollAutoGenerate(payrollWithStaffInfo, staff);
+      
+      res.json({
+        success: true,
+        message: `Successfully added ${payrollWithStaffInfo.length} payroll records without overwriting existing data`,
+        mode: "auto-generate (append only)",
+        totalRecords: payrollWithStaffInfo.length,
+        staffCount: staff.length,
+        syncedAt: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('Payroll auto-generate sync error:', error);
+      res.status(500).json({ 
+        message: "Failed to sync payroll auto-generate",
+        details: error.message 
+      });
+    }
+  });
+
+  // Piutang sync - single worksheet
+  app.post("/api/google-sheets/sync-piutang-single-worksheet", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      // Get all piutang data across all accessible stores
+      const stores = await storage.getAllStores();
+      const allPiutangData = [];
+      
+      for (const store of stores) {
+        if (await hasStoreAccess(req.user, store.id)) {
+          const piutang = await storage.getPiutangByStore(store.id);
+          
+          // Add store and customer information
+          for (const p of piutang) {
+            const customer = await storage.getCustomer(p.customerId || '');
+            allPiutangData.push({
+              ...p,
+              storeName: store.name,
+              customerName: customer?.name || 'Unknown Customer'
+            });
+          }
+        }
+      }
+
+      await sheetsService.syncPiutangSingleWorksheet(allPiutangData);
+      
+      res.json({
+        success: true,
+        message: `Successfully synced ${allPiutangData.length} piutang records to single worksheet`,
+        worksheetName: "Piutang",
+        totalRecords: allPiutangData.length,
+        syncedAt: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('Piutang single worksheet sync error:', error);
+      res.status(500).json({ 
+        message: "Failed to sync piutang single worksheet",
+        details: error.message 
+      });
+    }
+  });
+
+  // Manual worksheet creation endpoints to prevent overwriting
+  app.post("/api/google-sheets/create-manual-worksheet", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const { worksheetName, dataType } = req.body;
+      if (!worksheetName) {
+        return res.status(400).json({ message: "Worksheet name is required" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      // Create unique worksheet name with timestamp to prevent overwriting
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      const uniqueWorksheetName = `${worksheetName} - ${timestamp}`;
+
+      const result = await sheetsService.createWorksheet(uniqueWorksheetName);
+      
+      res.json({
+        success: true,
+        message: `Successfully created manual worksheet: ${uniqueWorksheetName}`,
+        worksheetName: uniqueWorksheetName,
+        worksheetId: result.worksheetId,
+        dataType: dataType || 'manual',
+        createdAt: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('Manual worksheet creation error:', error);
+      res.status(500).json({ 
+        message: "Failed to create manual worksheet",
+        details: error.message 
+      });
+    }
+  });
+
+  // Auto-create worksheets for each store to prevent overwriting
+  app.post("/api/google-sheets/auto-create-store-worksheets", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const { dataType } = req.body; // 'sales' or 'cashflow'
+      if (!dataType || !['sales', 'cashflow'].includes(dataType)) {
+        return res.status(400).json({ message: "Data type must be 'sales' or 'cashflow'" });
+      }
+
+      const sheetsService = getGoogleSheetsService();
+      if (!sheetsService) {
+        return res.status(400).json({ 
+          message: "Google Sheets not configured",
+          details: "Please configure Google Sheets credentials first" 
+        });
+      }
+
+      // Get all stores that user has access to
+      const stores = await storage.getAllStores();
+      const accessibleStores = [];
+      
+      for (const store of stores) {
+        if (await hasStoreAccess(req.user, store.id)) {
+          accessibleStores.push(store);
+        }
+      }
+
+      if (accessibleStores.length === 0) {
+        return res.status(400).json({ message: "No accessible stores found" });
+      }
+
+      const createdWorksheets = [];
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+
+      // Create separate worksheet for each store
+      for (const store of accessibleStores) {
+        const worksheetName = `${dataType === 'sales' ? 'Sales' : 'Cashflow'} - ${store.name} - ${timestamp}`;
+        
+        try {
+          const result = await sheetsService.createWorksheet(worksheetName);
+          createdWorksheets.push({
+            storeId: store.id,
+            storeName: store.name,
+            worksheetName: worksheetName,
+            worksheetId: result.worksheetId
+          });
+        } catch (error: any) {
+          if (!error.message.includes('already exists')) {
+            console.error(`Failed to create worksheet for store ${store.name}:`, error);
+          }
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Successfully created ${createdWorksheets.length} ${dataType} worksheets for stores`,
+        dataType,
+        createdWorksheets,
+        totalWorksheets: createdWorksheets.length,
+        createdAt: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('Auto-create store worksheets error:', error);
+      res.status(500).json({ 
+        message: "Failed to auto-create store worksheets",
+        details: error.message 
+      });
+    }
+  });
+
   // Customer routes
   app.get("/api/customers", async (req, res) => {
     try {

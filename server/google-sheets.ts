@@ -1001,6 +1001,384 @@ export class GoogleSheetsService {
     }
   }
 
+  // Enhanced sync methods as requested by user
+
+  // Sales sync - separate worksheet per store
+  async syncSalesDataPerStore(
+    salesData: (Sales & { storeName?: string; userName?: string })[],
+    stores: Array<{ id: number; name: string }>
+  ): Promise<void> {
+    try {
+      console.log('🏪 Starting sales sync per store...');
+      
+      for (const store of stores) {
+        const worksheetName = `Sales - ${store.name}`;
+        
+        // Create worksheet if it doesn't exist
+        try {
+          await this.createWorksheet(worksheetName);
+        } catch (error: any) {
+          if (!error.message.includes('already exists')) {
+            console.error(`Failed to create worksheet "${worksheetName}":`, error);
+          }
+        }
+        
+        // Switch to this store's worksheet
+        await this.switchWorksheet(worksheetName);
+        
+        // Filter data for this store
+        const storeData = salesData.filter(s => 
+          s.storeId === store.id || s.storeName === store.name
+        );
+        
+        // Sync data to this worksheet
+        await this.ensureHeadersExist('sales');
+        
+        if (storeData.length > 0) {
+          // Clear existing data (except headers)
+          await this.sheets.spreadsheets.values.clear({
+            spreadsheetId: this.config.spreadsheetId,
+            range: `${worksheetName}!A2:U`,
+          });
+          
+          const values = storeData.map((sales) => this.formatSalesDataForSheets(sales));
+          
+          await this.sheets.spreadsheets.values.append({
+            spreadsheetId: this.config.spreadsheetId,
+            range: `${worksheetName}!A2:U`,
+            valueInputOption: 'RAW',
+            insertDataOption: 'INSERT_ROWS',
+            resource: { values },
+          });
+        }
+        
+        console.log(`✅ Synced ${storeData.length} sales records for store: ${store.name}`);
+      }
+      
+      console.log('🎉 Sales sync per store completed!');
+    } catch (error) {
+      console.error('Failed to sync sales data per store:', error);
+      throw error;
+    }
+  }
+
+  // Cashflow sync - separate worksheet per store
+  async syncCashflowDataPerStore(
+    cashflowData: (Cashflow & { storeName?: string; userName?: string })[],
+    stores: Array<{ id: number; name: string }>
+  ): Promise<void> {
+    try {
+      console.log('💰 Starting cashflow sync per store...');
+      
+      for (const store of stores) {
+        const worksheetName = `Cashflow - ${store.name}`;
+        
+        // Create worksheet if it doesn't exist
+        try {
+          await this.createWorksheet(worksheetName);
+        } catch (error: any) {
+          if (!error.message.includes('already exists')) {
+            console.error(`Failed to create worksheet "${worksheetName}":`, error);
+          }
+        }
+        
+        // Switch to this store's worksheet
+        await this.switchWorksheet(worksheetName);
+        
+        // Filter data for this store
+        const storeData = cashflowData.filter(c => 
+          c.storeId === store.id || c.storeName === store.name
+        );
+        
+        // Sync data to this worksheet
+        await this.ensureHeadersExist('cashflow');
+        
+        if (storeData.length > 0) {
+          // Clear existing data (except headers)
+          const headers = this.getWorksheetHeaders('cashflow');
+          const range = `${worksheetName}!A2:${String.fromCharCode(64 + headers.length)}`;
+          
+          await this.sheets.spreadsheets.values.clear({
+            spreadsheetId: this.config.spreadsheetId,
+            range: range,
+          });
+          
+          const values = storeData.map((cashflow) => this.formatCashflowDataForSheets(cashflow));
+          
+          await this.sheets.spreadsheets.values.append({
+            spreadsheetId: this.config.spreadsheetId,
+            range: range,
+            valueInputOption: 'RAW',
+            insertDataOption: 'INSERT_ROWS',
+            resource: { values },
+          });
+        }
+        
+        console.log(`✅ Synced ${storeData.length} cashflow records for store: ${store.name}`);
+      }
+      
+      console.log('🎉 Cashflow sync per store completed!');
+    } catch (error) {
+      console.error('Failed to sync cashflow data per store:', error);
+      throw error;
+    }
+  }
+
+  // Attendance sync - 2 tables side by side with 5 column gap and 5 row offset
+  async syncAttendanceSideBySide(
+    attendanceData: (Attendance & { userName?: string; storeName?: string })[],
+    stores: Array<{ id: number; name: string }>
+  ): Promise<void> {
+    try {
+      console.log('👥 Starting attendance side-by-side sync...');
+      const worksheetName = 'Absensi';
+      
+      // Create worksheet if it doesn't exist
+      try {
+        await this.createWorksheet(worksheetName);
+      } catch (error: any) {
+        if (!error.message.includes('already exists')) {
+          console.error(`Failed to create worksheet "${worksheetName}":`, error);
+        }
+      }
+      
+      // Switch to attendance worksheet
+      await this.switchWorksheet(worksheetName);
+      
+      // Clear entire worksheet first
+      await this.sheets.spreadsheets.values.clear({
+        spreadsheetId: this.config.spreadsheetId,
+        range: `${worksheetName}!A:Z`,
+      });
+      
+      const headers = this.getWorksheetHeaders('attendance');
+      
+      // Store 1 data - starts at A1
+      const store1 = stores[0];
+      if (store1) {
+        const store1Data = attendanceData.filter(a => 
+          a.storeId === store1.id || a.storeName === store1.name
+        );
+        
+        // Add store 1 title and headers
+        await this.sheets.spreadsheets.values.update({
+          spreadsheetId: this.config.spreadsheetId,
+          range: `${worksheetName}!A1:A1`,
+          valueInputOption: 'RAW',
+          resource: { values: [[`${store1.name} - Absensi`]] },
+        });
+        
+        await this.sheets.spreadsheets.values.update({
+          spreadsheetId: this.config.spreadsheetId,
+          range: `${worksheetName}!A2:${String.fromCharCode(64 + headers.length)}2`,
+          valueInputOption: 'RAW',
+          resource: { values: [headers] },
+        });
+        
+        if (store1Data.length > 0) {
+          const values = store1Data.map(a => this.formatAttendanceDataForSheets(a));
+          await this.sheets.spreadsheets.values.append({
+            spreadsheetId: this.config.spreadsheetId,
+            range: `${worksheetName}!A3:${String.fromCharCode(64 + headers.length)}`,
+            valueInputOption: 'RAW',
+            insertDataOption: 'INSERT_ROWS',
+            resource: { values },
+          });
+        }
+        
+        console.log(`✅ Synced ${store1Data.length} attendance records for ${store1.name}`);
+      }
+      
+      // Store 2 data - starts at column V (22nd column) with 5 column gap + 5 row offset
+      const store2 = stores[1];
+      if (store2) {
+        const store2Data = attendanceData.filter(a => 
+          a.storeId === store2.id || a.storeName === store2.name
+        );
+        
+        const startCol = 'V'; // 5 column gap after previous table
+        const titleRow = 6; // 5 rows down
+        const headerRow = 7;
+        const dataStartRow = 8;
+        
+        // Add store 2 title and headers
+        await this.sheets.spreadsheets.values.update({
+          spreadsheetId: this.config.spreadsheetId,
+          range: `${worksheetName}!${startCol}${titleRow}:${startCol}${titleRow}`,
+          valueInputOption: 'RAW',
+          resource: { values: [[`${store2.name} - Absensi`]] },
+        });
+        
+        const endCol = String.fromCharCode(startCol.charCodeAt(0) + headers.length - 1);
+        await this.sheets.spreadsheets.values.update({
+          spreadsheetId: this.config.spreadsheetId,
+          range: `${worksheetName}!${startCol}${headerRow}:${endCol}${headerRow}`,
+          valueInputOption: 'RAW',
+          resource: { values: [headers] },
+        });
+        
+        if (store2Data.length > 0) {
+          const values = store2Data.map(a => this.formatAttendanceDataForSheets(a));
+          await this.sheets.spreadsheets.values.append({
+            spreadsheetId: this.config.spreadsheetId,
+            range: `${worksheetName}!${startCol}${dataStartRow}:${endCol}`,
+            valueInputOption: 'RAW',
+            insertDataOption: 'INSERT_ROWS',
+            resource: { values },
+          });
+        }
+        
+        console.log(`✅ Synced ${store2Data.length} attendance records for ${store2.name}`);
+      }
+      
+      console.log('🎉 Attendance side-by-side sync completed!');
+    } catch (error) {
+      console.error('Failed to sync attendance side-by-side:', error);
+      throw error;
+    }
+  }
+
+  // Payroll sync - append without overwriting existing data
+  async syncPayrollAutoGenerate(
+    payrollData: any[],
+    staff: Array<{ id: string; name: string }>
+  ): Promise<void> {
+    try {
+      console.log('💼 Starting payroll auto-generate sync...');
+      const worksheetName = 'Payroll';
+      
+      // Create worksheet if it doesn't exist
+      try {
+        await this.createWorksheet(worksheetName);
+      } catch (error: any) {
+        if (!error.message.includes('already exists')) {
+          console.error(`Failed to create worksheet "${worksheetName}":`, error);
+        }
+      }
+      
+      // Switch to payroll worksheet
+      await this.switchWorksheet(worksheetName);
+      
+      // Check if headers exist, if not create them
+      const payrollHeaders = [
+        'ID Payroll',
+        'Nama Staff',
+        'Bulan/Tahun',
+        'Gaji Pokok',
+        'Bonus',
+        'Potongan',
+        'Total Gaji',
+        'Status Pembayaran',
+        'Tanggal Bayar',
+        'Catatan',
+        'Tanggal Dibuat'
+      ];
+      
+      // Check if there's any existing data
+      const existingResponse = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: this.config.spreadsheetId,
+        range: `${worksheetName}!A:A`,
+      });
+      
+      const hasExistingData = existingResponse.data.values && existingResponse.data.values.length > 1;
+      
+      if (!hasExistingData) {
+        // Add headers if no existing data
+        await this.sheets.spreadsheets.values.update({
+          spreadsheetId: this.config.spreadsheetId,
+          range: `${worksheetName}!A1:${String.fromCharCode(64 + payrollHeaders.length)}1`,
+          valueInputOption: 'RAW',
+          resource: { values: [payrollHeaders] },
+        });
+      }
+      
+      // Format and append new payroll data (never overwrite)
+      if (payrollData.length > 0) {
+        const values = payrollData.map((payroll) => [
+          payroll.id || '',
+          payroll.staffName || payroll.userName || '',
+          payroll.month || new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long' }),
+          parseFloat(payroll.basicSalary || payroll.salary || '0'),
+          parseFloat(payroll.bonus || '0'),
+          parseFloat(payroll.deductions || '0'),
+          parseFloat(payroll.totalSalary || '0'),
+          payroll.paymentStatus || 'pending',
+          payroll.paidAt ? new Date(payroll.paidAt).toLocaleDateString('id-ID') : '',
+          payroll.notes || '',
+          payroll.createdAt ? new Date(payroll.createdAt).toLocaleDateString('id-ID') : new Date().toLocaleDateString('id-ID')
+        ]);
+        
+        // Always append to the end (never overwrite)
+        await this.sheets.spreadsheets.values.append({
+          spreadsheetId: this.config.spreadsheetId,
+          range: `${worksheetName}!A:${String.fromCharCode(64 + payrollHeaders.length)}`,
+          valueInputOption: 'RAW',
+          insertDataOption: 'INSERT_ROWS',
+          resource: { values },
+        });
+        
+        console.log(`✅ Added ${payrollData.length} new payroll records`);
+      }
+      
+      console.log('🎉 Payroll auto-generate sync completed!');
+    } catch (error) {
+      console.error('Failed to sync payroll auto-generate:', error);
+      throw error;
+    }
+  }
+
+  // Piutang sync - single worksheet
+  async syncPiutangSingleWorksheet(
+    piutangData: (Piutang & { customerName?: string; storeName?: string })[]
+  ): Promise<void> {
+    try {
+      console.log('📋 Starting piutang single worksheet sync...');
+      const worksheetName = 'Piutang';
+      
+      // Create worksheet if it doesn't exist
+      try {
+        await this.createWorksheet(worksheetName);
+      } catch (error: any) {
+        if (!error.message.includes('already exists')) {
+          console.error(`Failed to create worksheet "${worksheetName}":`, error);
+        }
+      }
+      
+      // Switch to piutang worksheet
+      await this.switchWorksheet(worksheetName);
+      
+      // Sync data to this worksheet
+      await this.ensureHeadersExist('piutang');
+      
+      if (piutangData.length > 0) {
+        // Clear existing data (except headers)
+        const headers = this.getWorksheetHeaders('piutang');
+        const range = `${worksheetName}!A2:${String.fromCharCode(64 + headers.length)}`;
+        
+        await this.sheets.spreadsheets.values.clear({
+          spreadsheetId: this.config.spreadsheetId,
+          range: range,
+        });
+        
+        const values = piutangData.map((piutang) => this.formatPiutangDataForSheets(piutang));
+        
+        await this.sheets.spreadsheets.values.append({
+          spreadsheetId: this.config.spreadsheetId,
+          range: range,
+          valueInputOption: 'RAW',
+          insertDataOption: 'INSERT_ROWS',
+          resource: { values },
+        });
+      }
+      
+      console.log(`✅ Synced ${piutangData.length} piutang records`);
+      console.log('🎉 Piutang single worksheet sync completed!');
+    } catch (error) {
+      console.error('Failed to sync piutang single worksheet:', error);
+      throw error;
+    }
+  }
+
   // Auto create organized worksheets
   async setupOrganizedWorksheets(): Promise<{
     success: boolean;
