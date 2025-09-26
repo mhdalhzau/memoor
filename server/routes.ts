@@ -3482,11 +3482,31 @@ export function registerRoutes(app: Express): Server {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
       
+      const { storeId } = req.query;
+      
       let piutang;
       if (req.user.role === 'administrasi') {
-        piutang = await storage.getAllPiutang();
+        if (storeId) {
+          // Admin can filter by specific store
+          piutang = await storage.getPiutangByStore(parseInt(storeId as string));
+        } else {
+          // Admin gets all piutang from all stores
+          piutang = await storage.getAllPiutang();
+        }
       } else {
-        piutang = await storage.getPiutangByStore(req.user.storeId!);
+        // For non-admin users, get piutang from their accessible store
+        const targetStoreId = storeId ? parseInt(storeId as string) : await getUserFirstStoreId(req.user);
+        
+        if (!targetStoreId) {
+          return res.status(400).json({ message: "Store ID is required" });
+        }
+        
+        // Verify store access
+        if (!(await hasStoreAccess(req.user, targetStoreId))) {
+          return res.status(403).json({ message: "You don't have access to this store" });
+        }
+        
+        piutang = await storage.getPiutangByStore(targetStoreId);
       }
       
       res.json(piutang);

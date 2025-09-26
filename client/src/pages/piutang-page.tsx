@@ -15,12 +15,23 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Customer, Piutang, insertPiutangSchema, type InsertPiutang } from "@shared/schema";
+import { Customer, Piutang, insertPiutangSchema, type InsertPiutang, type User } from "@shared/schema";
 import { SyncButton } from "@/components/ui/sync-button";
 import { formatRupiah } from "@/lib/utils";
 
+// Unified interface for both customers and users
+interface UnifiedCustomer {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  type: 'external_customer' | 'internal_employee' | 'staff_member';
+  originalType: 'customer' | 'user';
+  storeId?: number;
+}
+
 interface CustomerWithPiutang {
-  customer: Customer;
+  customer: UnifiedCustomer;
   piutangRecords: Piutang[];
   totalDebt: number;
   totalPaid: number;
@@ -35,9 +46,14 @@ export default function PiutangPage() {
   const [paymentModalData, setPaymentModalData] = useState<Piutang | null>(null);
   const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
 
-  // Fetch customers and piutang data
+  // Fetch customers, users, and piutang data
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
+    enabled: !!user
+  });
+
+  const { data: users = [] } = useQuery<User[]>({
+    queryKey: ["/api/users"],
     enabled: !!user
   });
 
@@ -119,8 +135,46 @@ export default function PiutangPage() {
     },
   });
 
-  // Group piutang by customer and calculate totals
-  const customersWithPiutang: CustomerWithPiutang[] = customers
+  // Create unified customer list combining customers and users
+  const unifiedCustomers: UnifiedCustomer[] = [
+    // External customers
+    ...customers
+      .filter(c => c.type === 'customer')
+      .map(c => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        phone: c.phone,
+        type: 'external_customer' as const,
+        originalType: 'customer' as const,
+        storeId: c.storeId
+      })),
+    // Internal employees (from customers table)
+    ...customers
+      .filter(c => c.type === 'employee')
+      .map(c => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        phone: c.phone,
+        type: 'internal_employee' as const,
+        originalType: 'customer' as const,
+        storeId: c.storeId
+      })),
+    // Staff members (from users table)
+    ...users.map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      phone: u.phone,
+      type: 'staff_member' as const,
+      originalType: 'user' as const,
+      storeId: undefined
+    }))
+  ];
+
+  // Group piutang by unified customer and calculate totals
+  const customersWithPiutang: CustomerWithPiutang[] = unifiedCustomers
     .map((customer) => {
       const customerPiutang = piutangRecords.filter(p => p.customerId === customer.id);
       const totalDebt = customerPiutang.reduce((sum, p) => sum + parseFloat(p.amount), 0);
@@ -184,25 +238,37 @@ export default function PiutangPage() {
     return parseFloat(piutang.amount) - parseFloat(piutang.paidAmount || "0");
   };
 
-  const isInternalEmployee = (customer: Customer) => {
-    return customer.type === "employee";
+  const isInternalEmployee = (customer: UnifiedCustomer) => {
+    return customer.type === "internal_employee";
   };
 
-  const getInternalWarningBadge = (customer: Customer, remainingDebt: number) => {
-    if (!isInternalEmployee(customer) || remainingDebt <= 0) return null;
+  const isStaffMember = (customer: UnifiedCustomer) => {
+    return customer.type === "staff_member";
+  };
+
+  const getInternalWarningBadge = (customer: UnifiedCustomer, remainingDebt: number) => {
+    if ((!isInternalEmployee(customer) && !isStaffMember(customer)) || remainingDebt <= 0) return null;
     
     return (
       <Badge variant="destructive" className="bg-orange-100 text-orange-800 border-orange-300">
         <AlertTriangle className="h-3 w-3 mr-1" />
-        Internal Employee Debt
+        {isStaffMember(customer) ? 'Staff Member Debt' : 'Internal Employee Debt'}
       </Badge>
     );
   };
 
-  const getCustomerTypeBadge = (customer: Customer) => {
-    if (isInternalEmployee(customer)) {
+  const getCustomerTypeBadge = (customer: UnifiedCustomer) => {
+    if (isStaffMember(customer)) {
       return (
         <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+          <UserCheck className="h-3 w-3 mr-1" />
+          Staff
+        </Badge>
+      );
+    }
+    if (isInternalEmployee(customer)) {
+      return (
+        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
           <UserCheck className="h-3 w-3 mr-1" />
           Employee
         </Badge>
@@ -298,9 +364,24 @@ export default function PiutangPage() {
                             <SelectValue placeholder="Select customer" />
                           </SelectTrigger>
                           <SelectContent>
-                            {customers.map((customer) => (
+                            {unifiedCustomers.map((customer) => (
                               <SelectItem key={customer.id} value={customer.id}>
-                                {customer.name}
+                                <div className="flex items-center gap-2">
+                                  <span>{customer.name}</span>
+                                  <Badge 
+                                    variant="outline" 
+                                    className={
+                                      customer.type === 'staff_member' 
+                                        ? "bg-blue-50 text-blue-700 border-blue-300"
+                                        : customer.type === 'internal_employee'
+                                        ? "bg-orange-50 text-orange-700 border-orange-300"
+                                        : "bg-gray-50 text-gray-700"
+                                    }
+                                  >
+                                    {customer.type === 'staff_member' ? 'Staff' : 
+                                     customer.type === 'internal_employee' ? 'Employee' : 'Customer'}
+                                  </Badge>
+                                </div>
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -440,11 +521,11 @@ export default function PiutangPage() {
                               Remaining: {formatRupiah(item.remainingDebt)}
                             </span>
                           </div>
-                          {isInternalEmployee(item.customer) && item.remainingDebt > 0 && (
+                          {(isInternalEmployee(item.customer) || isStaffMember(item.customer)) && item.remainingDebt > 0 && (
                             <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
                               <p className="text-sm text-orange-800 flex items-center gap-1">
                                 <AlertTriangle className="h-4 w-4" />
-                                <strong>Warning:</strong> This is an internal employee with outstanding debt. Please follow company policy for employee receivables.
+                                <strong>Warning:</strong> This is {isStaffMember(item.customer) ? 'a staff member' : 'an internal employee'} with outstanding debt. Please follow company policy for {isStaffMember(item.customer) ? 'staff' : 'employee'} receivables.
                               </p>
                             </div>
                           )}
