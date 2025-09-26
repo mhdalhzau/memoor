@@ -65,6 +65,8 @@ export default function GoogleSheetsConfigContent() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [worksheets, setWorksheets] = useState<WorksheetInfo[]>([]);
   const [showCredentialsInput, setShowCredentialsInput] = useState(false);
+  const [manualWorksheetName, setManualWorksheetName] = useState("");
+  const [showManualInput, setShowManualInput] = useState(false);
 
   // Fetch current Google Sheets configuration
   const { data: config, refetch: refetchConfig } = useQuery<GoogleSheetsConfig>({
@@ -92,6 +94,60 @@ export default function GoogleSheetsConfigContent() {
       toast({
         title: "❌ Connection Failed",
         description: error.message || "Failed to connect to Google Sheets",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Manual worksheet creation mutation
+  const createManualWorksheetMutation = useMutation({
+    mutationFn: async (worksheetName: string) => {
+      const response = await apiRequest('POST', '/api/google-sheets/create-manual-worksheet', {
+        worksheetName: worksheetName.trim(),
+        overwriteProtection: true
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "✅ Worksheet Created",
+        description: `Successfully created worksheet: ${data.worksheetName}`,
+      });
+      setManualWorksheetName("");
+      setShowManualInput(false);
+      // Refresh worksheets list
+      if (config?.status === "connected") {
+        testConnectionMutation.mutate();
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "❌ Creation Failed",
+        description: error.message || "Failed to create worksheet",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Manual sync to specific worksheet mutation
+  const syncToManualWorksheetMutation = useMutation({
+    mutationFn: async (worksheetName: string) => {
+      const response = await apiRequest('POST', '/api/google-sheets/sync-to-worksheet', {
+        worksheetName: worksheetName.trim()
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "✅ Sync Completed",
+        description: `Successfully synced data to worksheet: ${data.worksheetName}`,
+      });
+      setManualWorksheetName("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "❌ Sync Failed", 
+        description: error.message || "Failed to sync to worksheet",
         variant: "destructive",
       });
     },
@@ -480,19 +536,98 @@ export default function GoogleSheetsConfigContent() {
                   <Sheet className="h-5 w-5" />
                   Available Worksheets
                 </CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCreateWorksheet}
-                  disabled={createWorksheetMutation.isPending}
-                  data-testid="button-create-worksheet"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Worksheet
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCreateWorksheet}
+                    disabled={createWorksheetMutation.isPending}
+                    data-testid="button-create-worksheet"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Worksheet
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowManualInput(!showManualInput)}
+                    data-testid="button-toggle-manual-input"
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    Manual Input
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
+              {showManualInput && (
+                <Card className="mb-4 bg-blue-50 border-blue-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Manual Worksheet Operations</CardTitle>
+                    <p className="text-sm text-gray-600">
+                      Create new worksheets or sync to existing ones with custom names to prevent data overwriting.
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="manual-worksheet-name">Worksheet Name</Label>
+                        <Input
+                          id="manual-worksheet-name"
+                          value={manualWorksheetName}
+                          onChange={(e) => setManualWorksheetName(e.target.value)}
+                          placeholder="Enter worksheet name (e.g., 'Sales_Store1_Nov2024')"
+                          data-testid="input-manual-worksheet-name"
+                        />
+                      </div>
+                      <div className="flex gap-3">
+                        <Button
+                          onClick={() => createManualWorksheetMutation.mutate(manualWorksheetName)}
+                          disabled={!manualWorksheetName.trim() || createManualWorksheetMutation.isPending}
+                          data-testid="button-create-manual-worksheet"
+                        >
+                          {createManualWorksheetMutation.isPending ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                              Creating...
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-4 h-4 mr-2" />
+                              Create & Generate New
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => syncToManualWorksheetMutation.mutate(manualWorksheetName)}
+                          disabled={!manualWorksheetName.trim() || syncToManualWorksheetMutation.isPending}
+                          data-testid="button-sync-manual-worksheet"
+                        >
+                          {syncToManualWorksheetMutation.isPending ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                              Syncing...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4 mr-2" />
+                              Sync to Existing
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <Alert>
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          <strong>Data Protection:</strong> Manual operations include overwrite protection. 
+                          New worksheets will be created safely, and existing worksheets will append data without overwriting.
+                        </AlertDescription>
+                      </Alert>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
               {worksheets.length === 0 ? (
                 <div className="text-center py-8">
                   <Sheet className="mx-auto h-12 w-12 text-gray-400 mb-4" />

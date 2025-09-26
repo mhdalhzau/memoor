@@ -361,8 +361,6 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Attendance routes
-  // Commented out - replaced by middleware integration
-  /*
   app.post("/api/attendance", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
@@ -427,7 +425,39 @@ export function registerRoutes(app: Express): Server {
       res.status(400).json({ message: error.message });
     }
   });
-  */
+
+  app.put("/api/attendance/:id", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const { id } = req.params;
+      
+      // Check if attendance record exists and user has access
+      const existingAttendance = await storage.getAttendance(id);
+      if (!existingAttendance) {
+        return res.status(404).json({ message: "Attendance record not found" });
+      }
+      
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, existingAttendance.storeId))) {
+        return res.status(403).json({ message: "You don't have access to this store" });
+      }
+      
+      // Only allow managers/admins to update other users' attendance
+      if (req.user.role === 'staff' && existingAttendance.userId !== req.user.id) {
+        return res.status(403).json({ message: "You can only update your own attendance" });
+      }
+      
+      const updatedAttendance = await storage.updateAttendance(id, req.body);
+      if (!updatedAttendance) {
+        return res.status(404).json({ message: "Failed to update attendance" });
+      }
+      
+      res.json(updatedAttendance);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
 
   app.get("/api/attendance", async (req, res) => {
     try {
@@ -3124,8 +3154,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Commented out - replaced by middleware integration
-  /*
   app.post("/api/stores", async (req, res) => {
     try {
       if (!req.user || req.user.role !== 'manager') {
@@ -3138,7 +3166,6 @@ export function registerRoutes(app: Express): Server {
       res.status(400).json({ message: error.message });
     }
   });
-  */
 
   app.patch("/api/stores/:id", async (req, res) => {
     try {
