@@ -68,6 +68,15 @@ export function calculateLateness(checkInTime: string, shift: string): number {
   return Math.max(0, checkInMinutes - shiftStartMinutes);
 }
 
+// Calculate early arrival in minutes (positive when arriving before shift start)
+export function calculateEarlyArrival(checkInTime: string, shift: string): number {
+  const checkInMinutes = timeToMinutes(checkInTime);
+  const shiftStartMinutes = timeToMinutes(SHIFT_SCHEDULES[shift as keyof typeof SHIFT_SCHEDULES].start);
+  
+  // Return positive minutes when arriving early (check-in before shift start)
+  return Math.max(0, shiftStartMinutes - checkInMinutes);
+}
+
 // Calculate overtime in minutes
 export function calculateOvertime(checkOutTime: string, shift: string): number {
   if (!checkOutTime) return 0;

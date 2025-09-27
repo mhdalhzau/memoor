@@ -562,10 +562,11 @@ export function registerRoutes(app: Express): Server {
           data.shift = detectShiftFromTime(data.checkIn);
         }
 
-        // Calculate lateness based on shift schedule
+        // Calculate lateness and early arrival based on shift schedule
         if (data.shift) {
-          const { calculateLateness } = await import('@shared/attendance-utils');
+          const { calculateLateness, calculateEarlyArrival } = await import('@shared/attendance-utils');
           data.latenessMinutes = calculateLateness(data.checkIn, data.shift);
+          data.earlyArrivalMinutes = calculateEarlyArrival(data.checkIn, data.shift);
         }
 
         // Calculate overtime if check-out is also available
@@ -577,6 +578,21 @@ export function registerRoutes(app: Express): Server {
       }
       
       const attendance = await storage.createAttendance(data);
+      
+      // Trigger payroll recalculation for any attendance with check-in time
+      if (data.checkIn) {
+        try {
+          const attendanceDate = new Date(attendance.date);
+          const year = attendanceDate.getFullYear();
+          const month = attendanceDate.getMonth() + 1; // JavaScript months are 0-based
+          
+          await storage.updatePayrollCalculation(attendance.userId, year, month, attendance.storeId);
+        } catch (payrollError) {
+          console.warn('Failed to update payroll calculation:', payrollError);
+          // Don't fail the attendance creation if payroll update fails
+        }
+      }
+      
       res.status(201).json(attendance);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -618,10 +634,11 @@ export function registerRoutes(app: Express): Server {
 
         const shift = updateData.shift || existingAttendance.shift;
         
-        // Calculate lateness based on shift schedule
+        // Calculate lateness and early arrival based on shift schedule
         if (checkIn && shift) {
-          const { calculateLateness } = await import('@shared/attendance-utils');
+          const { calculateLateness, calculateEarlyArrival } = await import('@shared/attendance-utils');
           updateData.latenessMinutes = calculateLateness(checkIn, shift);
+          updateData.earlyArrivalMinutes = calculateEarlyArrival(checkIn, shift);
         }
 
         // Calculate overtime if check-out is also available
@@ -636,6 +653,21 @@ export function registerRoutes(app: Express): Server {
       const updatedAttendance = await storage.updateAttendance(id, updateData);
       if (!updatedAttendance) {
         return res.status(404).json({ message: "Failed to update attendance" });
+      }
+      
+      // Trigger payroll recalculation if any time-related fields were updated
+      if (updateData.checkIn || updateData.checkOut || updateData.latenessMinutes !== undefined || 
+          updateData.earlyArrivalMinutes !== undefined || updateData.overtimeMinutes !== undefined) {
+        try {
+          const attendanceDate = new Date(updatedAttendance.date);
+          const year = attendanceDate.getFullYear();
+          const month = attendanceDate.getMonth() + 1; // JavaScript months are 0-based
+          
+          await storage.updatePayrollCalculation(updatedAttendance.userId, year, month, updatedAttendance.storeId);
+        } catch (payrollError) {
+          console.warn('Failed to update payroll calculation:', payrollError);
+          // Don't fail the attendance update if payroll update fails
+        }
       }
       
       res.json(updatedAttendance);
