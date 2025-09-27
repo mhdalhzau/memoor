@@ -549,11 +549,32 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Store ID is required" });
       }
       
-      const data = insertAttendanceSchema.parse({
+      let data = insertAttendanceSchema.parse({
         ...req.body,
         userId: targetUserId,
         storeId: targetStoreId,
       });
+
+      // Auto-calculate overtime and lateness if check-in and shift are available
+      if (data.checkIn) {
+        // Auto-detect shift if not provided
+        if (!data.shift) {
+          data.shift = detectShiftFromTime(data.checkIn);
+        }
+
+        // Calculate lateness based on shift schedule
+        if (data.shift) {
+          const { calculateLateness } = await import('@shared/attendance-utils');
+          data.latenessMinutes = calculateLateness(data.checkIn, data.shift);
+        }
+
+        // Calculate overtime if check-out is also available
+        if (data.checkOut && data.shift) {
+          const overtimeCalc = calculateShiftOvertime(data.checkIn, data.checkOut, data.shift);
+          data.overtimeMinutes = overtimeCalc.totalMinutes;
+          data.overtime = overtimeCalc.totalHours.toString();
+        }
+      }
       
       const attendance = await storage.createAttendance(data);
       res.status(201).json(attendance);
@@ -584,7 +605,35 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ message: "You can only update your own attendance" });
       }
       
-      const updatedAttendance = await storage.updateAttendance(id, req.body);
+      let updateData = { ...req.body };
+
+      // Auto-calculate overtime and lateness if check-in times are being updated
+      if (updateData.checkIn || existingAttendance.checkIn) {
+        const checkIn = updateData.checkIn || existingAttendance.checkIn;
+        
+        // Auto-detect shift if not provided
+        if (!updateData.shift && !existingAttendance.shift && checkIn) {
+          updateData.shift = detectShiftFromTime(checkIn);
+        }
+
+        const shift = updateData.shift || existingAttendance.shift;
+        
+        // Calculate lateness based on shift schedule
+        if (checkIn && shift) {
+          const { calculateLateness } = await import('@shared/attendance-utils');
+          updateData.latenessMinutes = calculateLateness(checkIn, shift);
+        }
+
+        // Calculate overtime if check-out is also available
+        const checkOut = updateData.checkOut || existingAttendance.checkOut;
+        if (checkIn && checkOut && shift) {
+          const overtimeCalc = calculateShiftOvertime(checkIn, checkOut, shift);
+          updateData.overtimeMinutes = overtimeCalc.totalMinutes;
+          updateData.overtime = overtimeCalc.totalHours.toString();
+        }
+      }
+
+      const updatedAttendance = await storage.updateAttendance(id, updateData);
       if (!updatedAttendance) {
         return res.status(404).json({ message: "Failed to update attendance" });
       }

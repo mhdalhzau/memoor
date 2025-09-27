@@ -35,7 +35,7 @@ export const userStores = mysqlTable("user_stores", {
 
 // Stores table - Map TypeScript 'id' property to database 'store_id' column
 export const stores = mysqlTable("stores", {
-  id: int("store_id").primaryKey(),
+  id: int("store_id").primaryKey().autoincrement(),
   name: text("name").notNull(),
   address: text("address"),
   phone: text("phone"),
