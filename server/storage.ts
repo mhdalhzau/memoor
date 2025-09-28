@@ -135,9 +135,17 @@ export interface IStorage {
   createQrisPiutangForManager(salesRecord: Sales): Promise<void>;
   createQrisPiutangForImport(storeId: number, qrisAmount: number, description: string, userId?: string, date?: Date): Promise<void>;
   
+  // Comprehensive user-as-customer methods
+  createCustomerRecordForUser(userId: string, storeId: number): Promise<Customer | undefined>;
+  findOrCreateCustomerForUser(userId: string, storeId: number): Promise<Customer | undefined>;
+  createCustomerRecordsForAllUsers(): Promise<void>;
+  syncUserToCustomerRecords(): Promise<void>;
+  getCustomersIncludingUsers(storeId?: number): Promise<Customer[]>;
+  findCustomerByUserId(userId: string, storeId: number): Promise<Customer | undefined>;
+  
   // Piutang methods
   getPiutang(id: string): Promise<Piutang | undefined>;
-  getPiutangByStore(storeId: number): Promise<Piutang[]>;
+  getPiutangByStore(storeId: number, page?: number, limit?: number): Promise<{ data: Piutang[], total: number, hasMore: boolean }>;
   getPiutangByCustomer(customerId: string): Promise<Piutang[]>;
   getAllPiutang(): Promise<Piutang[]>;
   createPiutang(piutang: InsertPiutang): Promise<Piutang>;
@@ -1092,10 +1100,12 @@ export class DatabaseStorage implements IStorage {
 
   async updateOvertimeStatus(id: string, status: string, approvedBy: string): Promise<Overtime | undefined> {
     try {
-      const result = await db.update(overtime).set({ 
+      await db.update(overtime).set({ 
         status, 
         approvedBy 
-      }).where(eq(overtime.id, id)).returning();
+      }).where(eq(overtime.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated overtime
+      const result = await db.select().from(overtime).where(eq(overtime.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating overtime status:', error);
@@ -1105,10 +1115,12 @@ export class DatabaseStorage implements IStorage {
 
   async updateOvertimeHours(id: string, hours: string, reason: string): Promise<Overtime | undefined> {
     try {
-      const result = await db.update(overtime).set({ 
+      await db.update(overtime).set({ 
         hours,
         reason 
-      }).where(eq(overtime.id, id)).returning();
+      }).where(eq(overtime.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated overtime
+      const result = await db.select().from(overtime).where(eq(overtime.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating overtime hours:', error);
@@ -1236,6 +1248,160 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // Comprehensive user-as-customer methods
+  async createCustomerRecordForUser(userId: string, storeId: number): Promise<Customer | undefined> {
+    try {
+      console.log(`🧑‍💼 Creating customer record for user ${userId} in store ${storeId}`);
+      
+      const user = await this.getUser(userId);
+      if (!user) {
+        console.warn(`User ${userId} not found - cannot create customer record`);
+        return undefined;
+      }
+
+      // Check if customer record already exists for this user in this store
+      const existingCustomer = await db.select().from(customers).where(
+        and(
+          eq(customers.storeId, storeId),
+          eq(customers.email, user.email),
+          eq(customers.type, "user_based") // Mark as user-based customer
+        )
+      );
+
+      if (existingCustomer.length > 0) {
+        console.log(`✅ Customer record already exists for user ${user.name} in store ${storeId}`);
+        return existingCustomer[0];
+      }
+
+      // Create customer record for user
+      const customerId = randomUUID();
+      await db.insert(customers).values({
+        id: customerId,
+        storeId,
+        name: user.name,
+        email: user.email,
+        phone: user.phone || "",
+        address: "",
+        type: "user_based" // Mark as user-based customer
+      });
+
+      // Fetch the created record
+      const result = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
+      console.log(`✅ Created customer record for user ${user.name} in store ${storeId}`);
+      return result[0];
+    } catch (error) {
+      console.error('Error creating customer record for user:', error);
+      return undefined;
+    }
+  }
+
+  async findOrCreateCustomerForUser(userId: string, storeId: number): Promise<Customer | undefined> {
+    try {
+      // First try to find existing customer record
+      const user = await this.getUser(userId);
+      if (!user) {
+        return undefined;
+      }
+
+      const existingCustomer = await db.select().from(customers).where(
+        and(
+          eq(customers.storeId, storeId),
+          eq(customers.email, user.email),
+          eq(customers.type, "user_based")
+        )
+      );
+
+      if (existingCustomer.length > 0) {
+        return existingCustomer[0];
+      }
+
+      // Create new customer record if not found
+      return await this.createCustomerRecordForUser(userId, storeId);
+    } catch (error) {
+      console.error('Error finding/creating customer for user:', error);
+      return undefined;
+    }
+  }
+
+  async createCustomerRecordsForAllUsers(): Promise<void> {
+    try {
+      console.log('🚀 Starting to create customer records for all users across all stores');
+      
+      // Get all users
+      const allUsers = await this.getAllUsers();
+      // Get all stores
+      const allStores = await this.getAllStores();
+      
+      let processed = 0;
+
+      for (const user of allUsers) {
+        // Get stores this user has access to
+        const userStores = await this.getUserStores(user.id);
+        
+        for (const store of userStores) {
+          const customerRecord = await this.findOrCreateCustomerForUser(user.id, store.id);
+          if (customerRecord) {
+            // Assume creation was successful (we don't track if it was new or existing)
+            processed++;
+            console.log(`✅ Ensured customer record exists for ${user.name} in ${store.name}`);
+          }
+        }
+      }
+
+      console.log(`✅ User-to-customer sync complete: ${processed} user-customer relationships processed`);
+    } catch (error) {
+      console.error('Error creating customer records for all users:', error);
+      throw error;
+    }
+  }
+
+  async syncUserToCustomerRecords(): Promise<void> {
+    try {
+      console.log('🔄 Syncing user-to-customer records');
+      await this.createCustomerRecordsForAllUsers();
+    } catch (error) {
+      console.error('Error syncing user-to-customer records:', error);
+      throw error;
+    }
+  }
+
+  async getCustomersIncludingUsers(storeId?: number): Promise<Customer[]> {
+    try {
+      if (storeId) {
+        // Get customers for specific store
+        return await db.select().from(customers).where(eq(customers.storeId, storeId)).orderBy(desc(customers.createdAt));
+      } else {
+        // Get all customers
+        return await db.select().from(customers).orderBy(desc(customers.createdAt));
+      }
+    } catch (error) {
+      console.error('Error getting customers including users:', error);
+      return [];
+    }
+  }
+
+  async findCustomerByUserId(userId: string, storeId: number): Promise<Customer | undefined> {
+    try {
+      const user = await this.getUser(userId);
+      if (!user) {
+        return undefined;
+      }
+
+      const result = await db.select().from(customers).where(
+        and(
+          eq(customers.storeId, storeId),
+          eq(customers.email, user.email),
+          eq(customers.type, "user_based")
+        )
+      );
+
+      return result[0];
+    } catch (error) {
+      console.error('Error finding customer by user ID:', error);
+      return undefined;
+    }
+  }
+
   // Helper methods for QRIS management
   // Find actual manager user and create/get corresponding customer record
   async findOrCreateCustomerForManagerUser(storeId: number): Promise<Customer | undefined> {
@@ -1309,8 +1475,7 @@ export class DatabaseStorage implements IStorage {
         email: managerUser.email,
         phone: managerUser.phone || "",
         address: "",
-        type: "employee", // Mark as employee type
-        notes: `Auto-created customer record for manager user: ${managerUser.name} (${managerUser.role})`
+        type: "employee" // Mark as employee type
       });
 
       // Fetch the created record
@@ -1423,8 +1588,7 @@ export class DatabaseStorage implements IStorage {
           email: newUser.email,
           phone: newUser.phone || "",
           address: "",
-          type: "employee",
-          notes: `QRIS piutang customer record for ${newUser.name} (${newUser.role}) - migrated from old customer ${oldCustomerId}`
+          type: "employee"
         });
         
         const createdCustomer = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
@@ -1490,12 +1654,34 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getPiutangByStore(storeId: number): Promise<Piutang[]> {
+  async getPiutangByStore(storeId: number, page: number = 1, limit: number = 50): Promise<{ data: Piutang[], total: number, hasMore: boolean }> {
     try {
-      return await db.select().from(piutang).where(eq(piutang.storeId, storeId)).orderBy(desc(piutang.createdAt));
+      // Calculate offset for pagination
+      const offset = (page - 1) * limit;
+      
+      // Get total count for pagination info
+      const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(piutang).where(eq(piutang.storeId, storeId));
+      const total = countResult.count;
+      
+      // Get paginated results
+      const data = await db.select()
+        .from(piutang)
+        .where(eq(piutang.storeId, storeId))
+        .orderBy(desc(piutang.createdAt))
+        .limit(limit)
+        .offset(offset);
+      
+      // Calculate if there are more records
+      const hasMore = offset + data.length < total;
+      
+      return {
+        data,
+        total,
+        hasMore
+      };
     } catch (error) {
       console.error('Error getting piutang by store:', error);
-      return [];
+      return { data: [], total: 0, hasMore: false };
     }
   }
 
@@ -1519,10 +1705,13 @@ export class DatabaseStorage implements IStorage {
 
   async createPiutang(piutangData: InsertPiutang): Promise<Piutang> {
     try {
-      const result = await db.insert(piutang).values({
-        id: randomUUID(),
+      const piutangId = randomUUID();
+      await db.insert(piutang).values({
+        id: piutangId,
         ...piutangData
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created piutang
+      const result = await db.select().from(piutang).where(eq(piutang.id, piutangId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating piutang:', error);
@@ -1537,7 +1726,9 @@ export class DatabaseStorage implements IStorage {
         updateData.paidAmount = paidAmount;
       }
       
-      const result = await db.update(piutang).set(updateData).where(eq(piutang.id, id)).returning();
+      await db.update(piutang).set(updateData).where(eq(piutang.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated piutang
+      const result = await db.select().from(piutang).where(eq(piutang.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating piutang status:', error);
@@ -1621,10 +1812,13 @@ export class DatabaseStorage implements IStorage {
 
   async createWallet(walletData: InsertWallet): Promise<Wallet> {
     try {
-      const result = await db.insert(wallets).values({
-        id: randomUUID(),
+      const walletId = randomUUID();
+      await db.insert(wallets).values({
+        id: walletId,
         ...walletData
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created wallet
+      const result = await db.select().from(wallets).where(eq(wallets.id, walletId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating wallet:', error);
@@ -1634,7 +1828,9 @@ export class DatabaseStorage implements IStorage {
 
   async updateWallet(id: string, data: Partial<InsertWallet>): Promise<Wallet | undefined> {
     try {
-      const result = await db.update(wallets).set(data).where(eq(wallets.id, id)).returning();
+      await db.update(wallets).set(data).where(eq(wallets.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated wallet
+      const result = await db.select().from(wallets).where(eq(wallets.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating wallet:', error);
@@ -1644,7 +1840,9 @@ export class DatabaseStorage implements IStorage {
 
   async updateWalletBalance(id: string, balance: string): Promise<Wallet | undefined> {
     try {
-      const result = await db.update(wallets).set({ balance }).where(eq(wallets.id, id)).returning();
+      await db.update(wallets).set({ balance }).where(eq(wallets.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated wallet
+      const result = await db.select().from(wallets).where(eq(wallets.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating wallet balance:', error);
@@ -1679,14 +1877,19 @@ export class DatabaseStorage implements IStorage {
       
       if (existing) {
         // Update existing config
-        const result = await db.update(payrollConfig).set(config).where(eq(payrollConfig.id, existing.id)).returning();
+        await db.update(payrollConfig).set(config).where(eq(payrollConfig.id, existing.id));
+        // MySQL doesn't support .returning(), so fetch the updated config
+        const result = await db.select().from(payrollConfig).where(eq(payrollConfig.id, existing.id)).limit(1);
         return result[0];
       } else {
         // Create new config
-        const result = await db.insert(payrollConfig).values({
-          id: randomUUID(),
+        const configId = randomUUID();
+        await db.insert(payrollConfig).values({
+          id: configId,
           ...config
-        }).returning();
+        });
+        // MySQL doesn't support .returning(), so fetch the created config
+        const result = await db.select().from(payrollConfig).where(eq(payrollConfig.id, configId)).limit(1);
         return result[0];
       }
     } catch (error) {
@@ -1726,10 +1929,13 @@ export class DatabaseStorage implements IStorage {
 
   async createSupplier(supplier: InsertSupplier): Promise<Supplier> { 
     try {
-      const result = await db.insert(suppliers).values({
-        id: randomUUID(),
+      const supplierId = randomUUID();
+      await db.insert(suppliers).values({
+        id: supplierId,
         ...supplier
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created supplier
+      const result = await db.select().from(suppliers).where(eq(suppliers.id, supplierId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating supplier:', error);
@@ -1739,7 +1945,9 @@ export class DatabaseStorage implements IStorage {
 
   async updateSupplier(id: string, data: Partial<InsertSupplier>): Promise<Supplier | undefined> { 
     try {
-      const result = await db.update(suppliers).set(data).where(eq(suppliers.id, id)).returning();
+      await db.update(suppliers).set(data).where(eq(suppliers.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated supplier
+      const result = await db.select().from(suppliers).where(eq(suppliers.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating supplier:', error);
@@ -1873,10 +2081,13 @@ export class DatabaseStorage implements IStorage {
 
   async createProduct(product: InsertProduct): Promise<Product> { 
     try {
-      const result = await db.insert(products).values({
-        id: randomUUID(),
+      const productId = randomUUID();
+      await db.insert(products).values({
+        id: productId,
         ...product
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created product
+      const result = await db.select().from(products).where(eq(products.id, productId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating product:', error);
@@ -1886,7 +2097,9 @@ export class DatabaseStorage implements IStorage {
 
   async updateProduct(id: string, data: Partial<InsertProduct>): Promise<Product | undefined> { 
     try {
-      const result = await db.update(products).set(data).where(eq(products.id, id)).returning();
+      await db.update(products).set(data).where(eq(products.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated product
+      const result = await db.select().from(products).where(eq(products.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating product:', error);
@@ -2008,10 +2221,13 @@ export class DatabaseStorage implements IStorage {
 
   async createInventory(inventoryData: InsertInventory): Promise<Inventory> { 
     try {
-      const result = await db.insert(inventory).values({
-        id: randomUUID(),
+      const inventoryId = randomUUID();
+      await db.insert(inventory).values({
+        id: inventoryId,
         ...inventoryData
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created inventory
+      const result = await db.select().from(inventory).where(eq(inventory.id, inventoryId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating inventory:', error);
@@ -2021,7 +2237,9 @@ export class DatabaseStorage implements IStorage {
 
   async updateInventory(id: string, data: Partial<InsertInventory>): Promise<Inventory | undefined> { 
     try {
-      const result = await db.update(inventory).set(data).where(eq(inventory.id, id)).returning();
+      await db.update(inventory).set(data).where(eq(inventory.id, id));
+      // MySQL doesn't support .returning(), so fetch the updated inventory
+      const result = await db.select().from(inventory).where(eq(inventory.id, id)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating inventory:', error);
@@ -2031,10 +2249,12 @@ export class DatabaseStorage implements IStorage {
 
   async updateInventoryStock(productId: string, newStock: string): Promise<Inventory | undefined> { 
     try {
-      const result = await db.update(inventory).set({ 
+      await db.update(inventory).set({ 
         currentStock: newStock,
         lastUpdated: new Date()
-      }).where(eq(inventory.productId, productId)).returning();
+      }).where(eq(inventory.productId, productId));
+      // MySQL doesn't support .returning(), so fetch the updated inventory
+      const result = await db.select().from(inventory).where(eq(inventory.productId, productId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error updating inventory stock:', error);
@@ -2135,10 +2355,13 @@ export class DatabaseStorage implements IStorage {
 
   async createInventoryTransaction(transaction: InsertInventoryTransaction): Promise<InventoryTransaction> { 
     try {
-      const result = await db.insert(inventoryTransactions).values({
-        id: randomUUID(),
+      const transactionId = randomUUID();
+      await db.insert(inventoryTransactions).values({
+        id: transactionId,
         ...transaction
-      }).returning();
+      });
+      // MySQL doesn't support .returning(), so fetch the created transaction
+      const result = await db.select().from(inventoryTransactions).where(eq(inventoryTransactions.id, transactionId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating inventory transaction:', error);

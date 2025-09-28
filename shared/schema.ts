@@ -199,7 +199,7 @@ export const customers = mysqlTable("customers", {
   email: text("email"),
   phone: text("phone"),
   address: text("address"),
-  type: text("type").default("customer"), // 'customer', 'employee'
+  type: text("type").default("customer"), // 'customer', 'employee', 'user_based'
   storeId: int("store_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });

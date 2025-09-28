@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,14 +19,13 @@ import { Customer, Piutang, insertPiutangSchema, type InsertPiutang, type User }
 import { SyncButton } from "@/components/ui/sync-button";
 import { formatRupiah } from "@/lib/utils";
 
-// Unified interface for both customers and users
+// Unified interface for customers (now includes user-based customers from backend)
 interface UnifiedCustomer {
   id: string;
   name: string;
   email?: string;
   phone?: string;
-  type: 'external_customer' | 'internal_employee' | 'staff_member';
-  originalType: 'customer' | 'user';
+  type: 'customer' | 'employee' | 'user_based';
   storeId?: number;
 }
 
@@ -46,21 +45,26 @@ export default function PiutangPage() {
   const [paymentModalData, setPaymentModalData] = useState<Piutang | null>(null);
   const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
 
-  // Fetch customers, users, and piutang data
+  // Fetch unified customers (includes user-based customers) and piutang data
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
     enabled: !!user
   });
 
-  const { data: users = [] } = useQuery<User[]>({
-    queryKey: ["/api/users"],
-    enabled: !!user
-  });
-
-  const { data: piutangRecords = [], isLoading } = useQuery<Piutang[]>({
+  // Define the pagination response type
+  const { data: piutangResponse, isLoading } = useQuery<{
+    data: Piutang[];
+    total: number;
+    hasMore: boolean;
+    page: number;
+    limit: number;
+  }>({
     queryKey: ["/api/piutang"],
     enabled: !!user
   });
+
+  // Extract the piutang records from the pagination response with proper safety checks
+  const piutangRecords = Array.isArray(piutangResponse?.data) ? piutangResponse.data : [];
 
   // Piutang form for adding new debt
   const piutangForm = useForm<InsertPiutang>({
@@ -135,71 +139,66 @@ export default function PiutangPage() {
     },
   });
 
-  // Create unified customer list combining customers and users
-  const unifiedCustomers: UnifiedCustomer[] = [
-    // External customers
-    ...customers
-      .filter(c => c.type === 'customer')
-      .map(c => ({
-        id: c.id,
-        name: c.name,
-        email: c.email,
-        phone: c.phone,
-        type: 'external_customer' as const,
-        originalType: 'customer' as const,
-        storeId: c.storeId
-      })),
-    // Internal employees (from customers table)
-    ...customers
-      .filter(c => c.type === 'employee')
-      .map(c => ({
-        id: c.id,
-        name: c.name,
-        email: c.email,
-        phone: c.phone,
-        type: 'internal_employee' as const,
-        originalType: 'customer' as const,
-        storeId: c.storeId
-      })),
-    // Staff members (from users table)
-    ...users.map(u => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      phone: u.phone,
-      type: 'staff_member' as const,
-      originalType: 'user' as const,
-      storeId: undefined
-    }))
-  ];
+  // Unified customers from backend (includes external customers, employees, and user-based customers)
+  const safeCustomers = Array.isArray(customers) ? customers : [];
+  
+  const unifiedCustomers: UnifiedCustomer[] = safeCustomers
+    .filter(c => c && c.id)
+    .map(c => ({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      type: c.type as 'customer' | 'employee' | 'user_based',
+      storeId: c.storeId
+    }));
 
-  // Group piutang by unified customer and calculate totals
-  const customersWithPiutang: CustomerWithPiutang[] = unifiedCustomers
-    .map((customer) => {
-      const customerPiutang = piutangRecords.filter(p => p.customerId === customer.id);
-      const totalDebt = customerPiutang.reduce((sum, p) => sum + parseFloat(p.amount), 0);
-      const totalPaid = customerPiutang.reduce((sum, p) => sum + parseFloat(p.paidAmount || "0"), 0);
-      const remainingDebt = totalDebt - totalPaid;
+  // Group piutang by unified customer and calculate totals with safety checks
+  const customersWithPiutang: CustomerWithPiutang[] = React.useMemo(() => {
+    // Don't calculate if we're still loading or if data is not ready
+    if (isLoading || !Array.isArray(piutangRecords) || !Array.isArray(unifiedCustomers)) {
+      return [];
+    }
+
+    return unifiedCustomers
+      .filter(customer => customer && customer.id) // Ensure customer is valid
+      .map((customer) => {
+        // Add extra safety check for piutangRecords before filtering
+        const safePiutangRecords = Array.isArray(piutangRecords) ? piutangRecords : [];
+        const customerPiutang = safePiutangRecords.filter(p => p && p.customerId === customer.id);
+        
+        const totalDebt = customerPiutang.reduce((sum, p) => sum + (p && p.amount ? parseFloat(p.amount) : 0), 0);
+        const totalPaid = customerPiutang.reduce((sum, p) => sum + (p && p.paidAmount ? parseFloat(p.paidAmount) : 0), 0);
+        const remainingDebt = totalDebt - totalPaid;
+        
+        return {
+          customer,
+          piutangRecords: customerPiutang,
+          totalDebt,
+          totalPaid,
+          remainingDebt,
+        };
+      })
+      .filter((item) => item && Array.isArray(item.piutangRecords) && item.piutangRecords.length > 0); // Only show customers with debt
+  }, [unifiedCustomers, piutangRecords, isLoading]);
+
+  // Filter customers based on search term with safety checks
+  const filteredCustomers = React.useMemo(() => {
+    if (!Array.isArray(customersWithPiutang)) {
+      return [];
+    }
+    
+    return customersWithPiutang.filter((item) => {
+      if (!item || !item.customer) return false;
       
-      return {
-        customer,
-        piutangRecords: customerPiutang,
-        totalDebt,
-        totalPaid,
-        remainingDebt,
-      };
-    })
-    .filter((item) => item.piutangRecords.length > 0); // Only show customers with debt
-
-  // Filter customers based on search term
-  const filteredCustomers = customersWithPiutang.filter((item) => {
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      (item.customer.name || "").toLowerCase().includes(searchLower) ||
-      (item.customer.email || "").toLowerCase().includes(searchLower) ||
-      (item.customer.phone || "").toLowerCase().includes(searchLower)
-    );
-  });
+      const searchLower = searchTerm.toLowerCase();
+      return (
+        (item.customer.name || "").toLowerCase().includes(searchLower) ||
+        (item.customer.email || "").toLowerCase().includes(searchLower) ||
+        (item.customer.phone || "").toLowerCase().includes(searchLower)
+      );
+    });
+  }, [customersWithPiutang, searchTerm]);
 
   const toggleCustomerExpansion = (customerId: string) => {
     const newExpanded = new Set(expandedCustomers);
@@ -239,30 +238,30 @@ export default function PiutangPage() {
   };
 
   const isInternalEmployee = (customer: UnifiedCustomer) => {
-    return customer.type === "internal_employee";
+    return customer.type === "employee";
   };
 
-  const isStaffMember = (customer: UnifiedCustomer) => {
-    return customer.type === "staff_member";
+  const isUserBasedCustomer = (customer: UnifiedCustomer) => {
+    return customer.type === "user_based";
   };
 
   const getInternalWarningBadge = (customer: UnifiedCustomer, remainingDebt: number) => {
-    if ((!isInternalEmployee(customer) && !isStaffMember(customer)) || remainingDebt <= 0) return null;
+    if ((!isInternalEmployee(customer) && !isUserBasedCustomer(customer)) || remainingDebt <= 0) return null;
     
     return (
       <Badge variant="destructive" className="bg-orange-100 text-orange-800 border-orange-300">
         <AlertTriangle className="h-3 w-3 mr-1" />
-        {isStaffMember(customer) ? 'Staff Member Debt' : 'Internal Employee Debt'}
+        {isUserBasedCustomer(customer) ? 'User Account Debt' : 'Internal Employee Debt'}
       </Badge>
     );
   };
 
   const getCustomerTypeBadge = (customer: UnifiedCustomer) => {
-    if (isStaffMember(customer)) {
+    if (isUserBasedCustomer(customer)) {
       return (
         <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
           <UserCheck className="h-3 w-3 mr-1" />
-          Staff
+          User Account
         </Badge>
       );
     }
@@ -521,11 +520,11 @@ export default function PiutangPage() {
                               Remaining: {formatRupiah(item.remainingDebt)}
                             </span>
                           </div>
-                          {(isInternalEmployee(item.customer) || isStaffMember(item.customer)) && item.remainingDebt > 0 && (
+                          {(isInternalEmployee(item.customer) || isUserBasedCustomer(item.customer)) && item.remainingDebt > 0 && (
                             <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
                               <p className="text-sm text-orange-800 flex items-center gap-1">
                                 <AlertTriangle className="h-4 w-4" />
-                                <strong>Warning:</strong> This is {isStaffMember(item.customer) ? 'a staff member' : 'an internal employee'} with outstanding debt. Please follow company policy for {isStaffMember(item.customer) ? 'staff' : 'employee'} receivables.
+                                <strong>Warning:</strong> This is {isUserBasedCustomer(item.customer) ? 'a user account' : 'an internal employee'} with outstanding debt. Please follow company policy for {isUserBasedCustomer(item.customer) ? 'user account' : 'employee'} receivables.
                               </p>
                             </div>
                           )}

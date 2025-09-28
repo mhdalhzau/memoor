@@ -3586,14 +3586,15 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Customer routes
+  // Customer routes - Updated to include user-based customers
   app.get("/api/customers", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
       
       let customers;
       if (req.user.role === 'administrasi') {
-        customers = await storage.getAllCustomers();
+        // Admin sees all customers from all stores, including user-based customers
+        customers = await storage.getCustomersIncludingUsers();
       } else {
         // Get first store ID for the user, don't use req.user.storeId directly
         const targetStoreId = await getUserFirstStoreId(req.user);
@@ -3602,7 +3603,8 @@ export function registerRoutes(app: Express): Server {
           return res.status(400).json({ message: "No store access found for user" });
         }
         
-        customers = await storage.getCustomersByStore(targetStoreId);
+        // Get customers for specific store, including user-based customers
+        customers = await storage.getCustomersIncludingUsers(targetStoreId);
       }
       
       res.json(customers);
@@ -3705,6 +3707,34 @@ export function registerRoutes(app: Express): Server {
       res.status(204).send();
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  // User-to-Customer Sync endpoint - Create customer records for all users
+  app.post("/api/customers/sync-users", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      // Only managers and admins can trigger user sync
+      if (!['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Only managers and administrators can sync user-customer records" });
+      }
+      
+      console.log(`🚀 User-to-customer sync triggered by ${req.user.name} (${req.user.role})`);
+      
+      // Trigger the comprehensive user-to-customer sync
+      await storage.syncUserToCustomerRecords();
+      
+      res.json({ 
+        success: true, 
+        message: "User-to-customer records sync completed successfully" 
+      });
+    } catch (error: any) {
+      console.error('Error syncing user-to-customer records:', error);
+      res.status(500).json({ 
+        error: "Failed to sync user-to-customer records", 
+        details: error.message 
+      });
     }
   });
 
@@ -5460,7 +5490,7 @@ export function registerRoutes(app: Express): Server {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-      const { storeId, customerId } = req.query;
+      const { storeId, customerId, page, limit } = req.query;
       const targetStoreId = storeId ? parseInt(storeId as string) : await getUserFirstStoreId(req.user);
 
       if (!targetStoreId) {
@@ -5472,7 +5502,10 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ message: "You don't have access to this store" });
       }
 
-      let piutangRecords;
+      // Parse pagination parameters with defaults and limits
+      const pageNum = page ? Math.max(1, parseInt(page as string)) : 1;
+      const limitNum = limit ? Math.min(100, Math.max(1, parseInt(limit as string))) : 50; // Max 100, min 1, default 50
+
       if (customerId) {
         // Verify customer belongs to accessible store
         const customer = await storage.getCustomer(customerId as string);
@@ -5485,12 +5518,24 @@ export function registerRoutes(app: Express): Server {
           return res.status(403).json({ message: "You don't have access to this customer's piutang" });
         }
         
-        piutangRecords = await storage.getPiutangByCustomer(customerId as string);
+        // For customer-specific queries, return all records (no pagination for now)
+        const piutangRecords = await storage.getPiutangByCustomer(customerId as string);
+        res.json({
+          data: piutangRecords,
+          total: piutangRecords.length,
+          hasMore: false,
+          page: 1,
+          limit: piutangRecords.length
+        });
       } else {
-        piutangRecords = await storage.getPiutangByStore(targetStoreId);
+        // Use pagination for store queries to prevent timeouts
+        const result = await storage.getPiutangByStore(targetStoreId, pageNum, limitNum);
+        res.json({
+          ...result,
+          page: pageNum,
+          limit: limitNum
+        });
       }
-
-      res.json(piutangRecords);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
