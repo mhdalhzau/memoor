@@ -2173,9 +2173,27 @@ export function registerRoutes(app: Express): Server {
         }
       }
 
-      // ✅ QRIS piutang creation is already handled by storage.createSales() method
-      // No need to call createQrisPiutangForManager again here - it would create duplicates
-      console.log(`📋 DEBUG: QRIS piutang creation handled by createSales() method, no duplicate call needed`)
+      // Handle QRIS piutang creation for main totalQris field
+      if (salesData.totalQris && Number(salesData.totalQris) > 0) {
+        try {
+          console.log(`🎯 DEBUG: Creating QRIS piutang for main totalQris field: ${salesData.totalQris}`);
+          
+          await storage.createQrisPiutangForImport(
+            targetStoreId,
+            Number(salesData.totalQris),
+            `QRIS payment from sales ${new Date(importDate).toISOString().split('T')[0]} - awaiting transfer to store`,
+            newSales.userId,
+            importDate
+          );
+          
+          console.log(`✅ DEBUG: QRIS piutang created successfully for main totalQris: ${salesData.totalQris}`);
+        } catch (qrisError) {
+          console.error('Failed to create QRIS piutang for main totalQris:', qrisError);
+          // Don't fail the entire import if QRIS piutang creation fails
+        }
+      } else {
+        console.log(`❌ DEBUG: No main totalQris amount found or amount <= 0: ${salesData.totalQris}`);
+      }
 
       res.json({
         success: true,
