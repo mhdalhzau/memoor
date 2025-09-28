@@ -3,8 +3,8 @@ import mysql from 'mysql2/promise';
 import fs from 'fs';
 import * as schema from '@shared/schema';
 
-// Get MySQL database URL - prioritize the new MySQL URL
-const databaseUrl = "mysql://avnadmin:AVNS_Woo6_cb4krTtGU7mJQi@marlokk-mhdalhzau.j.aivencloud.com:18498/defaultdb?ssl-mode=REQUIRED" || process.env.MYSQL_DATABASE_URL || process.env.DATABASE_URL;
+// Get MySQL database URL from environment variables only
+const databaseUrl = process.env.MYSQL_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!databaseUrl) {
   throw new Error('MYSQL_DATABASE_URL environment variable is required for MySQL connection');
@@ -13,7 +13,7 @@ if (!databaseUrl) {
 // Parse the database URL to extract connection parameters
 const url = new URL(databaseUrl);
 
-// Create MySQL connection pool with SSL configuration
+// Create MySQL connection pool with MySQL2-compatible configuration for performance
 const pool = mysql.createPool({
   host: url.hostname,
   port: parseInt(url.port) || 3306,
@@ -21,8 +21,11 @@ const pool = mysql.createPool({
   password: url.password,
   database: url.pathname.slice(1), // Remove leading slash
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 25,  // Increased from 10 for better concurrency  
   queueLimit: 0,
+  keepAliveInitialDelay: 0,
+  enableKeepAlive: true,
+  multipleStatements: false, // Security best practice
   ssl: {
     ca: fs.readFileSync('attached_assets/ca.pem', 'utf8'),
     rejectUnauthorized: true

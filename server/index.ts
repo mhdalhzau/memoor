@@ -1,11 +1,41 @@
 import express, { type Request, Response, NextFunction } from "express";
+import compression from "compression";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupDatabaseMiddleware } from "./middleware/integration";
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+
+// Enable gzip compression for better performance
+app.use(compression({
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    return compression.filter(req, res);
+  },
+  threshold: 1024 // Only compress responses larger than 1kb
+}));
+
+// API timeout middleware - prevent hanging requests
+app.use('/api', (req, res, next) => {
+  const timeout = req.method === 'GET' ? 15000 : 30000; // 15s for GET, 30s for POST/PUT/DELETE
+  
+  const timer = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(504).json({ 
+        error: 'Request timeout', 
+        message: 'The request took too long to complete' 
+      });
+    }
+  }, timeout);
+  
+  res.on('finish', () => clearTimeout(timer));
+  res.on('close', () => clearTimeout(timer));
+  
+  next();
+});
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 // Add text parser for database import endpoint
 app.use('/api/backup/import', express.text({ 
   type: ['text/plain', 'application/sql', 'text/sql'], 
@@ -48,30 +78,60 @@ app.use((req, res, next) => {
   // Setup database middleware untuk operasi CRUD yang dioptimalkan
   setupDatabaseMiddleware(app);
 
-  // Global error handler - ensure all errors return JSON for API routes
+  // Enhanced global error handler - ensure all errors return JSON for API routes
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     let message = err.message || "Internal Server Error";
     
-    // For API routes, ensure we always return JSON
+    // For API routes, ALWAYS ensure we return JSON and never HTML
     if (req.path.startsWith('/api')) {
-      res.set('Content-Type', 'application/json');
+      // Prevent any HTML from being sent
+      res.set('Content-Type', 'application/json; charset=utf-8');
+      res.set('Cache-Control', 'no-cache');
       
-      // Enhanced error information for development
-      const errorResponse: any = { message };
+      // Create structured error response
+      const errorResponse: any = { 
+        success: false,
+        error: message,
+        status: status,
+        timestamp: new Date().toISOString()
+      };
+      
+      // Add detailed error info in development
       if (app.get("env") === "development") {
-        errorResponse.error = err.name;
-        errorResponse.details = err.code || err.errno;
+        errorResponse.details = {
+          name: err.name,
+          code: err.code || err.errno,
+          stack: err.stack?.split('\n').slice(0, 10) // Limit stack trace
+        };
       }
       
-      res.status(status).json(errorResponse);
+      // Handle specific error types
+      if (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT') {
+        errorResponse.error = 'Database connection failed';
+        errorResponse.message = 'Unable to connect to database. Please try again later.';
+      } else if (err.code === 'ER_ACCESS_DENIED_ERROR') {
+        errorResponse.error = 'Database access denied';
+        errorResponse.message = 'Database authentication failed.';
+      }
+      
+      // Ensure response hasn't been sent already
+      if (!res.headersSent) {
+        res.status(status).json(errorResponse);
+      }
     } else {
-      // For non-API routes, fall back to default error handling
-      res.status(status).send(message);
+      // For non-API routes, return text/html error
+      if (!res.headersSent) {
+        res.status(status).send(message);
+      }
     }
     
-    // Log error for debugging (don't throw as it breaks the response)
-    console.error(`Error ${status} on ${req.method} ${req.path}:`, err.message);
+    // Enhanced error logging
+    const userAgent = req.get('User-Agent') || 'Unknown';
+    console.error(`[${new Date().toISOString()}] ERROR ${status} on ${req.method} ${req.path}:`);
+    console.error(`  Message: ${err.message}`);
+    console.error(`  User-Agent: ${userAgent}`);
+    if (err.stack) console.error(`  Stack: ${err.stack.split('\n').slice(0, 3).join('\n')}`);
   });
 
   // importantly only setup vite in development and after
