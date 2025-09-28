@@ -1767,11 +1767,11 @@ export class DatabaseStorage implements IStorage {
       // Create cashflow record for payment
       const cashflowRecord = await this.createCashflow({
         storeId: piutangRecord.storeId,
-        amount: Number(amount),
-        type: 'income',
+        amount: amount,
+        type: 'Pembayaran Piutang',
         description: `Pembayaran piutang: ${description}`,
         date: new Date(),
-        category: 'piutang_payment'
+        category: 'Income'
       }, userId);
 
       return { piutang: updatedPiutang, cashflow: cashflowRecord };

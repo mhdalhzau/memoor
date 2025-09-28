@@ -61,6 +61,8 @@ const incomeTypes = [
   "Pendapatan Jasa/Komisi",
   "Penambahan Modal",
   "Penagihan Utang/Cicilan",
+  "Pembayaran Piutang",
+  "Pemberian Utang",
   "Terima Pinjaman",
   "Transaksi Agen Pembayaran (Income)",
   "Pendapatan Di Luar Usaha",
@@ -72,7 +74,6 @@ const expenseTypes = [
   "Pembelian bahan baku",
   "Biaya operasional",
   "Gaji/Bonus Karyawan",
-  "Pemberian Utang",
   "Transaksi Agen Pembayaran (Expense)",
   "Pembayaran Utang/Cicilan",
   "Pengeluaran usaha untuk membayar utang/cicilan",
@@ -157,8 +158,8 @@ export default function CashflowContent() {
   const form = useForm<CashflowData>({
     resolver: zodResolver(cashflowSchema),
     defaultValues: {
-      category: "Expense",
-      type: "Pengeluaran Lain-lain",
+      category: "Income",
+      type: "Pendapatan Lain-lain",
       amount: 0,
       description: "",
       paymentStatus: "lunas",
