@@ -28,15 +28,46 @@ interface StoreWallet {
 }
 
 export default function DashboardContent() {
+  console.log("📊 DASHBOARD COMPONENT INITIALIZED");
+  
   const { data: stats, isLoading, isError: isStatsError } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
+    onSuccess: (data) => {
+      console.log("✅ DASHBOARD STATS LOADED SUCCESSFULLY");
+      console.log("📊 Stats Data:", data);
+    },
+    onError: (error) => {
+      console.error("❌ DASHBOARD STATS LOADING FAILED:", error);
+    }
   });
 
   const { data: storeWallets, isLoading: isLoadingStoreWallets, isError: isStoreWalletsError } = useQuery<StoreWallet[]>({
     queryKey: ["/api/dashboard/store-wallets"],
+    onSuccess: (data) => {
+      console.log("✅ STORE WALLETS LOADED SUCCESSFULLY");
+      console.log("🏪 Store Wallets Data:", data);
+    },
+    onError: (error) => {
+      console.error("❌ STORE WALLETS LOADING FAILED:", error);
+    }
+  });
+  
+  console.log("🔄 DASHBOARD STATE:", {
+    statsLoading: isLoading,
+    walletsLoading: isLoadingStoreWallets,
+    statsError: isStatsError,
+    walletsError: isStoreWalletsError,
+    hasStats: !!stats,
+    hasWallets: !!storeWallets
   });
 
   if (isLoading || isLoadingStoreWallets) {
+    console.log("⏳ DASHBOARD LOADING STATE - Showing skeleton UI");
+    console.log("🔄 Loading Details:", {
+      statsLoading: isLoading,
+      walletsLoading: isLoadingStoreWallets
+    });
+    
     return (
       <div className="space-y-8">
         {/* Main Stats Skeleton */}
@@ -79,6 +110,10 @@ export default function DashboardContent() {
     );
   }
 
+  console.log("✅ DASHBOARD RENDERING WITH DATA");
+  console.log("📊 Final Stats:", stats);
+  console.log("🏪 Final Store Wallets:", storeWallets);
+  
   return (
     <div className="space-y-8">
       {/* Dashboard Header */}

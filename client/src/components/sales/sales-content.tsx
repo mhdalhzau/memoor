@@ -29,6 +29,10 @@ function getUserNameFromId(userId: string | null, allUsers: any[] = []): string 
 
 // Text Import Modal Component
 function TextImportModal({ storeId, storeName }: { storeId: number; storeName: string }) {
+  console.log("🚀 TEXT IMPORT MODAL INITIALIZED");
+  console.log("🏪 Store ID:", storeId);
+  console.log("🏬 Store Name:", storeName);
+  
   const [isOpen, setIsOpen] = useState(false);
   const [textData, setTextData] = useState("");
   const [parsedData, setParsedData] = useState<any>(null);
@@ -39,9 +43,19 @@ function TextImportModal({ storeId, storeName }: { storeId: number; storeName: s
   // Text import mutation
   const importTextMutation = useMutation({
     mutationFn: async (data: { storeId: number; textData: string }) => {
-      return await apiRequest('POST', '/api/sales/import-text', data);
+      console.log("🚀 TEXT IMPORT MUTATION STARTED");
+      console.log("📝 Import Data:", JSON.stringify(data, null, 2));
+      console.log("🏪 Target Store ID:", data.storeId);
+      console.log("📊 Text Data Length:", data.textData.length, "characters");
+      
+      const response = await apiRequest('POST', '/api/sales/import-text', data);
+      console.log("✅ TEXT IMPORT API RESPONSE:", response);
+      return response;
     },
     onSuccess: (response) => {
+      console.log("🎉 TEXT IMPORT SUCCESS!");
+      console.log("📤 Success Response:", response);
+      
       const details = [];
       details.push("✅ Sales record created");
       
@@ -73,6 +87,13 @@ function TextImportModal({ storeId, storeName }: { storeId: number; storeName: s
       setIsOpen(false);
     },
     onError: (error: any) => {
+      console.error("🔥 TEXT IMPORT FAILED:", error);
+      console.error("📋 Error Details:", {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      
       toast({
         title: "Import Failed",
         description: error.message || "Failed to import sales data",
@@ -83,7 +104,12 @@ function TextImportModal({ storeId, storeName }: { storeId: number; storeName: s
 
   // Parse text locally for preview
   const parseTextForPreview = (text: string) => {
+    console.log("🚀 PARSING TEXT FOR PREVIEW");
+    console.log("📝 Text Length:", text.length, "characters");
+    
     const lines = text.split('\n').map(line => line.trim());
+    console.log("📋 Total Lines:", lines.length);
+    console.log("📄 Sample Lines:", lines.slice(0, 5));
     
     const data: any = {
       employeeName: null,
@@ -223,7 +249,11 @@ function TextImportModal({ storeId, storeName }: { storeId: number; storeName: s
   };
 
   const handleParseAndPreview = () => {
+    console.log("🚀 HANDLE PARSE AND PREVIEW STARTED");
+    console.log("📝 Text Data Length:", textData.trim().length);
+    
     if (!textData.trim()) {
+      console.log("❌ PARSE FAILED: No text data provided");
       toast({
         title: "Error",
         description: "Please enter text data to parse",
@@ -232,19 +262,31 @@ function TextImportModal({ storeId, storeName }: { storeId: number; storeName: s
       return;
     }
 
+    console.log("🔍 Parsing text data...");
     const parsed = parseTextForPreview(textData.trim());
+    console.log("📊 Parsed Data:", parsed);
+    
     setParsedData(parsed);
     setStep("preview");
+    console.log("✅ PARSE AND PREVIEW COMPLETED - Moving to preview step");
   };
 
   const handleConfirmImport = () => {
+    console.log("🚀 CONFIRM IMPORT STARTED");
+    console.log("🏪 Store ID:", storeId);
+    console.log("📝 Text Data Length:", textData.trim().length);
+    console.log("📊 Parsed Data:", parsedData);
+    
     importTextMutation.mutate({
       storeId,
       textData: textData.trim()
     });
+    
+    console.log("✅ IMPORT MUTATION TRIGGERED");
   };
 
   const handleBackToInput = () => {
+    console.log("🔙 BACK TO INPUT - Returning to input step");
     setStep("input");
     setParsedData(null);
   };
