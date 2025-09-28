@@ -201,6 +201,14 @@ export interface IStorage {
   getInventoryTransactionsByProduct(productId: string): Promise<InventoryTransactionWithProduct[]>;
   createInventoryTransaction(transaction: InsertInventoryTransaction): Promise<InventoryTransaction>;
   
+  // Migration methods
+  migrateSalesData(storeId: number): Promise<{
+    salesProcessed: number;
+    cashflowRecordsCreated: number;
+    piutangRecordsCreated: number;
+    errors: string[];
+  }>;
+  
   sessionStore: SessionStore;
 }
 
@@ -1677,6 +1685,134 @@ export class DatabaseStorage implements IStorage {
       
     } catch (error) {
       console.error('Error during piutang migration:', error);
+      throw error;
+    }
+  }
+
+  // Migration for retroactive processing of sales data
+  async migrateSalesData(storeId: number): Promise<{
+    salesProcessed: number;
+    cashflowRecordsCreated: number;
+    piutangRecordsCreated: number;
+    errors: string[];
+  }> {
+    try {
+      console.log(`🔄 Starting sales data migration for store ${storeId}...`);
+      
+      let salesProcessed = 0;
+      let cashflowRecordsCreated = 0;
+      let piutangRecordsCreated = 0;
+      const errors: string[] = [];
+
+      // Find all sales records from the specified store that have totalQris > 0
+      const salesWithQris = await db.select().from(sales)
+        .where(
+          and(
+            eq(sales.storeId, storeId),
+            sql`${sales.totalQris} > 0`
+          )
+        )
+        .orderBy(asc(sales.date));
+
+      console.log(`📊 Found ${salesWithQris.length} sales records with QRIS payments to process`);
+
+      for (const salesRecord of salesWithQris) {
+        try {
+          salesProcessed++;
+          console.log(`📄 Processing sales record ${salesRecord.id} (${new Date(salesRecord.date).toISOString().split('T')[0]})`);
+          
+          // Check for existing cashflow records for this sales record
+          const existingCashflow = await db.select().from(cashflow)
+            .where(eq(cashflow.salesId, salesRecord.id));
+          
+          // Check if cash sales cashflow record exists
+          const hasCashflow = existingCashflow.some(cf => 
+            cf.type === 'Sales' && cf.category === 'Income'
+          );
+          
+          // Create cashflow record for cash sales if missing and totalCash > 0
+          if (!hasCashflow && salesRecord.totalCash && parseFloat(salesRecord.totalCash.toString()) > 0) {
+            try {
+              await this.createCashflow({
+                storeId: salesRecord.storeId,
+                category: 'Income',
+                type: 'Sales',
+                amount: salesRecord.totalCash,
+                description: `Cash Sales ${new Date(salesRecord.date).toISOString().split('T')[0]} [MIGRATED]`,
+                salesId: salesRecord.id,
+                date: salesRecord.date
+              });
+              cashflowRecordsCreated++;
+              console.log(`✅ Created cash sales cashflow record: ${salesRecord.totalCash}`);
+            } catch (error) {
+              const errorMsg = `Failed to create cashflow for sales ${salesRecord.id}: ${error}`;
+              errors.push(errorMsg);
+              console.error(`❌ ${errorMsg}`);
+            }
+          }
+
+          // Check if QRIS piutang records exist
+          // Look for piutang records that mention this sales record or are from the same date
+          const salesDateStr = new Date(salesRecord.date).toISOString().split('T')[0];
+          const existingPiutang = await db.select().from(piutang)
+            .where(
+              and(
+                eq(piutang.storeId, salesRecord.storeId),
+                or(
+                  like(piutang.description, `%${salesDateStr}%`),
+                  like(piutang.description, `%sales ${salesRecord.id}%`)
+                )
+              )
+            );
+          
+          const hasQrisPiutang = existingPiutang.some(p => 
+            p.description.includes('QRIS payment') && 
+            parseFloat(p.amount) === parseFloat(salesRecord.totalQris.toString())
+          );
+
+          // Create QRIS piutang record if missing and totalQris > 0
+          if (!hasQrisPiutang && salesRecord.totalQris && parseFloat(salesRecord.totalQris.toString()) > 0) {
+            try {
+              await this.createQrisPiutangForManager(salesRecord);
+              piutangRecordsCreated++;
+              console.log(`✅ Created QRIS piutang record: ${salesRecord.totalQris}`);
+            } catch (error) {
+              const errorMsg = `Failed to create QRIS piutang for sales ${salesRecord.id}: ${error}`;
+              errors.push(errorMsg);
+              console.error(`❌ ${errorMsg}`);
+            }
+          } else if (hasQrisPiutang) {
+            console.log(`⏭️ QRIS piutang already exists for sales ${salesRecord.id}`);
+          }
+
+        } catch (error) {
+          const errorMsg = `Error processing sales record ${salesRecord.id}: ${error}`;
+          errors.push(errorMsg);
+          console.error(`❌ ${errorMsg}`);
+        }
+      }
+
+      const summary = {
+        salesProcessed,
+        cashflowRecordsCreated,
+        piutangRecordsCreated,
+        errors
+      };
+
+      console.log(`🎉 Sales data migration completed:`);
+      console.log(`   📄 Sales processed: ${salesProcessed}`);
+      console.log(`   💰 Cashflow records created: ${cashflowRecordsCreated}`);
+      console.log(`   📋 Piutang records created: ${piutangRecordsCreated}`);
+      console.log(`   ❌ Errors: ${errors.length}`);
+      
+      if (errors.length > 0) {
+        console.log(`📝 Migration errors:`, errors);
+      }
+
+      return summary;
+      
+    } catch (error) {
+      console.error('Error during sales data migration:', error);
       throw error;
     }
   }

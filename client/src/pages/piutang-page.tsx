@@ -68,8 +68,13 @@ export default function PiutangPage() {
 
   // Fetch unified customers (includes user-based customers) and piutang data
   const { data: customers = [] } = useQuery<Customer[]>({
-    queryKey: ["/api/customers"],
-    enabled: !!user
+    queryKey: ["/api/customers", currentStoreId],
+    queryFn: async () => {
+      if (!currentStoreId) throw new Error("Store ID is required");
+      const res = await apiRequest("GET", `/api/customers?storeId=${currentStoreId}`);
+      return await res.json();
+    },
+    enabled: !!user && !!currentStoreId
   });
 
   // Define the pagination response type - now with store filtering
@@ -80,15 +85,18 @@ export default function PiutangPage() {
     page: number;
     limit: number;
   }>({
-    queryKey: ["/api/piutang", { storeId: currentStoreId }],
+    queryKey: ["/api/piutang", currentStoreId],
     queryFn: async () => {
+      if (!currentStoreId) throw new Error("Store ID is required");
       const res = await apiRequest(
         "GET",
         `/api/piutang?storeId=${currentStoreId}`,
       );
       return await res.json();
     },
-    enabled: !!user && !!currentStoreId
+    enabled: !!user && !!currentStoreId,
+    staleTime: 0, // Always refetch when switching stores
+    refetchOnWindowFocus: true,
   });
 
   // Extract the piutang records from the pagination response with proper safety checks
@@ -144,8 +152,8 @@ export default function PiutangPage() {
       });
       piutangForm.reset();
       setIsAddModalOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/piutang", { storeId: currentStoreId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/piutang"] }); // Also invalidate base query
+      queryClient.invalidateQueries({ queryKey: ["/api/piutang"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/piutang", currentStoreId] });
     },
     onError: (error: Error) => {
       toast({
@@ -172,10 +180,10 @@ export default function PiutangPage() {
       });
       paymentForm.reset();
       setPaymentModalData(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/piutang", { storeId: currentStoreId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/piutang"] }); // Also invalidate base query
-      queryClient.invalidateQueries({ queryKey: ["/api/cashflow", { storeId: currentStoreId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/cashflow"] }); // Also invalidate base cashflow query
+      queryClient.invalidateQueries({ queryKey: ["/api/piutang"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/piutang", currentStoreId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cashflow"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cashflow", currentStoreId] });
     },
     onError: (error: Error) => {
       toast({

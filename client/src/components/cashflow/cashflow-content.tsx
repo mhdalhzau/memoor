@@ -360,7 +360,7 @@ export default function CashflowContent() {
       );
       return await res.json();
     },
-    enabled: !!currentStoreId, // 👈 biar query jalan hanya kalau ada storeId
+    enabled: !!currentStoreId, // Only run query when we have a store ID
   });
 
   // Customer queries
@@ -373,202 +373,124 @@ export default function CashflowContent() {
     queryKey: ["/api/customers/search", customerSearchTerm],
     queryFn: async ({ queryKey }) => {
       const [url, searchTerm] = queryKey;
-      const res = await apiRequest(
-        "GET",
-        `${url}?q=${encodeURIComponent(searchTerm as string)}`,
-      );
+      if (!searchTerm) return [];
+      const res = await apiRequest("GET", `${url}?q=${encodeURIComponent(searchTerm)}`);
       return await res.json();
     },
     enabled: customerSearchTerm.length > 0,
   });
 
-  // Filter customers based on search term AND current store
-  const storeFilteredCustomers = customers.filter(c => 
-    currentStoreId ? c.storeId === currentStoreId : true
-  );
-  const storeFilteredSearchResults = searchResults.filter(c => 
-    currentStoreId ? c.storeId === currentStoreId : true
-  );
-  const filteredCustomers =
-    customerSearchTerm.length > 0 ? storeFilteredSearchResults : storeFilteredCustomers;
+  // Filtered customers based on search
+  const filteredCustomers = customerSearchTerm.length > 0 ? searchResults : customers;
 
-  // Query for store-specific cashflow data to calculate grand totals for current store
-  const { data: allCashflowData = [] } = useQuery<Cashflow[]>({
-    queryKey: ["/api/cashflow", { storeId: currentStoreId, scope: "totals" }],
-    queryFn: async () => {
-      const res = await apiRequest("GET", `/api/cashflow?storeId=${currentStoreId}`);
-      return await res.json();
+  // Calculate store totals for dashboard
+  const storeTotals = useMemo(() => {
+    if (!cashflowRecords) return {};
+
+    const totals: Record<number, { totalIncome: number; totalExpense: number; totalInvestment: number; netFlow: number }> = {};
+
+    // Group by store and calculate totals
+    stores.forEach(store => {
+      const storeRecords = cashflowRecords.filter(record => record.storeId === store.id);
+      
+      const income = storeRecords
+        .filter(record => record.category === "Income")
+        .reduce((sum, record) => sum + parseFloat(record.amount), 0);
+      
+      const expense = storeRecords
+        .filter(record => record.category === "Expense")
+        .reduce((sum, record) => sum + parseFloat(record.amount), 0);
+      
+      const investment = storeRecords
+        .filter(record => record.category === "Investment")
+        .reduce((sum, record) => sum + parseFloat(record.amount), 0);
+
+      totals[store.id] = {
+        totalIncome: income,
+        totalExpense: expense,
+        totalInvestment: investment,
+        netFlow: income - expense - investment,
+      };
+    });
+
+    return totals;
+  }, [cashflowRecords, stores]);
+
+  // Submit cashflow mutation
+  const submitCashflowMutation = useMutation({
+    mutationFn: async (data: CashflowData) => {
+      console.log("🚀 CASHFLOW SUBMISSION STARTED");
+      console.log("📝 Form Data:", data);
+      console.log("🏪 Target Store ID:", data.storeId);
+      
+      const res = await apiRequest("POST", "/api/cashflow", data);
+      const result = await res.json();
+      console.log("✅ CASHFLOW SUBMISSION SUCCESS");
+      console.log("📄 Server Response:", result);
+      return result;
     },
-    enabled: !!currentStoreId,
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Cashflow entry added successfully!",
+      });
+      form.reset();
+      queryClient.invalidateQueries({ queryKey: ["/api/cashflow"] });
+    },
+    onError: (error: Error) => {
+      console.error("❌ CASHFLOW SUBMISSION ERROR:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add cashflow entry",
+        variant: "destructive",
+      });
+    },
   });
 
-  // Calculate totals for each store and overall
-  const calculateStoreTotals = (records: Cashflow[]) => {
-    let totalIncome = 0;
-    let totalExpense = 0;
-    let totalInvestment = 0;
-
-    records.forEach((record) => {
-      // Only use totalPengeluaran for Pembelian Minyak transactions or when totalPengeluaran > 0
-      const useTotal =
-        record.category === "Expense" &&
-        (isPembelianMinyak(record.type) ||
-          parseFloat(record.totalPengeluaran ?? "0") > 0);
-      const amount = useTotal
-        ? parseFloat(record.totalPengeluaran || "0")
-        : parseFloat(record.amount || "0");
-
-      // Guard against NaN
-      const safeAmount = isNaN(amount) ? 0 : amount;
-
-      switch (record.category) {
-        case "Income":
-          totalIncome += safeAmount;
-          break;
-        case "Expense":
-          totalExpense += safeAmount;
-          break;
-        case "Investment":
-          totalInvestment += safeAmount;
-          break;
-      }
-    });
-
-    return {
-      totalIncome,
-      totalExpense,
-      totalInvestment,
-      netFlow: totalIncome - totalExpense - totalInvestment,
-    };
-  };
-
-  // Memoize calculations for performance by store
-  const storeTotals = useMemo(() => {
-    const totals: { [storeId: number]: any } = {};
-    stores.forEach((store) => {
-      const storeData = allCashflowData.filter(
-        (record) => record.storeId === store.id,
-      );
-      totals[store.id] = calculateStoreTotals(storeData);
-    });
-    return totals;
-  }, [allCashflowData, stores]);
-
-  const grandTotals = useMemo(() => {
-    let totalIncome = 0,
-      totalExpense = 0,
-      totalInvestment = 0;
-    Object.values(storeTotals).forEach((storeTotal: any) => {
-      totalIncome += storeTotal.totalIncome;
-      totalExpense += storeTotal.totalExpense;
-      totalInvestment += storeTotal.totalInvestment;
-    });
-    return {
-      totalIncome,
-      totalExpense,
-      totalInvestment,
-      netFlow: totalIncome - totalExpense - totalInvestment,
-    };
-  }, [storeTotals]);
-
-  // Customer creation form
-  const customerForm = useForm<z.infer<typeof insertCustomerSchema>>({
+  // Customer form
+  const customerForm = useForm({
     resolver: zodResolver(insertCustomerSchema),
     defaultValues: {
       name: "",
       email: "",
       phone: "",
       address: "",
-      type: "customer",
+      storeId: currentStoreId || 1,
     },
   });
 
-  const submitCashflowMutation = useMutation({
-    mutationFn: async (data: CashflowData) => {
-      console.log("🚀 CASHFLOW MUTATION STARTED");
-      console.log("📝 Data being sent:", JSON.stringify(data, null, 2));
-      console.log("🏪 Current Store ID:", currentStoreId);
-      console.log("📊 Active Tab:", activeTab);
-      
-      try {
-        const res = await apiRequest("POST", "/api/cashflow", data);
-        console.log("✅ API Response Status:", res.status);
-        
-        if (!res.ok) {
-          const errorText = await res.text();
-          console.error("❌ API Error Response:", errorText);
-          throw new Error(`API Error ${res.status}: ${errorText}`);
-        }
-        
-        const result = await res.json();
-        console.log("📥 API Response Data:", result);
-        return result;
-      } catch (error) {
-        console.error("💥 CASHFLOW MUTATION ERROR:", error);
-        throw error;
-      }
-    },
-    onSuccess: (data) => {
-      console.log("🎉 CASHFLOW MUTATION SUCCESS:", data);
-      toast({
-        title: "✅ Success",
-        description: "Cashflow entry saved successfully!",
-      });
-      form.reset();
-      queryClient.invalidateQueries({
-        queryKey: ["/api/cashflow", { storeId: currentStoreId }],
-      });
-      queryClient.invalidateQueries({ 
-        queryKey: ["/api/cashflow", { storeId: currentStoreId, scope: "totals" }] 
-      });
-    },
-    onError: (error: Error) => {
-      console.error("🔥 CASHFLOW MUTATION FAILED:", error);
-      console.error("📋 Error Stack:", error.stack);
-      toast({
-        title: "❌ Error Cashflow",
-        description: `GAGAL SIMPAN: ${error.message}`,
-        variant: "destructive",
-      });
-      
-      // Show aggressive debugging alert
-      alert(`🚨 CASHFLOW ERROR ALERT 🚨\n\nError: ${error.message}\n\nCheck console for details!`);
-    },
-  });
-
-  // Customer creation mutation
+  // Create customer mutation
   const createCustomerMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof insertCustomerSchema>) => {
-      const res = await apiRequest("POST", "/api/customers", data);
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/customers", {
+        ...data,
+        storeId: currentStoreId || 1,
+      });
       return await res.json();
     },
-    onSuccess: (newCustomer: Customer) => {
+    onSuccess: (newCustomer) => {
       toast({
         title: "Success",
         description: "Customer created successfully!",
       });
       customerForm.reset();
       setIsAddCustomerModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      
       // Set the newly created customer as selected
       form.setValue("customerId", newCustomer.id);
-      queryClient.invalidateQueries({ queryKey: ["/api/customers", { storeId: currentStoreId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/customers"] }); // Also invalidate base query
-      queryClient.invalidateQueries({ queryKey: ["/api/customers/search", { storeId: currentStoreId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/customers/search"] }); // Also invalidate base search query
     },
     onError: (error: Error) => {
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "Failed to create customer",
         variant: "destructive",
       });
     },
   });
 
   const onSubmit = (data: CashflowData) => {
-    console.log("🔥 CASHFLOW SUBMIT TRIGGERED!");
-    console.log("📋 Form Data:", JSON.stringify(data, null, 2));
-    console.log("🏪 Store ID Check:", data.storeId);
+    console.log("🎯 FORM SUBMISSION TRIGGERED");
     console.log("📊 Active Tab Check:", activeTab);
     console.log("🏬 Current Store ID:", currentStoreId);
     console.log("🔄 Mutation Status:", {
@@ -579,308 +501,136 @@ export default function CashflowContent() {
     
     // Validate that currentStoreId is set
     if (!currentStoreId) {
+      console.error("❌ SUBMISSION BLOCKED: No current store ID");
       toast({
         title: "Error",
-        description: "Please wait for store data to load before submitting.",
+        description: "Please select a store first",
         variant: "destructive",
       });
       return;
     }
 
-    // Validate that the selected customer belongs to the current store (if customer is selected)
-    if (data.customerId) {
-      const selectedCustomer = filteredCustomers.find(c => c.id === data.customerId);
-      if (selectedCustomer && selectedCustomer.storeId !== currentStoreId) {
-        toast({
-          title: "Error",
-          description: "Selected customer does not belong to the current store.",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
+    // Force store ID to current store
+    const submissionData = { 
+      ...data, 
+      storeId: currentStoreId 
+    };
     
-    // Aggressive validation checks
-    if (!data.storeId) {
-      alert("🚨 ERROR: Store ID is missing!");
-      console.error("❌ Store ID validation failed:", data.storeId);
-      return;
-    }
-    
-    if (!data.amount || data.amount <= 0) {
-      alert("🚨 ERROR: Amount must be greater than 0!");
-      console.error("❌ Amount validation failed:", data.amount);
-      return;
-    }
-    
-    if (!data.category) {
-      alert("🚨 ERROR: Category is required!");
-      console.error("❌ Category validation failed:", data.category);
-      return;
-    }
-    
-    if (!data.type) {
-      alert("🚨 ERROR: Type is required!");
-      console.error("❌ Type validation failed:", data.type);
-      return;
-    }
-    
-    // Check form errors
-    const formErrors = form.formState.errors;
-    if (Object.keys(formErrors).length > 0) {
-      console.error("❌ FORM VALIDATION ERRORS:", formErrors);
-      alert(`🚨 FORM ERRORS:\n${JSON.stringify(formErrors, null, 2)}`);
-      return;
-    }
-    
-    console.log("✅ All validations passed, submitting...");
-    submitCashflowMutation.mutate(data);
+    console.log("📤 Final Submission Data:", submissionData);
+    submitCashflowMutation.mutate(submissionData);
   };
 
-  const onSubmitCustomer = (data: z.infer<typeof insertCustomerSchema>) => {
-    // Validate that currentStoreId is set
-    if (!currentStoreId) {
-      toast({
-        title: "Error",
-        description: "Please wait for store data to load before creating customer.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    createCustomerMutation.mutate({
-      ...data,
-      storeId: currentStoreId,
-    });
+  const onCreateCustomer = (data: any) => {
+    createCustomerMutation.mutate(data);
   };
 
   return (
     <div className="space-y-6">
-      {/* Store tabs for Cashflow filtering */}
-      {!currentStoreId ? (
-        <div>Loading store...</div>
-      ) : (
-        <Tabs value={activeTab ?? ""} onValueChange={handleTabChange}>
-          <TabsList
-          className={`grid w-full ${
-            stores.length > 0
-              ? stores.length === 1
-                ? "grid-cols-1"
-                : stores.length === 2
-                  ? "grid-cols-2"
-                  : stores.length === 3
-                    ? "grid-cols-3"
-                    : "grid-cols-4"
-              : "grid-cols-2"
-          }`}
-        >
-          {stores.length > 0 ? (
-            stores.map((store) => (
-              <TabsTrigger
-                key={store.id}
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+            Cashflow Management
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">
+            Track income, expenses, and investments across all stores
+          </p>
+        </div>
+        <SyncButton 
+          dataType="cashflow"
+          variant="outline"
+          className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+        />
+      </div>
+
+      {/* Tabs for different stores */}
+      {stores.length > 0 ? (
+        <Tabs value={activeTab || `store-${stores[0]?.id}`} onValueChange={handleTabChange}>
+          <TabsList className="grid w-full grid-cols-2">
+            {stores.map((store) => (
+              <TabsTrigger 
+                key={store.id} 
                 value={`store-${store.id}`}
-                data-testid={`tab-cashflow-store-${store.id}`}
+                data-testid={`tab-store-${store.id}`}
               >
-                <DollarSign className="h-4 w-4 mr-2" />
                 {store.name}
               </TabsTrigger>
-            ))
-          ) : (
-            <>
-              <TabsTrigger value="store-1" data-testid="tab-cashflow-store-1">
-                <DollarSign className="h-4 w-4 mr-2" />
-                Store 1
-              </TabsTrigger>
-              <TabsTrigger value="store-2" data-testid="tab-cashflow-store-2">
-                <DollarSign className="h-4 w-4 mr-2" />
-                Store 2
-              </TabsTrigger>
-            </>
-          )}
-        </TabsList>
+            ))}
+          </TabsList>
 
-        {/* Financial Summary Overview */}
-        <div className="mb-6 space-y-4">
-          {/* Grand Total Summary */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5" />
-                  Total Semua Toko
-                </CardTitle>
-                <SyncButton
-                  dataType="cashflow"
-                  variant="outline"
-                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <TrendingUp className="h-4 w-4 text-green-600" />
-                    <p className="text-sm font-medium text-green-700 dark:text-green-300">
-                      Total Pemasukan
-                    </p>
-                  </div>
-                  <p
-                    className="text-2xl font-bold text-green-600"
-                    data-testid="text-grand-total-income"
-                  >
-                    {formatRupiah(grandTotals.totalIncome)}
-                  </p>
-                </div>
-                <div className="text-center p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <TrendingDown className="h-4 w-4 text-red-600" />
-                    <p className="text-sm font-medium text-red-700 dark:text-red-300">
-                      Total Pengeluaran
-                    </p>
-                  </div>
-                  <p
-                    className="text-2xl font-bold text-red-600"
-                    data-testid="text-grand-total-expense"
-                  >
-                    {formatRupiah(grandTotals.totalExpense)}
-                  </p>
-                </div>
-                <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <DollarSign className="h-4 w-4 text-blue-600" />
-                    <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                      Total Investasi
-                    </p>
-                  </div>
-                  <p
-                    className="text-2xl font-bold text-blue-600"
-                    data-testid="text-grand-total-investment"
-                  >
-                    {formatRupiah(grandTotals.totalInvestment)}
-                  </p>
-                </div>
-                <div
-                  className={`text-center p-4 rounded-lg ${
-                    grandTotals.netFlow >= 0
-                      ? "bg-emerald-50 dark:bg-emerald-900/20"
-                      : "bg-orange-50 dark:bg-orange-900/20"
-                  }`}
-                >
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <TrendingUp
-                      className={`h-4 w-4 ${
-                        grandTotals.netFlow >= 0
-                          ? "text-emerald-600"
-                          : "text-orange-600"
-                      }`}
-                    />
-                    <p
-                      className={`text-sm font-medium ${
-                        grandTotals.netFlow >= 0
-                          ? "text-emerald-700 dark:text-emerald-300"
-                          : "text-orange-700 dark:text-orange-300"
-                      }`}
-                    >
-                      Net Cashflow
-                    </p>
-                  </div>
-                  <p
-                    className={`text-2xl font-bold ${
-                      grandTotals.netFlow >= 0
-                        ? "text-emerald-600"
-                        : "text-orange-600"
-                    }`}
-                    data-testid="text-grand-net-flow"
-                  >
-                    {formatRupiah(grandTotals.netFlow)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Dynamic Store Cashflow Content */}
-        {stores.length > 0 ? (
-          stores.map((store, index) => (
-            <TabsContent
-              key={store.id}
-              value={`store-${store.id}`}
-              className="space-y-4"
-            >
-              {/* Store 1 Summary */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <DollarSign className="h-4 w-4" />
-                    {store.name}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/20 rounded">
-                    <span className="text-sm font-medium text-green-700 dark:text-green-300">
-                      Pemasukan
-                    </span>
-                    <span
-                      className="font-bold text-green-600"
-                      data-testid="text-store1-income"
-                    >
-                      {formatRupiah(
-                        (storeTotals[stores[0]?.id] || { totalIncome: 0 })
-                          .totalIncome,
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded">
-                    <span className="text-sm font-medium text-red-700 dark:text-red-300">
-                      Pengeluaran
-                    </span>
-                    <span
-                      className="font-bold text-red-600"
-                      data-testid="text-store1-expense"
-                    >
-                      {formatRupiah(
-                        (storeTotals[stores[0]?.id] || { totalExpense: 0 })
-                          .totalExpense,
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
-                    <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                      Investasi
-                    </span>
-                    <span
-                      className="font-bold text-blue-600"
-                      data-testid="text-store1-investment"
-                    >
-                      {formatRupiah(
-                        (storeTotals[stores[0]?.id] || { totalInvestment: 0 })
-                          .totalInvestment,
-                      )}
-                    </span>
-                  </div>
-                  <div
-                    className={`flex justify-between items-center p-2 rounded font-semibold ${
-                      (storeTotals[stores[0]?.id] || { netFlow: 0 }).netFlow >=
-                      0
-                        ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600"
-                        : "bg-orange-50 dark:bg-orange-900/20 text-orange-600"
-                    }`}
-                  >
-                    <span className="text-sm font-medium">Net Cashflow</span>
-                    <span data-testid="text-store1-net">
-                      {formatRupiah(
-                        (storeTotals[stores[0]?.id] || { netFlow: 0 }).netFlow,
-                      )}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Add Cashflow Entry */}
+          {stores.map((store) => (
+            <TabsContent key={store.id} value={`store-${store.id}`} className="space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Store Summary */}
                 <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <DollarSign className="h-4 w-4" />
+                      {store.name}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                      <span className="text-sm font-medium text-green-700 dark:text-green-300">
+                        Pemasukan
+                      </span>
+                      <span
+                        className="font-bold text-green-600"
+                        data-testid={`text-store${store.id}-income`}
+                      >
+                        {formatRupiah(
+                          (storeTotals[store.id] || { totalIncome: 0 })
+                            .totalIncome,
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded">
+                      <span className="text-sm font-medium text-red-700 dark:text-red-300">
+                        Pengeluaran
+                      </span>
+                      <span
+                        className="font-bold text-red-600"
+                        data-testid={`text-store${store.id}-expense`}
+                      >
+                        {formatRupiah(
+                          (storeTotals[store.id] || { totalExpense: 0 })
+                            .totalExpense,
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                      <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                        Investasi
+                      </span>
+                      <span
+                        className="font-bold text-blue-600"
+                        data-testid={`text-store${store.id}-investment`}
+                      >
+                        {formatRupiah(
+                          (storeTotals[store.id] || { totalInvestment: 0 })
+                            .totalInvestment,
+                        )}
+                      </span>
+                    </div>
+                    <div
+                      className={`flex justify-between items-center p-2 rounded font-semibold ${
+                        (storeTotals[store.id] || { netFlow: 0 }).netFlow >= 0
+                          ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600"
+                          : "bg-orange-50 dark:bg-orange-900/20 text-orange-600"
+                      }`}
+                    >
+                      <span className="text-sm font-medium">Net Cashflow</span>
+                      <span data-testid={`text-store${store.id}-net`}>
+                        {formatRupiah(
+                          (storeTotals[store.id] || { netFlow: 0 }).netFlow,
+                        )}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Add Cashflow Entry */}
+                <Card className="lg:col-span-2">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <DollarSign className="h-5 w-5" />
@@ -893,215 +643,283 @@ export default function CashflowContent() {
                         onSubmit={form.handleSubmit(onSubmit)}
                         className="space-y-4"
                       >
-                        <FormField
-                          control={form.control}
-                          name="category"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Category</FormLabel>
-                              <Select
-                                onValueChange={field.onChange}
-                                defaultValue={field.value}
-                              >
-                                <FormControl>
-                                  <SelectTrigger data-testid="select-category">
-                                    <SelectValue placeholder="Select category" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="Income">Income</SelectItem>
-                                  <SelectItem value="Expense">
-                                    Expense
-                                  </SelectItem>
-                                  <SelectItem value="Investment">
-                                    Investment
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name="type"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Type</FormLabel>
-                              <Select
-                                onValueChange={field.onChange}
-                                defaultValue={field.value}
-                              >
-                                <FormControl>
-                                  <SelectTrigger data-testid="select-type">
-                                    <SelectValue placeholder="Select type" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {watchCategory === "Income" &&
-                                    incomeTypes.map((type) => (
-                                      <SelectItem key={type} value={type}>
-                                        {type}
-                                      </SelectItem>
-                                    ))}
-                                  {watchCategory === "Expense" &&
-                                    expenseTypes.map((type) => (
-                                      <SelectItem key={type} value={type}>
-                                        {type}
-                                      </SelectItem>
-                                    ))}
-                                  {watchCategory === "Investment" &&
-                                    investmentTypes.map((type) => (
-                                      <SelectItem key={type} value={type}>
-                                        {type}
-                                      </SelectItem>
-                                    ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        {/* Payment Status - only show for relevant transaction types */}
-                        {requiresCustomer(watchType) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <FormField
                             control={form.control}
-                            name="paymentStatus"
+                            name="category"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Payment Status</FormLabel>
-                                <FormControl>
-                                  <RadioGroup
-                                    onValueChange={field.onChange}
-                                    defaultValue={field.value}
-                                    className="flex flex-row space-x-6"
-                                    data-testid="radio-payment-status"
-                                  >
-                                    <div className="flex items-center space-x-2">
-                                      <RadioGroupItem
-                                        value="lunas"
-                                        id="lunas"
-                                      />
-                                      <Label htmlFor="lunas">
-                                        Lunas (Paid)
-                                      </Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                      <RadioGroupItem
-                                        value="belum_lunas"
-                                        id="belum_lunas"
-                                      />
-                                      <Label htmlFor="belum_lunas">
-                                        Belum Lunas (Unpaid)
-                                      </Label>
-                                    </div>
-                                  </RadioGroup>
-                                </FormControl>
+                                <FormLabel>Category</FormLabel>
+                                <Select
+                                  onValueChange={field.onChange}
+                                  defaultValue={field.value}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger data-testid="select-category">
+                                      <SelectValue placeholder="Select category" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="Income">Income</SelectItem>
+                                    <SelectItem value="Expense">Expense</SelectItem>
+                                    <SelectItem value="Investment">
+                                      Investment
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
                                 <FormMessage />
                               </FormItem>
                             )}
                           />
-                        )}
 
-                        {/* Customer Selection - required for unpaid debt transactions */}
-                        {requiresCustomer(watchType) &&
-                          watchPaymentStatus === "belum_lunas" && (
-                            <FormField
-                              control={form.control}
-                              name="customerId"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Customer *</FormLabel>
-                                  <div className="flex gap-2">
-                                    <div className="flex-1">
-                                      <Select
-                                        onValueChange={field.onChange}
-                                        defaultValue={field.value}
-                                      >
-                                        <FormControl>
-                                          <SelectTrigger data-testid="select-customer">
-                                            <SelectValue placeholder="Select customer" />
-                                          </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                          <div className="p-2">
-                                            <Input
-                                              placeholder="Search customers..."
-                                              value={customerSearchTerm}
-                                              onChange={(e) =>
-                                                setCustomerSearchTerm(
-                                                  e.target.value,
-                                                )
-                                              }
-                                              className="mb-2"
-                                              data-testid="input-customer-search"
-                                            />
-                                          </div>
-                                          {filteredCustomers.length > 0 ? (
-                                            filteredCustomers.map(
-                                              (customer) => (
-                                                <SelectItem
-                                                  key={customer.id}
-                                                  value={customer.id}
-                                                >
-                                                  <div className="flex items-center gap-2">
-                                                    <User className="h-4 w-4" />
-                                                    <div>
-                                                      <div className="font-medium">
-                                                        {customer.name}
-                                                      </div>
-                                                      <div className="text-sm text-muted-foreground">
-                                                        {customer.email ||
-                                                          customer.phone ||
-                                                          "No contact info"}
-                                                      </div>
-                                                    </div>
-                                                  </div>
-                                                </SelectItem>
-                                              ),
-                                            )
-                                          ) : (
-                                            <div className="p-2 text-sm text-muted-foreground">
-                                              No customers found
-                                            </div>
-                                          )}
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="icon"
-                                      onClick={() =>
-                                        setIsAddCustomerModalOpen(true)
-                                      }
-                                      data-testid="button-add-customer"
-                                    >
-                                      <Plus className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          )}
-
-                        {/* Conditional fields for Pembelian Minyak */}
-                        {isPembelianMinyak(watchType) && (
                           <FormField
                             control={form.control}
-                            name="jumlahGalon"
+                            name="type"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Jumlah Galon</FormLabel>
+                                <FormLabel>Type</FormLabel>
+                                <Select
+                                  onValueChange={field.onChange}
+                                  value={field.value}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger data-testid="select-type">
+                                      <SelectValue placeholder="Select type" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {watchCategory === "Income" &&
+                                      incomeTypes.map((type) => (
+                                        <SelectItem key={type} value={type}>
+                                          {type}
+                                        </SelectItem>
+                                      ))}
+                                    {watchCategory === "Expense" &&
+                                      expenseTypes.map((type) => (
+                                        <SelectItem key={type} value={type}>
+                                          {type}
+                                        </SelectItem>
+                                      ))}
+                                    {watchCategory === "Investment" &&
+                                      investmentTypes.map((type) => (
+                                        <SelectItem key={type} value={type}>
+                                          {type}
+                                        </SelectItem>
+                                      ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        {/* Special fields for Pembelian Minyak */}
+                        {isPembelianMinyak(watchType) && (
+                          <div className="p-4 border border-blue-200 rounded-lg bg-blue-50/50 space-y-4">
+                            <h4 className="font-medium text-blue-800">
+                              Pembelian Minyak Details
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <FormField
+                                control={form.control}
+                                name="jumlahGalon"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Jumlah Galon *</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="number"
+                                        step="0.001"
+                                        placeholder="Enter gallons"
+                                        data-testid="input-jumlah-galon"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="amount"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Base Amount (Auto-calculated)</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="number"
+                                        placeholder="Base amount"
+                                        readOnly
+                                        className="bg-gray-100"
+                                        data-testid="input-base-amount"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="pajakOngkos"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Pajak Ongkos (Auto-calculated)</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="number"
+                                        placeholder="Pajak ongkos"
+                                        readOnly
+                                        className="bg-gray-100"
+                                        data-testid="input-pajak-ongkos"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="totalPengeluaran"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Total Pengeluaran (Auto-calculated)</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="number"
+                                        placeholder="Total pengeluaran"
+                                        readOnly
+                                        className="bg-gray-100"
+                                        data-testid="input-total-pengeluaran"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Special fields for Transfer Rekening */}
+                        {isTransferRekening(watchType) && (
+                          <div className="p-4 border border-purple-200 rounded-lg bg-purple-50/50 space-y-4">
+                            <h4 className="font-medium text-purple-800">
+                              Transfer Rekening Details
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <FormField
+                                control={form.control}
+                                name="konter"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Konter Type</FormLabel>
+                                    <FormControl>
+                                      <RadioGroup
+                                        onValueChange={field.onChange}
+                                        value={field.value}
+                                        className="flex flex-row space-x-4"
+                                      >
+                                        <div className="flex items-center space-x-2">
+                                          <RadioGroupItem value="Dia store" id="dia-store" />
+                                          <Label htmlFor="dia-store">Dia store</Label>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                          <RadioGroupItem value="manual" id="manual" />
+                                          <Label htmlFor="manual">Manual</Label>
+                                        </div>
+                                      </RadioGroup>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="amount"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Transfer Amount</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="Enter amount"
+                                        data-testid="input-transfer-amount"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="pajakTransferRekening"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Pajak Transfer</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="number"
+                                        placeholder="Tax amount"
+                                        readOnly={watchKonter === "Dia store"}
+                                        className={watchKonter === "Dia store" ? "bg-gray-100" : ""}
+                                        data-testid="input-pajak-transfer-rekening"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="hasil"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Hasil (Auto-calculated)</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="number"
+                                        placeholder="Result"
+                                        readOnly
+                                        className="bg-gray-100"
+                                        data-testid="input-hasil"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Regular amount field for non-special transaction types */}
+                        {!isPembelianMinyak(watchType) && !isTransferRekening(watchType) && (
+                          <FormField
+                            control={form.control}
+                            name="amount"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Amount</FormLabel>
                                 <FormControl>
                                   <Input
                                     type="number"
                                     step="0.01"
-                                    placeholder="0"
-                                    data-testid="input-jumlah-galon"
+                                    placeholder="Enter amount"
+                                    data-testid="input-amount"
                                     {...field}
                                   />
                                 </FormControl>
@@ -1113,192 +931,6 @@ export default function CashflowContent() {
 
                         <FormField
                           control={form.control}
-                          name="amount"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Amount</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  placeholder="0.00"
-                                  data-testid="input-amount"
-                                  readOnly={isPembelianMinyak(watchType)}
-                                  className={
-                                    isPembelianMinyak(watchType)
-                                      ? "bg-gray-50"
-                                      : ""
-                                  }
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        {/* Additional readonly fields for Pembelian Minyak */}
-                        {isPembelianMinyak(watchType) && (
-                          <>
-                            <FormField
-                              control={form.control}
-                              name="pajakOngkos"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Pajak Ongkos</FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      placeholder="0.00"
-                                      data-testid="input-pajak-ongkos"
-                                      readOnly
-                                      className="bg-gray-50"
-                                      {...field}
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-
-                            <FormField
-                              control={form.control}
-                              name="pajakTransfer"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Pajak Transfer</FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      placeholder="2500.00"
-                                      data-testid="input-pajak-transfer"
-                                      readOnly
-                                      className="bg-gray-50"
-                                      {...field}
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-
-                            <FormField
-                              control={form.control}
-                              name="totalPengeluaran"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Total Pengeluaran</FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      placeholder="0.00"
-                                      data-testid="input-total-pengeluaran"
-                                      readOnly
-                                      className="bg-gray-50"
-                                      {...field}
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          </>
-                        )}
-
-                        {/* Additional fields for Transfer Rekening */}
-                        {isTransferRekening(watchType) && (
-                          <>
-                            <FormField
-                              control={form.control}
-                              name="konter"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Konter</FormLabel>
-                                  <FormControl>
-                                    <RadioGroup
-                                      onValueChange={field.onChange}
-                                      defaultValue={field.value}
-                                      className="flex flex-row space-x-6"
-                                      data-testid="radio-konter"
-                                    >
-                                      <div className="flex items-center space-x-2">
-                                        <RadioGroupItem
-                                          value="Dia store"
-                                          id="dia-store"
-                                        />
-                                        <Label htmlFor="dia-store">
-                                          Dia store
-                                        </Label>
-                                      </div>
-                                      <div className="flex items-center space-x-2">
-                                        <RadioGroupItem
-                                          value="manual"
-                                          id="manual"
-                                        />
-                                        <Label htmlFor="manual">Manual</Label>
-                                      </div>
-                                    </RadioGroup>
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-
-                            <FormField
-                              control={form.control}
-                              name="pajakTransferRekening"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Pajak Transfer Rekening</FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      placeholder="0.00"
-                                      data-testid="input-pajak-transfer-rekening"
-                                      readOnly={watchKonter === "Dia store"}
-                                      className={
-                                        watchKonter === "Dia store"
-                                          ? "bg-gray-50"
-                                          : ""
-                                      }
-                                      {...field}
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-
-                            <FormField
-                              control={form.control}
-                              name="hasil"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Hasil</FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      placeholder="0.00"
-                                      data-testid="input-hasil"
-                                      readOnly
-                                      className="bg-gray-50"
-                                      {...field}
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          </>
-                        )}
-
-                        <FormField
-                          control={form.control}
                           name="description"
                           render={({ field }) => (
                             <FormItem>
@@ -1306,7 +938,7 @@ export default function CashflowContent() {
                               <FormControl>
                                 <Textarea
                                   placeholder="Enter description"
-                                  data-testid="textarea-description"
+                                  data-testid="input-description"
                                   {...field}
                                 />
                               </FormControl>
@@ -1315,13 +947,209 @@ export default function CashflowContent() {
                           )}
                         />
 
+                        {/* Customer selection for debt transactions */}
+                        {requiresCustomer(watchType) && (
+                          <div className="space-y-4 p-4 border border-orange-200 rounded-lg bg-orange-50/50">
+                            <h4 className="font-medium text-orange-800">
+                              Customer Details
+                            </h4>
+                            
+                            <FormField
+                              control={form.control}
+                              name="paymentStatus"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Payment Status</FormLabel>
+                                  <Select
+                                    onValueChange={field.onChange}
+                                    defaultValue={field.value}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger data-testid="select-payment-status">
+                                        <SelectValue placeholder="Select payment status" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="lunas">Lunas (Paid)</SelectItem>
+                                      <SelectItem value="belum_lunas">Belum Lunas (Unpaid)</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            {watchPaymentStatus === "belum_lunas" && (
+                              <div className="space-y-4">
+                                <div className="flex items-center gap-2">
+                                  <FormField
+                                    control={form.control}
+                                    name="customerId"
+                                    render={({ field }) => (
+                                      <FormItem className="flex-1">
+                                        <FormLabel>Select Customer</FormLabel>
+                                        <Select
+                                          onValueChange={field.onChange}
+                                          value={field.value}
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger data-testid="select-customer">
+                                              <SelectValue placeholder="Select customer" />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                            {/* Search box */}
+                                            <div className="p-2">
+                                              <Input
+                                                placeholder="Search customers..."
+                                                value={customerSearchTerm}
+                                                onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                                                data-testid="input-customer-search"
+                                              />
+                                            </div>
+                                            {filteredCustomers.map((customer) => (
+                                              <SelectItem key={customer.id} value={customer.id}>
+                                                {customer.name} {customer.email && `(${customer.email})`}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                  
+                                  <Dialog open={isAddCustomerModalOpen} onOpenChange={setIsAddCustomerModalOpen}>
+                                    <DialogTrigger asChild>
+                                      <Button 
+                                        type="button" 
+                                        variant="outline" 
+                                        size="icon"
+                                        className="mt-8"
+                                        data-testid="button-add-customer"
+                                      >
+                                        <Plus className="h-4 w-4" />
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                      <DialogHeader>
+                                        <DialogTitle>Add New Customer</DialogTitle>
+                                        <DialogDescription>
+                                          Create a new customer for debt tracking
+                                        </DialogDescription>
+                                      </DialogHeader>
+                                      <Form {...customerForm}>
+                                        <form onSubmit={customerForm.handleSubmit(onCreateCustomer)} className="space-y-4">
+                                          <FormField
+                                            control={customerForm.control}
+                                            name="name"
+                                            render={({ field }) => (
+                                              <FormItem>
+                                                <FormLabel>Name *</FormLabel>
+                                                <FormControl>
+                                                  <Input
+                                                    placeholder="Enter customer name"
+                                                    data-testid="input-customer-name"
+                                                    {...field}
+                                                  />
+                                                </FormControl>
+                                                <FormMessage />
+                                              </FormItem>
+                                            )}
+                                          />
+
+                                          <FormField
+                                            control={customerForm.control}
+                                            name="email"
+                                            render={({ field }) => (
+                                              <FormItem>
+                                                <FormLabel>Email (Optional)</FormLabel>
+                                                <FormControl>
+                                                  <Input
+                                                    type="email"
+                                                    placeholder="Enter email address"
+                                                    data-testid="input-customer-email"
+                                                    {...field}
+                                                  />
+                                                </FormControl>
+                                                <FormMessage />
+                                              </FormItem>
+                                            )}
+                                          />
+
+                                          <FormField
+                                            control={customerForm.control}
+                                            name="phone"
+                                            render={({ field }) => (
+                                              <FormItem>
+                                                <FormLabel>Phone (Optional)</FormLabel>
+                                                <FormControl>
+                                                  <Input
+                                                    placeholder="Enter phone number"
+                                                    data-testid="input-customer-phone"
+                                                    {...field}
+                                                  />
+                                                </FormControl>
+                                                <FormMessage />
+                                              </FormItem>
+                                            )}
+                                          />
+
+                                          <FormField
+                                            control={customerForm.control}
+                                            name="address"
+                                            render={({ field }) => (
+                                              <FormItem>
+                                                <FormLabel>Address</FormLabel>
+                                                <FormControl>
+                                                  <Textarea
+                                                    placeholder="Enter customer address"
+                                                    data-testid="input-customer-address"
+                                                    {...field}
+                                                  />
+                                                </FormControl>
+                                                <FormMessage />
+                                              </FormItem>
+                                            )}
+                                          />
+
+                                          <div className="flex gap-2 pt-4">
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              className="flex-1"
+                                              onClick={() => setIsAddCustomerModalOpen(false)}
+                                              data-testid="button-cancel-customer"
+                                            >
+                                              Cancel
+                                            </Button>
+                                            <Button
+                                              type="submit"
+                                              className="flex-1"
+                                              disabled={createCustomerMutation.isPending}
+                                              data-testid="button-save-customer"
+                                            >
+                                              {createCustomerMutation.isPending
+                                                ? "Saving..."
+                                                : "Save Customer"}
+                                            </Button>
+                                          </div>
+                                        </form>
+                                      </Form>
+                                    </DialogContent>
+                                  </Dialog>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         <Button
                           type="submit"
                           className="w-full"
                           disabled={submitCashflowMutation.isPending}
                           data-testid="button-submit-cashflow"
                           onClick={(e) => {
-                            console.log("🚨 SUBMIT BUTTON CLICKED (Store 1)");
                             console.log("🔄 Button Event:", e);
                             console.log("⚡ Is Disabled:", submitCashflowMutation.isPending);
                             console.log("📋 Current Form Values:", form.getValues());
@@ -1342,648 +1170,9 @@ export default function CashflowContent() {
                     </Form>
                   </CardContent>
                 </Card>
-
-                {/* Cashflow Records */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5" />
-                      Recent Cashflow Records
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {isLoading ? (
-                      <div className="text-center py-8">
-                        Loading cashflow records...
-                      </div>
-                    ) : cashflowRecords &&
-                      cashflowRecords.filter((record) => record.storeId === 1)
-                        .length > 0 ? (
-                      <div className="space-y-4 max-h-96 overflow-y-auto">
-                        {cashflowRecords
-                          .filter((record) => record.storeId === 1)
-                          .map((entry) => (
-                            <div
-                              key={entry.id}
-                              className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                              onClick={() => {
-                                setSelectedEntry(entry);
-                                setIsDetailModalOpen(true);
-                              }}
-                              data-testid={`cashflow-entry-${entry.id}`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <div
-                                  className={`p-2 rounded-full ${
-                                    entry.category === "Income"
-                                      ? "bg-green-100 text-green-600"
-                                      : entry.category === "Expense"
-                                        ? "bg-red-100 text-red-600"
-                                        : "bg-blue-100 text-blue-600"
-                                  }`}
-                                >
-                                  {entry.category === "Income" ? (
-                                    <TrendingUp className="h-4 w-4" />
-                                  ) : entry.category === "Expense" ? (
-                                    <TrendingDown className="h-4 w-4" />
-                                  ) : (
-                                    <DollarSign className="h-4 w-4" />
-                                  )}
-                                </div>
-                                <div>
-                                  <p className="font-medium text-foreground">
-                                    {entry.description ||
-                                      `${entry.category} - ${entry.type}`}
-                                  </p>
-                                  <p className="text-sm text-muted-foreground">
-                                    {entry.category} • {entry.type}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`font-semibold ${
-                                    entry.category === "Income"
-                                      ? "text-green-600"
-                                      : "text-red-600"
-                                  }`}
-                                >
-                                  {entry.category === "Income" ? "+" : "-"}
-                                  {formatRupiah(
-                                    entry.category === "Expense" &&
-                                      entry.totalPengeluaran
-                                      ? entry.totalPengeluaran
-                                      : entry.amount,
-                                  )}
-                                </span>
-                                <Eye className="h-4 w-4 text-muted-foreground" />
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    ) : (
-                      <div className="text-center text-muted-foreground py-8">
-                        <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p>No cashflow records found for {store.name}</p>
-                        <p className="text-sm">
-                          Add your first entry using the form
-                        </p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
               </div>
-            </TabsContent>
-          ))
-        ) : (
-          // Fallback for when stores haven't loaded yet
-          <>
-            <TabsContent value="store-1" className="space-y-4">
-              <div className="text-center py-8">Loading store data...</div>
-            </TabsContent>
-            <TabsContent value="store-2" className="space-y-4">
-              <div className="text-center py-8">Loading store data...</div>
-            </TabsContent>
-          </>
-        )}
 
-        {/* Legacy second store content - will be replaced by dynamic content above */}
-        {stores.length > 1 && (
-          <TabsContent
-            value={`store-${stores[1]?.id}`}
-            className="space-y-4"
-            style={{ display: "none" }}
-          >
-            {/* Store 2 Summary */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <DollarSign className="h-4 w-4" />
-                  {stores[1]?.name || "Store 2"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/20 rounded">
-                  <span className="text-sm font-medium text-green-700 dark:text-green-300">
-                    Pemasukan
-                  </span>
-                  <span
-                    className="font-bold text-green-600"
-                    data-testid="text-store2-income"
-                  >
-                    {formatRupiah(
-                      (storeTotals[stores[1]?.id] || { totalIncome: 0 })
-                        .totalIncome,
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded">
-                  <span className="text-sm font-medium text-red-700 dark:text-red-300">
-                    Pengeluaran
-                  </span>
-                  <span
-                    className="font-bold text-red-600"
-                    data-testid="text-store2-expense"
-                  >
-                    {formatRupiah(
-                      (storeTotals[stores[1]?.id] || { totalExpense: 0 })
-                        .totalExpense,
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
-                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                    Investasi
-                  </span>
-                  <span
-                    className="font-bold text-blue-600"
-                    data-testid="text-store2-investment"
-                  >
-                    {formatRupiah(
-                      (storeTotals[stores[1]?.id] || { totalInvestment: 0 })
-                        .totalInvestment,
-                    )}
-                  </span>
-                </div>
-                <div
-                  className={`flex justify-between items-center p-2 rounded font-semibold ${
-                    (storeTotals[stores[1]?.id] || { netFlow: 0 }).netFlow >= 0
-                      ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600"
-                      : "bg-orange-50 dark:bg-orange-900/20 text-orange-600"
-                  }`}
-                >
-                  <span className="text-sm font-medium">Net Cashflow</span>
-                  <span data-testid="text-store2-net">
-                    {formatRupiah(
-                      (storeTotals[stores[1]?.id] || { netFlow: 0 }).netFlow,
-                    )}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Add Cashflow Entry for {stores[1]?.name || 'Store 2'} */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <DollarSign className="h-5 w-5" />
-                    Add Cashflow Entry
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Form {...form}>
-                    <form
-                      onSubmit={form.handleSubmit(onSubmit)}
-                      className="space-y-4"
-                    >
-                      <FormField
-                        control={form.control}
-                        name="category"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Category</FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger data-testid="select-category">
-                                  <SelectValue placeholder="Select category" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="Income">Income</SelectItem>
-                                <SelectItem value="Expense">Expense</SelectItem>
-                                <SelectItem value="Investment">
-                                  Investment
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="type"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Type</FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger data-testid="select-type">
-                                  <SelectValue placeholder="Select type" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {watchCategory === "Income" &&
-                                  incomeTypes.map((type) => (
-                                    <SelectItem key={type} value={type}>
-                                      {type}
-                                    </SelectItem>
-                                  ))}
-                                {watchCategory === "Expense" &&
-                                  expenseTypes.map((type) => (
-                                    <SelectItem key={type} value={type}>
-                                      {type}
-                                    </SelectItem>
-                                  ))}
-                                {watchCategory === "Investment" &&
-                                  investmentTypes.map((type) => (
-                                    <SelectItem key={type} value={type}>
-                                      {type}
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      {/* Payment Status - only show for relevant transaction types */}
-                      {requiresCustomer(watchType) && (
-                        <FormField
-                          control={form.control}
-                          name="paymentStatus"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Payment Status</FormLabel>
-                              <FormControl>
-                                <RadioGroup
-                                  onValueChange={field.onChange}
-                                  defaultValue={field.value}
-                                  className="flex flex-row space-x-6"
-                                  data-testid="radio-payment-status"
-                                >
-                                  <div className="flex items-center space-x-2">
-                                    <RadioGroupItem
-                                      value="lunas"
-                                      id="lunas-2"
-                                    />
-                                    <Label htmlFor="lunas-2">
-                                      Lunas (Paid)
-                                    </Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <RadioGroupItem
-                                      value="belum_lunas"
-                                      id="belum_lunas-2"
-                                    />
-                                    <Label htmlFor="belum_lunas-2">
-                                      Belum Lunas (Unpaid)
-                                    </Label>
-                                  </div>
-                                </RadioGroup>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      )}
-
-                      {/* Customer Selection - required for unpaid debt transactions */}
-                      {requiresCustomer(watchType) &&
-                        watchPaymentStatus === "belum_lunas" && (
-                          <FormField
-                            control={form.control}
-                            name="customerId"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Customer *</FormLabel>
-                                <div className="flex gap-2">
-                                  <div className="flex-1">
-                                    <Select
-                                      onValueChange={field.onChange}
-                                      defaultValue={field.value}
-                                    >
-                                      <FormControl>
-                                        <SelectTrigger data-testid="select-customer">
-                                          <SelectValue placeholder="Select customer" />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                        <div className="p-2">
-                                          <Input
-                                            placeholder="Search customers..."
-                                            value={customerSearchTerm}
-                                            onChange={(e) =>
-                                              setCustomerSearchTerm(
-                                                e.target.value,
-                                              )
-                                            }
-                                            className="mb-2"
-                                            data-testid="input-customer-search"
-                                          />
-                                        </div>
-                                        {filteredCustomers.length > 0 ? (
-                                          filteredCustomers.map((customer) => (
-                                            <SelectItem
-                                              key={customer.id}
-                                              value={customer.id}
-                                            >
-                                              <div className="flex items-center gap-2">
-                                                <User className="h-4 w-4" />
-                                                <div>
-                                                  <div className="font-medium">
-                                                    {customer.name}
-                                                  </div>
-                                                  <div className="text-sm text-muted-foreground">
-                                                    {customer.email ||
-                                                      customer.phone ||
-                                                      "No contact info"}
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            </SelectItem>
-                                          ))
-                                        ) : (
-                                          <div className="p-2 text-sm text-muted-foreground">
-                                            No customers found
-                                          </div>
-                                        )}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="icon"
-                                    onClick={() =>
-                                      setIsAddCustomerModalOpen(true)
-                                    }
-                                    data-testid="button-add-customer"
-                                  >
-                                    <Plus className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        )}
-
-                      {/* Conditional fields for Pembelian Minyak */}
-                      {isPembelianMinyak(watchType) && (
-                        <FormField
-                          control={form.control}
-                          name="jumlahGalon"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Jumlah Galon</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  placeholder="0"
-                                  data-testid="input-jumlah-galon"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      )}
-
-                      <FormField
-                        control={form.control}
-                        name="amount"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Amount</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                data-testid="input-amount"
-                                readOnly={isPembelianMinyak(watchType)}
-                                className={
-                                  isPembelianMinyak(watchType)
-                                    ? "bg-gray-50"
-                                    : ""
-                                }
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      {/* Additional readonly fields for Pembelian Minyak */}
-                      {isPembelianMinyak(watchType) && (
-                        <>
-                          <FormField
-                            control={form.control}
-                            name="pajakOngkos"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Pajak Ongkos</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="0.00"
-                                    data-testid="input-pajak-ongkos"
-                                    readOnly
-                                    className="bg-gray-50"
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name="pajakTransfer"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Pajak Transfer</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="2500.00"
-                                    data-testid="input-pajak-transfer"
-                                    readOnly
-                                    className="bg-gray-50"
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name="totalPengeluaran"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Total Pengeluaran</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="0.00"
-                                    data-testid="input-total-pengeluaran"
-                                    readOnly
-                                    className="bg-gray-50"
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </>
-                      )}
-
-                      {/* Additional fields for Transfer Rekening */}
-                      {isTransferRekening(watchType) && (
-                        <>
-                          <FormField
-                            control={form.control}
-                            name="konter"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Konter</FormLabel>
-                                <FormControl>
-                                  <RadioGroup
-                                    onValueChange={field.onChange}
-                                    defaultValue={field.value}
-                                    className="flex flex-row space-x-6"
-                                    data-testid="radio-konter"
-                                  >
-                                    <div className="flex items-center space-x-2">
-                                      <RadioGroupItem
-                                        value="Dia store"
-                                        id="dia-store-2"
-                                      />
-                                      <Label htmlFor="dia-store-2">
-                                        Dia store
-                                      </Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                      <RadioGroupItem
-                                        value="manual"
-                                        id="manual-2"
-                                      />
-                                      <Label htmlFor="manual-2">Manual</Label>
-                                    </div>
-                                  </RadioGroup>
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name="pajakTransferRekening"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Pajak Transfer Rekening</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="0.00"
-                                    data-testid="input-pajak-transfer-rekening"
-                                    readOnly={watchKonter === "Dia store"}
-                                    className={
-                                      watchKonter === "Dia store"
-                                        ? "bg-gray-50"
-                                        : ""
-                                    }
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name="hasil"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Hasil</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="0.00"
-                                    data-testid="input-hasil"
-                                    readOnly
-                                    className="bg-gray-50"
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </>
-                      )}
-
-                      <FormField
-                        control={form.control}
-                        name="description"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Description (Optional)</FormLabel>
-                            <FormControl>
-                              <Textarea
-                                placeholder="Enter description"
-                                data-testid="textarea-description"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <Button
-                        type="submit"
-                        className="w-full"
-                        disabled={submitCashflowMutation.isPending}
-                        data-testid="button-submit-cashflow"
-                        onClick={(e) => {
-                          console.log("🚨 SUBMIT BUTTON CLICKED (Store 2)");
-                          console.log("🔄 Button Event:", e);
-                          console.log("⚡ Is Disabled:", submitCashflowMutation.isPending);
-                          console.log("📋 Current Form Values:", form.getValues());
-                          console.log("❌ Form Errors:", form.formState.errors);
-                          console.log("✅ Form Valid:", form.formState.isValid);
-                          
-                          if (submitCashflowMutation.isPending) {
-                            alert("🚨 BUTTON DISABLED: Mutation is pending!");
-                            e.preventDefault();
-                          }
-                        }}
-                      >
-                        {submitCashflowMutation.isPending
-                          ? "Adding..."
-                          : "Add Entry"}
-                      </Button>
-                    </form>
-                  </Form>
-                </CardContent>
-              </Card>
-
-              {/* Cashflow Records for {stores[1]?.name || 'Store 2'} */}
+              {/* Cashflow Records - FIXED: Using dynamic store.id instead of hardcoded */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1997,11 +1186,11 @@ export default function CashflowContent() {
                       Loading cashflow records...
                     </div>
                   ) : cashflowRecords &&
-                    cashflowRecords.filter((record) => record.storeId === 2)
+                    cashflowRecords.filter((record) => record.storeId === store.id)
                       .length > 0 ? (
                     <div className="space-y-4 max-h-96 overflow-y-auto">
                       {cashflowRecords
-                        .filter((record) => record.storeId === 2)
+                        .filter((record) => record.storeId === store.id)
                         .map((entry) => (
                           <div
                             key={entry.id}
@@ -2064,10 +1253,7 @@ export default function CashflowContent() {
                   ) : (
                     <div className="text-center text-muted-foreground py-8">
                       <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>
-                        No cashflow records found for{" "}
-                        {stores[1]?.name || "Store 2"}
-                      </p>
+                      <p>No cashflow records found for {store.name}</p>
                       <p className="text-sm">
                         Add your first entry using the form
                       </p>
@@ -2075,10 +1261,12 @@ export default function CashflowContent() {
                   )}
                 </CardContent>
               </Card>
-            </div>
-          </TabsContent>
-        )}
+            </TabsContent>
+          ))}
         </Tabs>
+      ) : (
+        // Fallback for when stores haven't loaded yet
+        <div className="text-center py-8">Loading store data...</div>
       )}
 
       {/* Detail Modal for viewing cashflow entries */}
@@ -2091,291 +1279,56 @@ export default function CashflowContent() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Category
-                  </p>
-                  <p className="text-base">{selectedEntry.category}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Type
-                  </p>
-                  <p className="text-base">{selectedEntry.type}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Amount
-                  </p>
-                  <p
-                    className={`text-lg font-semibold ${
-                      selectedEntry.category === "Income"
-                        ? "text-green-600"
-                        : "text-red-600"
-                    }`}
-                  >
-                    {selectedEntry.category === "Income" ? "+" : "-"}
-                    {formatRupiah(
-                      selectedEntry.category === "Expense" &&
-                        selectedEntry.totalPengeluaran
-                        ? selectedEntry.totalPengeluaran
-                        : selectedEntry.amount,
-                    )}
+                  <label className="text-sm font-medium">Category</label>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedEntry.category}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Date
+                  <label className="text-sm font-medium">Type</label>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedEntry.type}
                   </p>
-                  <p className="text-base">
-                    {new Date(
-                      selectedEntry.createdAt || new Date(),
-                    ).toLocaleDateString("id-ID")}
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Amount</label>
+                  <p className="text-sm text-muted-foreground">
+                    {formatRupiah(selectedEntry.amount)}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Date</label>
+                  <p className="text-sm text-muted-foreground">
+                    {new Date(selectedEntry.date).toLocaleDateString()}
                   </p>
                 </div>
               </div>
-
               {selectedEntry.description && (
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Description
+                  <label className="text-sm font-medium">Description</label>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedEntry.description}
                   </p>
-                  <p className="text-base">{selectedEntry.description}</p>
                 </div>
               )}
-
-              {/* Show additional details for Pembelian Minyak */}
-              {isPembelianMinyak(selectedEntry.type) && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Pembelian Minyak Details
-                  </p>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">
-                        Jumlah Galon:
-                      </span>
-                      <span className="ml-2">
-                        {selectedEntry.jumlahGalon || 0}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">
-                        Pajak Ongkos:
-                      </span>
-                      <span className="ml-2">
-                        {formatRupiah(selectedEntry.pajakOngkos || "0")}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">
-                        Pajak Transfer:
-                      </span>
-                      <span className="ml-2">
-                        {formatRupiah(selectedEntry.pajakTransfer || "0")}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">
-                        Total Pengeluaran:
-                      </span>
-                      <span className="ml-2 font-medium">
-                        {formatRupiah(selectedEntry.totalPengeluaran || "0")}
-                      </span>
-                    </div>
+              {selectedEntry.jumlahGalon && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Jumlah Galon</label>
+                    <p className="text-sm text-muted-foreground">
+                      {formatNumber(selectedEntry.jumlahGalon)}
+                    </p>
                   </div>
-                </div>
-              )}
-
-              {/* Show additional details for Transfer Rekening */}
-              {isTransferRekening(selectedEntry.type) && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Transfer Rekening Details
-                  </p>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Konter:</span>
-                      <span className="ml-2">
-                        {selectedEntry.konter || "N/A"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">
-                        Pajak Transfer:
-                      </span>
-                      <span className="ml-2">
-                        {formatRupiah(
-                          selectedEntry.pajakTransferRekening || "0",
-                        )}
-                      </span>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="text-muted-foreground">Hasil:</span>
-                      <span className="ml-2 font-medium">
-                        {formatRupiah(selectedEntry.hasil || "0")}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Show payment status and customer for debt transactions */}
-              {requiresCustomer(selectedEntry.type) && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Payment Details
-                  </p>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">
-                        Payment Status:
-                      </span>
-                      <span
-                        className={`ml-2 font-medium ${
-                          selectedEntry.paymentStatus === "lunas"
-                            ? "text-green-600"
-                            : "text-red-600"
-                        }`}
-                      >
-                        {selectedEntry.paymentStatus === "lunas"
-                          ? "Lunas"
-                          : "Belum Lunas"}
-                      </span>
-                    </div>
-                    {selectedEntry.customerId && (
-                      <div>
-                        <span className="text-muted-foreground">Customer:</span>
-                        <span className="ml-2">
-                          {customers.find(
-                            (c) => c.id === selectedEntry.customerId,
-                          )?.name || "Unknown"}
-                        </span>
-                      </div>
-                    )}
+                  <div>
+                    <label className="text-sm font-medium">Total Pengeluaran</label>
+                    <p className="text-sm text-muted-foreground">
+                      {formatRupiah(selectedEntry.totalPengeluaran || "0")}
+                    </p>
                   </div>
                 </div>
               )}
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Customer Modal */}
-      <Dialog
-        open={isAddCustomerModalOpen}
-        onOpenChange={setIsAddCustomerModalOpen}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add New Customer</DialogTitle>
-            <DialogDescription>
-              Create a new customer profile for debt tracking
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...customerForm}>
-            <form
-              onSubmit={customerForm.handleSubmit(onSubmitCustomer)}
-              className="space-y-4"
-            >
-              <FormField
-                control={customerForm.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Customer Name *</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="Enter customer name"
-                        data-testid="input-customer-name"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={customerForm.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email (Optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="email"
-                        placeholder="Enter email address"
-                        data-testid="input-customer-email"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={customerForm.control}
-                name="phone"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Phone (Optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="Enter phone number"
-                        data-testid="input-customer-phone"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={customerForm.control}
-                name="address"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Address</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Enter customer address"
-                        data-testid="input-customer-address"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="flex gap-2 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setIsAddCustomerModalOpen(false)}
-                  data-testid="button-cancel-customer"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  className="flex-1"
-                  disabled={createCustomerMutation.isPending}
-                  data-testid="button-save-customer"
-                >
-                  {createCustomerMutation.isPending
-                    ? "Saving..."
-                    : "Save Customer"}
-                </Button>
-              </div>
-            </form>
-          </Form>
         </DialogContent>
       </Dialog>
     </div>

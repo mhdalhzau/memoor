@@ -435,6 +435,66 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Sales data migration endpoint
+  app.post('/api/migrate-sales-data', async (req: any, res: any) => {
+    console.log("🚀 SALES DATA MIGRATION STARTED");
+    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    console.log("📝 Request Body:", req.body);
+    
+    if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
+      console.log("❌ MIGRATION ACCESS DENIED: Insufficient permissions");
+      return res.status(403).json({ error: 'Hanya administrator atau manager yang dapat menjalankan migrasi data' });
+    }
+    
+    const { storeId } = req.body;
+    console.log("🏪 Store ID for migration:", storeId);
+    
+    // Default to Patam Lestari store (ID: 2) if no storeId provided
+    const targetStoreId = storeId || 2;
+    console.log("🎯 Target Store ID:", targetStoreId);
+    
+    // Validate store ID
+    if (typeof targetStoreId !== 'number' || targetStoreId <= 0) {
+      console.log("❌ MIGRATION FAILED: Invalid store ID");
+      return res.status(400).json({ error: 'Store ID harus berupa angka positif' });
+    }
+    
+    try {
+      console.log("🔄 Starting sales data migration process...");
+      const migrationResult = await storage.migrateSalesData(targetStoreId);
+      console.log("✅ SALES DATA MIGRATION COMPLETED SUCCESSFULLY");
+      console.log("📊 Migration Result:", migrationResult);
+      
+      const response = { 
+        success: true, 
+        message: `Migrasi data sales untuk store ${targetStoreId} berhasil diselesaikan`,
+        storeId: targetStoreId,
+        results: {
+          salesProcessed: migrationResult.salesProcessed,
+          cashflowRecordsCreated: migrationResult.cashflowRecordsCreated,
+          piutangRecordsCreated: migrationResult.piutangRecordsCreated,
+          totalErrors: migrationResult.errors.length
+        },
+        details: migrationResult.errors.length > 0 ? {
+          errors: migrationResult.errors
+        } : undefined,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log("📤 Migration Response:", response);
+      res.json(response);
+    } catch (error: any) {
+      console.error("🔥 SALES DATA MIGRATION FAILED:", error);
+      console.error("📋 Error Stack:", error.stack);
+      res.status(500).json({ 
+        error: `Gagal melakukan migrasi data sales untuk store ${targetStoreId}`, 
+        details: error.message,
+        storeId: targetStoreId,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   // Setup real-time middleware for automatic event broadcasting
   app.use(realtimeMiddleware);
   

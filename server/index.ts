@@ -3,6 +3,7 @@ import compression from "compression";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupDatabaseMiddleware } from "./middleware/integration";
+import { runStartupMigration } from "./startup-migration";
 
 const app = express();
 
@@ -77,6 +78,9 @@ app.use((req, res, next) => {
   
   // Setup database middleware untuk operasi CRUD yang dioptimalkan
   setupDatabaseMiddleware(app);
+  
+  // Run startup migration for Patam Lestari store (store ID 2)
+  await runStartupMigration();
 
   // Enhanced global error handler - ensure all errors return JSON for API routes
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
