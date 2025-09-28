@@ -510,14 +510,11 @@ export default function CashflowContent() {
   return (
     <div className="space-y-6">
       {/* Store tabs for Cashflow filtering */}
-        {!currentStoreId ? (
-          <div>Loading store...</div>
-        ) : (
-          <Tabs value={activeTab ?? ""} onValueChange={handleTabChange}>
-            {/* konten tab */}
-          </Tabs>
-        )}
-        <TabsList
+      {!currentStoreId ? (
+        <div>Loading store...</div>
+      ) : (
+        <Tabs value={activeTab ?? ""} onValueChange={handleTabChange}>
+          <TabsList
           className={`grid w-full ${
             stores.length > 0
               ? stores.length === 1
@@ -1908,7 +1905,8 @@ export default function CashflowContent() {
             </div>
           </TabsContent>
         )}
-      </Tabs>
+        </Tabs>
+      )}
 
       {/* Detail Modal for viewing cashflow entries */}
       <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
