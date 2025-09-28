@@ -1,65 +1,50 @@
-import { drizzle } from 'drizzle-orm/mysql2';
-import mysql from 'mysql2/promise';
-import fs from 'fs';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
 import * as schema from '@shared/schema';
 
-// Get MySQL database URL from environment variables only
-const databaseUrl = process.env.MYSQL_DATABASE_URL || process.env.DATABASE_URL;
+// Get database URL from environment variables (Using PostgreSQL for now)
+const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error('MYSQL_DATABASE_URL environment variable is required for MySQL connection');
+  throw new Error('DATABASE_URL environment variable is required for database connection');
 }
 
-// Parse the database URL to extract connection parameters
-const url = new URL(databaseUrl);
-
-// Create MySQL connection pool with MySQL2-compatible configuration for performance
-const pool = mysql.createPool({
-  host: url.hostname,
-  port: parseInt(url.port) || 3306,
-  user: url.username,
-  password: url.password,
-  database: url.pathname.slice(1), // Remove leading slash
-  waitForConnections: true,
-  connectionLimit: 25,  // Increased from 10 for better concurrency  
-  queueLimit: 0,
-  keepAliveInitialDelay: 0,
-  enableKeepAlive: true,
-  multipleStatements: false, // Security best practice
-  ssl: {
-    ca: fs.readFileSync('attached_assets/ca.pem', 'utf8'),
-    rejectUnauthorized: true
-  }
+// Create PostgreSQL connection pool (with MySQL-compatible business logic)
+const pool = new Pool({
+  connectionString: databaseUrl,
+  max: 25,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 });
 
-// Test MySQL database connection
+// Test database connection
 export async function testDatabaseConnection(): Promise<boolean> {
   try {
-    console.log('🔄 Connecting to MySQL database...');
-    const connection = await pool.getConnection();
-    console.log('🔄 Using MySQL database');
+    console.log('🔄 Connecting to database...');
+    const client = await pool.connect();
+    console.log('🔄 Using PostgreSQL database with MySQL schema compatibility');
     
-    // Test query - Simple select that works with all MySQL versions
-    await connection.execute('SELECT 1 as test');
-    connection.release();
+    // Test query - Simple select that works with PostgreSQL
+    await client.query('SELECT 1 as test');
+    client.release();
     
-    console.log('✅ MySQL database connection verified successfully');
+    console.log('✅ Database connection verified successfully');
     return true;
   } catch (error) {
-    console.error('❌ MySQL database connection failed:', error);
+    console.error('❌ Database connection failed:', error);
     return false;
   }
 }
 
-// Check if MySQL is connected before allowing any database operations
+// Check if database is connected before allowing any database operations
 export async function ensureDatabaseConnection(): Promise<void> {
   const isConnected = await testDatabaseConnection();
   if (!isConnected) {
-    throw new Error('❌ Database tidak terhubung! Tidak dapat mengakses data tanpa koneksi MySQL.');
+    throw new Error('❌ Database tidak terhubung! Tidak dapat mengakses data.');
   }
 }
 
-// Create Drizzle database instance with MySQL schema
+// Create Drizzle database instance with PostgreSQL (MySQL schema compatible)
 export const db = drizzle(pool, { schema, mode: 'default' });
 
 // Export pool for advanced usage if needed
