@@ -183,8 +183,20 @@ export default function StaffPage() {
     },
   });
 
+  // Query untuk fetch stores yang user punya akses
+  const { data: stores = [] } = useQuery({
+    queryKey: ["/api/stores"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/stores");
+      return response.json();
+    },
+  });
+
   // Filter users to only show staff role
   const staffUsers = users.filter((user: any) => user.role === "staff");
+
+  // Get first store ID for current user
+  const firstStoreId = stores.length > 0 ? stores[0].id : 1;
 
   // Single endpoint submission (server handles all related records)
   const submitDataMutation = useMutation({
@@ -480,7 +492,7 @@ export default function StaffPage() {
     // Prepare attendance data
     const attendanceData = {
       userId: selectedStaff?.id || "",
-      storeId: 1, // Default store, should be dynamic based on user's store
+      storeId: firstStoreId, // Use dynamic store ID based on user's accessible stores
       checkIn: jamMasuk,
       checkOut: jamKeluar,
       shift: shift,
