@@ -1447,70 +1447,47 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Helper methods for QRIS management
-  // Find actual manager user and create/get corresponding customer record
+  // Find actual manager user and create/get corresponding customer record for the specific store
   async findOrCreateCustomerForManagerUser(storeId: number): Promise<Customer | undefined> {
     try {
-      // HARDCODED: Always use specific customer ID for ALL QRIS payments regardless of store
-      const targetCustomerId = 'ecf7eed0-b31c-4b5a-8cf8-a4a6d50e0cd3';
-      
-      // Check if this customer exists
-      const existingCustomer = await db.select().from(customers).where(
-        eq(customers.id, targetCustomerId)
-      );
-      
-      if (existingCustomer.length > 0) {
-        console.log(`✅ Using hardcoded QRIS customer ${existingCustomer[0].name} for store ${storeId} (consistent across ALL stores)`);
-        return existingCustomer[0];
-      }
-      
-      // Fallback: If customer doesn't exist, try to find manager user and create customer
       let managerUser: User | undefined;
       
-      // PRIORITY 1: Always try the default QRIS handler first for consistency
-      const defaultQrisUserId = '40603306-34ce-4e7b-845d-32c2fc4aee93';
-      const defaultQrisUser = await this.getUser(defaultQrisUserId);
-      
-      if (defaultQrisUser) {
-        managerUser = defaultQrisUser;
-        console.log(`⚠️ Hardcoded customer not found, using default QRIS manager ${managerUser.name} for store ${storeId}`);
-      } else {
-        // PRIORITY 2: If default user not found, try to find manager or admin users assigned to this specific store
-        const storeUsers = await db.select({
-          userId: userStores.userId,
-          user: users
-        })
-        .from(userStores)
-        .innerJoin(users, eq(userStores.userId, users.id))
-        .where(
-          and(
-            eq(userStores.storeId, storeId),
-            or(
-              eq(users.role, 'manager'),
-              eq(users.role, 'administrasi')
-            )
+      // PRIORITY 1: Try to find manager or admin users assigned to this specific store
+      const storeUsers = await db.select({
+        userId: userStores.userId,
+        user: users
+      })
+      .from(userStores)
+      .innerJoin(users, eq(userStores.userId, users.id))
+      .where(
+        and(
+          eq(userStores.storeId, storeId),
+          or(
+            eq(users.role, 'manager'),
+            eq(users.role, 'administrasi')
           )
-        );
+        )
+      );
 
-        if (storeUsers.length > 0) {
-          managerUser = storeUsers[0].user;
-          console.log(`⚠️ Default QRIS user not found, using store-specific manager ${managerUser.name} for store ${storeId}`);
-        } else {
-          // PRIORITY 3: If no store-specific manager found, find any manager/admin user
-          const anyManager = await db.select().from(users).where(
-            or(
-              eq(users.role, 'manager'),
-              eq(users.role, 'administrasi')
-            )
-          ).limit(1);
+      if (storeUsers.length > 0) {
+        managerUser = storeUsers[0].user;
+        console.log(`✅ Using store-specific manager ${managerUser.name} for QRIS piutang in store ${storeId}`);
+      } else {
+        // PRIORITY 2: If no store-specific manager found, find any manager/admin user
+        const anyManager = await db.select().from(users).where(
+          or(
+            eq(users.role, 'manager'),
+            eq(users.role, 'administrasi')
+          )
+        ).limit(1);
 
-          if (anyManager.length === 0) {
-            console.warn(`❌ No manager user found for store ${storeId} or in system`);
-            return undefined;
-          }
-          
-          managerUser = anyManager[0];
-          console.log(`⚠️ Using fallback general manager ${managerUser.name} for QRIS piutang in store ${storeId}`);
+        if (anyManager.length === 0) {
+          console.warn(`❌ No manager user found for store ${storeId} or in system`);
+          return undefined;
         }
+        
+        managerUser = anyManager[0];
+        console.log(`⚠️ Using fallback general manager ${managerUser.name} for QRIS piutang in store ${storeId}`);
       }
 
       // Check if customer record already exists for this manager user
