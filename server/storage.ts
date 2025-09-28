@@ -94,6 +94,7 @@ export interface IStorage {
   getPayroll(id: string): Promise<Payroll | undefined>;
   getPayrollByUser(userId: string): Promise<Payroll[]>;
   getPayrollByUserStoreMonth(userId: string, storeId: number, month: string): Promise<Payroll | undefined>;
+  getPayrollByStoresAndMonth(storeIds: number[], month: string): Promise<Payroll[]>;
   getAllPayroll(): Promise<Payroll[]>;
   createPayroll(payroll: InsertPayroll): Promise<Payroll>;
   updatePayrollStatus(id: string, status: string): Promise<Payroll | undefined>;
@@ -109,6 +110,7 @@ export interface IStorage {
   // Overtime methods
   getOvertime(id: string): Promise<Overtime | undefined>;
   getOvertimeByStore(storeId: number): Promise<Overtime[]>;
+  getOvertimeByStoresAndMonth(storeIds: number[], month: string): Promise<Overtime[]>;
   getAllOvertime(): Promise<Overtime[]>;
   createOvertime(overtime: InsertOvertime): Promise<Overtime>;
   updateOvertimeStatus(id: string, status: string, approvedBy: string): Promise<Overtime | undefined>;
@@ -214,7 +216,7 @@ import {
   inventory,
   inventoryTransactions
 } from "@shared/schema";
-import { eq, and, gte, lte, like, or, desc, asc } from "drizzle-orm";
+import { eq, and, gte, lte, like, or, desc, asc, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 // import pgSession from "connect-pg-simple"; // PostgreSQL-specific, not compatible with MySQL
 import MemoryStore from "memorystore";
@@ -904,6 +906,21 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async getPayrollByStoresAndMonth(storeIds: number[], month: string): Promise<Payroll[]> {
+    try {
+      if (storeIds.length === 0) return [];
+      return await db.select().from(payroll).where(
+        and(
+          inArray(payroll.storeId, storeIds),
+          eq(payroll.month, month)
+        )
+      ).orderBy(desc(payroll.createdAt));
+    } catch (error) {
+      console.error('Error getting payroll by stores and month:', error);
+      return [];
+    }
+  }
+
   async getAllPayroll(): Promise<Payroll[]> {
     try {
       return await db.select().from(payroll).orderBy(desc(payroll.createdAt));
@@ -1029,6 +1046,21 @@ export class DatabaseStorage implements IStorage {
       return await db.select().from(overtime).where(eq(overtime.storeId, storeId)).orderBy(desc(overtime.createdAt));
     } catch (error) {
       console.error('Error getting overtime by store:', error);
+      return [];
+    }
+  }
+
+  async getOvertimeByStoresAndMonth(storeIds: number[], month: string): Promise<Overtime[]> {
+    try {
+      if (storeIds.length === 0) return [];
+      return await db.select().from(overtime).where(
+        and(
+          inArray(overtime.storeId, storeIds),
+          sql`DATE_FORMAT(${overtime.createdAt}, '%Y-%m') = ${month}`
+        )
+      ).orderBy(desc(overtime.createdAt));
+    } catch (error) {
+      console.error('Error getting overtime by stores and month:', error);
       return [];
     }
   }

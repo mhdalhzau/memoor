@@ -2148,19 +2148,25 @@ export function registerRoutes(app: Express): Server {
       const payrollCycle = payrollConfig ? parseInt(payrollConfig.payrollCycle) : 30;
       const overtimeRate = payrollConfig ? parseFloat(payrollConfig.overtimeRate) : 10000;
       
+      // OPTIMIZATION: Fetch only relevant data for current month and accessible stores
+      const allOvertimeRecords = await storage.getOvertimeByStoresAndMonth(accessibleStoreIds, currentMonth);
+      const allPayrollRecords = await storage.getPayrollByStoresAndMonth(accessibleStoreIds, currentMonth);
+      
       // Generate payroll per store (per-store requirement)
       const payrollPromises = [];
       for (const storeId of accessibleStoreIds) {
         const storeUsers = await storage.getUsersByStore(storeId);
         const staffUsers = storeUsers.filter((u: any) => u.role === 'staff');
         
+        // Fetch attendance once per store
+        const storeAttendanceRecords = await storage.getAttendanceByStore(storeId);
+        
         for (const user of staffUsers) {
           const monthlySalary = parseFloat(user.salary || "3000000"); // Default to 3M IDR
           const dailySalary = monthlySalary / payrollCycle;
           
-          // Calculate working days from attendance records for current month and this specific store
-          const attendanceRecords = await storage.getAttendanceByStore(storeId);
-          const userAttendanceThisMonth = attendanceRecords.filter(attendance => {
+          // Calculate working days from pre-fetched attendance records
+          const userAttendanceThisMonth = storeAttendanceRecords.filter(attendance => {
             const attendanceDate = new Date(attendance.date || attendance.createdAt);
             return attendance.userId === user.id &&
                    attendanceDate.toISOString().slice(0, 7) === currentMonth && 
@@ -2174,9 +2180,8 @@ export function registerRoutes(app: Express): Server {
           }));
           const workingDays = uniqueDates.size;
           
-          // Calculate overtime hours from overtime records for current month and this specific store
-          const overtimeRecords = await storage.getAllOvertime();
-          const userOvertimeThisMonth = overtimeRecords.filter(overtime => 
+          // Calculate overtime hours from pre-fetched overtime records
+          const userOvertimeThisMonth = allOvertimeRecords.filter(overtime => 
             overtime.userId === user.id &&
             overtime.storeId === storeId &&
             overtime.status === 'approved' &&
@@ -2191,8 +2196,12 @@ export function registerRoutes(app: Express): Server {
           const overtimePay = totalOvertimeHours * overtimeRate;
           const totalAmount = basePay + overtimePay;
           
-          // Check if payroll already exists for this user, store, and month
-          const existingPayroll = await storage.getPayrollByUserStoreMonth(user.id, storeId, currentMonth);
+          // Check if payroll already exists from pre-fetched payroll records
+          const existingPayroll = allPayrollRecords.find(p => 
+            p.userId === user.id && 
+            p.storeId === storeId && 
+            p.month === currentMonth
+          );
           
           if (existingPayroll) {
             // Update existing payroll record with new calculations including totalAmount
@@ -2218,6 +2227,7 @@ export function registerRoutes(app: Express): Server {
       const payrolls = await Promise.all(payrollPromises);
       res.status(201).json(payrolls);
     } catch (error: any) {
+      console.error('Payroll generation error:', error);
       res.status(400).json({ message: error.message });
     }
   });
