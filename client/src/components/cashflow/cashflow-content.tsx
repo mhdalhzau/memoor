@@ -92,41 +92,51 @@ const cashflowSchema = z
     type: z.enum(allTypes, {
       errorMap: () => ({ message: "Please select a type" }),
     }),
-    amount: z.coerce.number().positive("Amount must be positive"),
+    amount: z.coerce.number().positive("Amount must be positive").transform(String),
     description: z.string().optional(),
     storeId: z.coerce.number(),
     paymentStatus: z.enum(["lunas", "belum_lunas"]).optional(),
     customerId: z.string().optional(),
 
-    // Additional fields for Pembelian Minyak
-    jumlahGalon: z.coerce
-      .number()
-      .positive("Jumlah galon must be positive")
-      .optional(),
-    pajakOngkos: z.coerce.number().optional(),
-    pajakTransfer: z.coerce.number().optional(),
-    totalPengeluaran: z.coerce.number().optional(),
+    // Additional fields for Pembelian Minyak - transform numbers to strings
+    jumlahGalon: z.coerce.number().min(0).optional().transform(val => val?.toString()),
+    pajakOngkos: z.coerce.number().min(0).optional().transform(val => val?.toString()),
+    pajakTransfer: z.coerce.number().min(0).optional().transform(val => val?.toString()),
+    totalPengeluaran: z.coerce.number().min(0).optional().transform(val => val?.toString()),
 
-    // Additional fields for Transfer Rekening
+    // Additional fields for Transfer Rekening - transform numbers to strings
     konter: z.enum(["Dia store", "manual"]).optional(),
-    pajakTransferRekening: z.coerce.number().optional(),
-    hasil: z.coerce.number().optional(),
+    pajakTransferRekening: z.coerce.number().min(0).optional().transform(val => val?.toString()),
+    hasil: z.coerce.number().min(0).optional().transform(val => val?.toString()),
   })
-  .refine(
-    (data) => {
-      if (
-        data.type === "Pemberian Utang" &&
-        data.paymentStatus === "belum_lunas"
-      ) {
-        return !!data.customerId;
+  .superRefine((data, ctx) => {
+    // Validate customer for unpaid debt
+    if (
+      data.type === "Pemberian Utang" &&
+      data.paymentStatus === "belum_lunas"
+    ) {
+      if (!data.customerId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Customer selection is required for unpaid debt transactions",
+          path: ["customerId"],
+        });
       }
-      return true;
-    },
-    {
-      message: "Customer selection is required for unpaid debt transactions",
-      path: ["customerId"],
-    },
-  );
+    }
+
+    // Validate jumlahGalon for Pembelian Minyak only
+    if (
+      (data.type === "Pembelian stok (Pembelian Minyak)" ||
+        data.type === "Pembelian Minyak") &&
+      (!data.jumlahGalon || parseFloat(data.jumlahGalon) <= 0)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Jumlah galon must be positive for Pembelian Minyak",
+        path: ["jumlahGalon"],
+      });
+    }
+  });
 
 type CashflowData = z.infer<typeof cashflowSchema>;
 
