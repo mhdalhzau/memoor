@@ -1724,24 +1724,23 @@ export class DatabaseStorage implements IStorage {
             }
           }
 
-          // Check if QRIS piutang records exist
-          // Look for piutang records that mention this sales record or are from the same date
-          const salesDateStr = new Date(salesRecord.date).toISOString().split('T')[0];
+          // Check if QRIS piutang records exist - IMPROVED DETECTION
+          // Look for piutang records for same store, amount, and QRIS description  
+          const qrisAmount = parseFloat(salesRecord.totalQris.toString());
           const existingPiutang = await db.select().from(piutang)
             .where(
               and(
                 eq(piutang.storeId, salesRecord.storeId),
-                or(
-                  like(piutang.description, `%${salesDateStr}%`),
-                  like(piutang.description, `%sales ${salesRecord.id}%`)
-                )
+                like(piutang.description, '%QRIS payment%')
               )
             );
           
           const hasQrisPiutang = existingPiutang.some(p => 
-            p.description.includes('QRIS payment') && 
-            parseFloat(p.amount) === parseFloat(salesRecord.totalQris.toString())
+            parseFloat(p.amount) === qrisAmount &&
+            p.description.includes('QRIS payment')
           );
+          
+          console.log(`🔍 QRIS Detection Debug - Store ${salesRecord.storeId}, Amount ${qrisAmount}, Found ${existingPiutang.length} QRIS records, Has Match: ${hasQrisPiutang}`);
 
           // Create QRIS piutang record if missing and totalQris > 0
           if (!hasQrisPiutang && salesRecord.totalQris && parseFloat(salesRecord.totalQris.toString()) > 0) {
