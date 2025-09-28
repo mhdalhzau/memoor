@@ -1228,6 +1228,7 @@ export function registerRoutes(app: Express): Server {
                       type: 'Other' as const,
                       amount: incomeItem.amount.toString(),
                       description: `${incomeItem.description} (Auto-imported from setoran data) [${idempotencyKey}]`,
+                      salesId: savedSales.id,
                       date: savedSales.date
                     };
                     
@@ -1264,6 +1265,7 @@ export function registerRoutes(app: Express): Server {
                       type: 'Other' as const,
                       amount: expenseItem.amount.toString(),
                       description: `${expenseItem.description} (Auto-imported from setoran data) [${idempotencyKey}]`,
+                      salesId: savedSales.id,
                       date: savedSales.date
                     };
                     
@@ -1982,6 +1984,7 @@ export function registerRoutes(app: Express): Server {
                   type: 'Other',
                   amount: incomeItem.amount,
                   description: `${incomeItem.description} (Auto-imported from sales data)`,
+                  salesId: newSales.id,
                   date: importDate
                 };
                 
@@ -2010,6 +2013,7 @@ export function registerRoutes(app: Express): Server {
               type: 'Other',
               amount: salesData.totalIncome,
               description: `Income from sales import (Auto-imported on ${new Date().toISOString().split('T')[0]})`,
+              salesId: newSales.id,
               date: importDate
             };
             
@@ -2026,6 +2030,7 @@ export function registerRoutes(app: Express): Server {
               type: 'Other',
               amount: salesData.totalIncome,
               description: `Income from sales import - fallback (Auto-imported on ${new Date().toISOString().split('T')[0]})`,
+              salesId: newSales.id,
               date: importDate
             };
             
@@ -2064,6 +2069,7 @@ export function registerRoutes(app: Express): Server {
                 type: 'Other',
                 amount: expenseItem.amount,
                 description: `${expenseItem.description} (Auto-imported from sales data)`,
+                salesId: newSales.id,
                 date: importDate
               };
               
@@ -2078,6 +2084,7 @@ export function registerRoutes(app: Express): Server {
               type: 'Other',
               amount: salesData.totalExpenses,
               description: `Expenses from sales import (Auto-imported on ${new Date().toISOString().split('T')[0]})`,
+              salesId: newSales.id,
               date: importDate
             };
             
@@ -2094,6 +2101,7 @@ export function registerRoutes(app: Express): Server {
               type: 'Other',
               amount: salesData.totalExpenses,
               description: `Expenses from sales import - fallback (Auto-imported on ${new Date().toISOString().split('T')[0]})`,
+              salesId: newSales.id,
               date: importDate
             };
             

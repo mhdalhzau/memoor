@@ -112,6 +112,7 @@ export const cashflow = mysqlTable("cashflow", {
   // Customer and payment tracking fields
   customerId: varchar("customer_id", { length: 36 }), // Link to customers table
   piutangId: varchar("piutang_id", { length: 36 }), // Link to piutang table
+  salesId: varchar("sales_id", { length: 36 }), // Link to sales table
   paymentStatus: text("payment_status").default("lunas"), // 'lunas', 'belum_lunas'
   // Fields for Pembelian Minyak
   jumlahGalon: decimal("jumlah_galon", { precision: 12, scale: 2 }), // Number of gallons

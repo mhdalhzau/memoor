@@ -88,7 +88,8 @@ export interface IStorage {
   // Cashflow methods
   getCashflow(id: string): Promise<Cashflow | undefined>;
   getCashflowByStore(storeId: number): Promise<Cashflow[]>;
-  createCashflow(cashflow: InsertCashflow, createdBy?: string): Promise<Cashflow>;
+  createCashflow(cashflow: InsertCashflow): Promise<Cashflow>;
+  deleteCashflowBySalesId(salesId: string): Promise<void>;
   
   // Payroll methods
   getPayroll(id: string): Promise<Payroll | undefined>;
@@ -812,6 +813,10 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSales(id: string): Promise<void> {
     try {
+      // First delete related cashflow entries to implement cascading delete
+      await this.deleteCashflowBySalesId(id);
+      
+      // Then delete the sales record
       await db.delete(sales).where(eq(sales.id, id));
     } catch (error) {
       console.error('Error deleting sales:', error);
@@ -861,19 +866,27 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async createCashflow(cashflowData: InsertCashflow, createdBy?: string): Promise<Cashflow> {
+  async createCashflow(cashflowData: InsertCashflow): Promise<Cashflow> {
     try {
       const cashflowId = randomUUID();
       await db.insert(cashflow).values({
         id: cashflowId,
-        ...cashflowData,
-        createdBy
+        ...cashflowData
       });
       // MySQL doesn't support .returning(), so fetch the created cashflow
       const result = await db.select().from(cashflow).where(eq(cashflow.id, cashflowId)).limit(1);
       return result[0];
     } catch (error) {
       console.error('Error creating cashflow:', error);
+      throw error;
+    }
+  }
+
+  async deleteCashflowBySalesId(salesId: string): Promise<void> {
+    try {
+      await db.delete(cashflow).where(eq(cashflow.salesId, salesId));
+    } catch (error) {
+      console.error('Error deleting cashflow by salesId:', error);
       throw error;
     }
   }
