@@ -117,7 +117,11 @@ export default function PiutangPage() {
   console.log("👥 PiutangPage: Customers data:", customers);
 
   // Fetch all piutang records from all stores
-  const { data: piutangResponse, isLoading, refetch: refetchPiutang } = useQuery<{
+  const {
+    data: piutangResponse,
+    isLoading,
+    refetch: refetchPiutang,
+  } = useQuery<{
     data: Piutang[];
     total: number;
     hasMore: boolean;
@@ -144,18 +148,30 @@ export default function PiutangPage() {
 
   console.log("💰 PiutangPage: Piutang records:", piutangRecords);
   console.log("📊 PiutangPage: Loading state:", isLoading);
-  
+
   // Log store distribution of piutang data
   React.useEffect(() => {
     if (piutangRecords.length > 0) {
-      const storeDistribution = piutangRecords.reduce((acc, record) => {
-        acc[record.storeId] = (acc[record.storeId] || 0) + 1;
-        return acc;
-      }, {} as Record<number, number>);
-      
-      console.log("📊 PiutangPage: Piutang distribution by store:", storeDistribution);
-      console.log("🏪 PiutangPage: Records from Tiban Hills (Store 1):", storeDistribution[1] || 0);
-      console.log("🏪 PiutangPage: Records from Patam Lestari (Store 2):", storeDistribution[2] || 0);
+      const storeDistribution = piutangRecords.reduce(
+        (acc, record) => {
+          acc[record.storeId] = (acc[record.storeId] || 0) + 1;
+          return acc;
+        },
+        {} as Record<number, number>,
+      );
+
+      console.log(
+        "📊 PiutangPage: Piutang distribution by store:",
+        storeDistribution,
+      );
+      console.log(
+        "🏪 PiutangPage: Records from Tiban Hills (Store 1):",
+        storeDistribution[1] || 0,
+      );
+      console.log(
+        "🏪 PiutangPage: Records from Patam Lestari (Store 2):",
+        storeDistribution[2] || 0,
+      );
     }
   }, [piutangRecords]);
 
@@ -274,48 +290,65 @@ export default function PiutangPage() {
     const grouped: Record<number, CustomerWithPiutang[]> = {};
 
     stores.forEach((store) => {
-      const storeCustomers = unifiedCustomers.filter(
-        (customer) => customer.storeId === store.id,
+      // Get all piutang records for this store
+      const safePiutangRecords = Array.isArray(piutangRecords) ? piutangRecords : [];
+      const storePiutangRecords = safePiutangRecords.filter(
+        (p) => p && p.storeId === store.id,
       );
 
-      const customersWithPiutang = storeCustomers
-        .filter((customer) => customer && customer.id)
-        .map((customer) => {
-          const safePiutangRecords = Array.isArray(piutangRecords)
-            ? piutangRecords
-            : [];
-          const customerPiutang = safePiutangRecords.filter(
-            (p) => p && p.customerId === customer.id && p.storeId === store.id,
-          );
+      // Group piutang by customer ID for this store
+      const customerPiutangMap = storePiutangRecords.reduce((acc, piutang) => {
+        if (!piutang.customerId) return acc;
+        if (!acc[piutang.customerId]) {
+          acc[piutang.customerId] = [];
+        }
+        acc[piutang.customerId].push(piutang);
+        return acc;
+      }, {} as Record<string, typeof piutangRecords>);
 
-          const totalDebt = customerPiutang.reduce(
-            (sum, p) => sum + (p && p.amount ? parseFloat(p.amount) : 0),
-            0,
-          );
-          const totalPaid = customerPiutang.reduce(
-            (sum, p) =>
-              sum + (p && p.paidAmount ? parseFloat(p.paidAmount) : 0),
-            0,
-          );
-          const remainingDebt = totalDebt - totalPaid;
-
-          return {
-            customer,
-            piutangRecords: customerPiutang,
-            totalDebt,
-            totalPaid,
-            remainingDebt,
+      // Create customer items for each customer with piutang
+      const customersWithPiutang = Object.entries(customerPiutangMap).map(([customerId, customerPiutang]) => {
+        // Try to find the customer in unifiedCustomers
+        let customer = unifiedCustomers.find(c => c.id === customerId);
+        
+        // If customer not found, create a placeholder customer from piutang data
+        if (!customer) {
+          // Try to get customer name from a related record or use a placeholder
+          const firstPiutang = customerPiutang[0];
+          customer = {
+            id: customerId,
+            name: `Customer ${customerId.slice(-8)}`, // Show last 8 chars of ID
+            email: "",
+            phone: "",
+            type: "customer" as const,
+            storeId: store.id,
           };
-        })
-        .filter(
-          (item) =>
-            item &&
-            Array.isArray(item.piutangRecords) &&
-            item.piutangRecords.length > 0,
-        );
+        }
 
-      // Always include the store in grouped data, even if no customers with piutang
-      grouped[store.id] = customersWithPiutang;
+        const totalDebt = customerPiutang.reduce(
+          (sum, p) => sum + (p && p.amount ? parseFloat(p.amount) : 0),
+          0,
+        );
+        const totalPaid = customerPiutang.reduce(
+          (sum, p) =>
+            sum + (p && p.paidAmount ? parseFloat(p.paidAmount) : 0),
+          0,
+        );
+        const remainingDebt = totalDebt - totalPaid;
+
+        return {
+          customer,
+          piutangRecords: customerPiutang,
+          totalDebt,
+          totalPaid,
+          remainingDebt,
+        };
+      });
+
+      // Only include stores that have piutang records
+      if (customersWithPiutang.length > 0) {
+        grouped[store.id] = customersWithPiutang;
+      }
     });
 
     return grouped;
@@ -465,20 +498,28 @@ export default function PiutangPage() {
   // Calculate store-level summary statistics
   const storeSummaries = React.useMemo(() => {
     if (!piutangRecords || !stores) return [];
-    
-    return stores.map(store => {
-      const storeRecords = piutangRecords.filter(record => record.storeId === store.id);
-      const totalDebt = storeRecords.reduce((sum, record) => sum + parseFloat(record.amount), 0);
-      const totalPaid = storeRecords.reduce((sum, record) => sum + parseFloat(record.paidAmount || '0'), 0);
+
+    return stores.map((store) => {
+      const storeRecords = piutangRecords.filter(
+        (record) => record.storeId === store.id,
+      );
+      const totalDebt = storeRecords.reduce(
+        (sum, record) => sum + parseFloat(record.amount),
+        0,
+      );
+      const totalPaid = storeRecords.reduce(
+        (sum, record) => sum + parseFloat(record.paidAmount || "0"),
+        0,
+      );
       const remaining = totalDebt - totalPaid;
-      
+
       return {
         store,
         recordCount: storeRecords.length,
         totalDebt,
         totalPaid,
         remaining,
-        customers: new Set(storeRecords.map(r => r.customerId)).size
+        customers: new Set(storeRecords.map((r) => r.customerId)).size,
       };
     });
   }, [piutangRecords, stores]);
@@ -510,7 +551,10 @@ export default function PiutangPage() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100" data-testid={`text-store-name-${summary.store.id}`}>
+                  <h3
+                    className="font-semibold text-gray-900 dark:text-gray-100"
+                    data-testid={`text-store-name-${summary.store.id}`}
+                  >
                     {summary.store.name}
                   </h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -518,22 +562,28 @@ export default function PiutangPage() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg font-semibold text-red-600" data-testid={`text-remaining-debt-${summary.store.id}`}>
+                  <p
+                    className="text-lg font-semibold text-red-600"
+                    data-testid={`text-remaining-debt-${summary.store.id}`}
+                  >
                     {formatRupiah(summary.remaining)}
                   </p>
-                  <p className="text-sm text-gray-500">
-                    Outstanding debt
-                  </p>
+                  <p className="text-sm text-gray-500">Outstanding debt</p>
                 </div>
               </div>
               <div className="mt-2 pt-2 border-t border-gray-100">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Total Debt:</span>
-                  <span data-testid={`text-total-debt-${summary.store.id}`}>{formatRupiah(summary.totalDebt)}</span>
+                  <span data-testid={`text-total-debt-${summary.store.id}`}>
+                    {formatRupiah(summary.totalDebt)}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Total Paid:</span>
-                  <span className="text-green-600" data-testid={`text-total-paid-${summary.store.id}`}>
+                  <span
+                    className="text-green-600"
+                    data-testid={`text-total-paid-${summary.store.id}`}
+                  >
                     {formatRupiah(summary.totalPaid)}
                   </span>
                 </div>
@@ -808,80 +858,6 @@ export default function PiutangPage() {
             </DialogContent>
           </Dialog>
         </div>
-      </div>
-
-      {/* Debug: Raw Piutang Data Display */}
-      <div className="mb-8">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Receipt className="h-4 w-4" />
-              🚀 All Piutang Records (Raw Data)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xs font-mono bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto">
-              <div className="text-green-600 font-bold mb-2">
-                📊 Total Records: {piutangRecords.length}
-              </div>
-              <div className="text-blue-600 font-bold mb-2">
-                🎯 QRIS Records:{" "}
-                {
-                  piutangRecords.filter((p) => p.description.includes("QRIS"))
-                    .length
-                }
-              </div>
-              <div className="text-purple-600 font-bold mb-4">
-                👤 Unique Customers:{" "}
-                {[...new Set(piutangRecords.map((p) => p.customerId))].length}
-              </div>
-
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {piutangRecords.map((p, idx) => (
-                  <div
-                    key={p.id}
-                    className="border-l-2 border-blue-300 pl-2 py-1 text-xs"
-                  >
-                    <div className="text-orange-600 font-bold">
-                      #{idx + 1} - {p.id}
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Customer ID:</span>{" "}
-                      <span className="text-blue-600">{p.customerId}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Store:</span>{" "}
-                      <span className="text-green-600">{p.storeId}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Amount:</span>{" "}
-                      <span className="text-red-600">
-                        {formatRupiah(parseFloat(p.amount))}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Status:</span>{" "}
-                      <span className="text-purple-600">{p.status}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Description:</span>{" "}
-                      <span className="text-gray-700">{p.description}</span>
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      Created: {new Date(p.createdAt).toLocaleString()}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {piutangRecords.length === 0 && (
-                <div className="text-center text-gray-500 py-8">
-                  No piutang records found
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Store Categories and Customer Debt List */}
