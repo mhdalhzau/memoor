@@ -2173,6 +2173,21 @@ export function registerRoutes(app: Express): Server {
         }
       }
 
+      // 🎯 CRITICAL: Handle QRIS piutang creation for totalQris (if not already handled via income entries)
+      if (newSales.totalQris && Number(newSales.totalQris) > 0) {
+        try {
+          console.log(`🎯 DEBUG: Processing totalQris ${newSales.totalQris} for store ${targetStoreId}`);
+          
+          // Use the main QRIS piutang method for sales records
+          await storage.createQrisPiutangForManager(newSales);
+          
+          console.log(`✅ DEBUG: Successfully created QRIS piutang for totalQris ${newSales.totalQris}`);
+        } catch (qrisError) {
+          console.error('❌ DEBUG: Failed to create QRIS piutang for totalQris:', qrisError);
+          // Don't fail the entire import if QRIS piutang creation fails
+        }
+      }
+
       res.json({
         success: true,
         message: "Sales data imported successfully from text with attendance and cashflow entries",
@@ -5589,17 +5604,7 @@ export function registerRoutes(app: Express): Server {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
       const { storeId, customerId, page, limit } = req.query;
-      const targetStoreId = storeId ? parseInt(storeId as string) : await getUserFirstStoreId(req.user);
-
-      if (!targetStoreId) {
-        return res.status(400).json({ message: "Store ID is required" });
-      }
-
-      // Verify store access
-      if (!(await hasStoreAccess(req.user, targetStoreId))) {
-        return res.status(403).json({ message: "You don't have access to this store" });
-      }
-
+      
       // Parse pagination parameters with defaults and limits
       const pageNum = page ? Math.max(1, parseInt(page as string)) : 1;
       const limitNum = limit ? Math.min(100, Math.max(1, parseInt(limit as string))) : 50; // Max 100, min 1, default 50
@@ -5625,11 +5630,71 @@ export function registerRoutes(app: Express): Server {
           page: 1,
           limit: piutangRecords.length
         });
-      } else {
-        // Use pagination for store queries to prevent timeouts
+      } else if (storeId) {
+        // Specific store requested
+        const targetStoreId = parseInt(storeId as string);
+        
+        // Verify store access
+        if (!(await hasStoreAccess(req.user, targetStoreId))) {
+          return res.status(403).json({ message: "You don't have access to this store" });
+        }
+        
+        // Use pagination for single store queries
         const result = await storage.getPiutangByStore(targetStoreId, pageNum, limitNum);
         res.json({
           ...result,
+          page: pageNum,
+          limit: limitNum
+        });
+      } else {
+        // No specific store requested - get piutang from all accessible stores
+        const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+        
+        if (accessibleStoreIds.length === 0) {
+          return res.json({
+            data: [],
+            total: 0,
+            hasMore: false,
+            page: pageNum,
+            limit: limitNum
+          });
+        }
+        
+        // Get piutang from all accessible stores
+        let allPiutangRecords: any[] = [];
+        let totalRecords = 0;
+        
+        for (const storeId of accessibleStoreIds) {
+          try {
+            // Get all records from this store (without pagination to merge properly)
+            const storeResult = await storage.getPiutangByStore(storeId);
+            allPiutangRecords.push(...storeResult.data);
+            // Note: we can't use storeResult.total for totalRecords calculation 
+            // since it represents paginated total, not actual total
+          } catch (error) {
+            console.error(`Error fetching piutang from store ${storeId}:`, error);
+            // Continue with other stores if one fails
+          }
+        }
+        
+        // Sort all records by creation date (newest first)
+        allPiutangRecords.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        
+        // Calculate total before pagination
+        totalRecords = allPiutangRecords.length;
+        
+        // Apply pagination to merged results
+        const startIndex = (pageNum - 1) * limitNum;
+        const endIndex = startIndex + limitNum;
+        const paginatedRecords = allPiutangRecords.slice(startIndex, endIndex);
+        
+        // Calculate if there are more records
+        const hasMore = endIndex < totalRecords;
+        
+        res.json({
+          data: paginatedRecords,
+          total: totalRecords,
+          hasMore: hasMore,
           page: pageNum,
           limit: limitNum
         });

@@ -1503,17 +1503,22 @@ export class DatabaseStorage implements IStorage {
 
   async createQrisPiutangForManager(salesRecord: Sales): Promise<void> {
     try {
+      console.log(`🎯 DEBUG: createQrisPiutangForManager called for store ${salesRecord.storeId}, QRIS amount: ${salesRecord.totalQris}`);
+      
       if (!salesRecord.totalQris || Number(salesRecord.totalQris) <= 0) {
+        console.log(`❌ DEBUG: No QRIS amount or amount <= 0, skipping`);
         return;
       }
 
       // Find manager user and create/get corresponding customer record
+      console.log(`🔍 DEBUG: Looking for fixed manager customer for store ${salesRecord.storeId}`);
       const managerCustomer = await this.findOrCreateCustomerForManagerUser(salesRecord.storeId);
       if (!managerCustomer) {
         console.warn('No manager user found for QRIS piutang - skipping QRIS piutang creation');
         return;
       }
 
+      console.log(`✅ DEBUG: Found manager customer: ${managerCustomer.name} (ID: ${managerCustomer.id})`);
       const qrisAmount = Number(salesRecord.totalQris);
 
       // Create piutang record for FULL QRIS amount to manager customer record
