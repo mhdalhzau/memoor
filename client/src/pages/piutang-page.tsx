@@ -706,7 +706,6 @@ export default function PiutangPage() {
         </div>
       </div>
 
-
       {/* Debug: Raw Piutang Data Display */}
       <div className="mb-8">
         <Card>
@@ -722,26 +721,55 @@ export default function PiutangPage() {
                 📊 Total Records: {piutangRecords.length}
               </div>
               <div className="text-blue-600 font-bold mb-2">
-                🎯 QRIS Records: {piutangRecords.filter(p => p.description.includes('QRIS')).length}
+                🎯 QRIS Records:{" "}
+                {
+                  piutangRecords.filter((p) => p.description.includes("QRIS"))
+                    .length
+                }
               </div>
               <div className="text-purple-600 font-bold mb-4">
-                👤 Unique Customers: {[...new Set(piutangRecords.map(p => p.customerId))].length}
+                👤 Unique Customers:{" "}
+                {[...new Set(piutangRecords.map((p) => p.customerId))].length}
               </div>
-              
+
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {piutangRecords.map((p, idx) => (
-                  <div key={p.id} className="border-l-2 border-blue-300 pl-2 py-1 text-xs">
-                    <div className="text-orange-600 font-bold">#{idx + 1} - {p.id}</div>
-                    <div><span className="text-gray-500">Customer ID:</span> <span className="text-blue-600">{p.customerId}</span></div>
-                    <div><span className="text-gray-500">Store:</span> <span className="text-green-600">{p.storeId}</span></div>
-                    <div><span className="text-gray-500">Amount:</span> <span className="text-red-600">{formatRupiah(parseFloat(p.amount))}</span></div>
-                    <div><span className="text-gray-500">Status:</span> <span className="text-purple-600">{p.status}</span></div>
-                    <div><span className="text-gray-500">Description:</span> <span className="text-gray-700">{p.description}</span></div>
-                    <div className="text-xs text-gray-400">Created: {new Date(p.createdAt).toLocaleString()}</div>
+                  <div
+                    key={p.id}
+                    className="border-l-2 border-blue-300 pl-2 py-1 text-xs"
+                  >
+                    <div className="text-orange-600 font-bold">
+                      #{idx + 1} - {p.id}
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Customer ID:</span>{" "}
+                      <span className="text-blue-600">{p.customerId}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Store:</span>{" "}
+                      <span className="text-green-600">{p.storeId}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Amount:</span>{" "}
+                      <span className="text-red-600">
+                        {formatRupiah(parseFloat(p.amount))}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Status:</span>{" "}
+                      <span className="text-purple-600">{p.status}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Description:</span>{" "}
+                      <span className="text-gray-700">{p.description}</span>
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      Created: {new Date(p.createdAt).toLocaleString()}
+                    </div>
                   </div>
                 ))}
               </div>
-              
+
               {piutangRecords.length === 0 && (
                 <div className="text-center text-gray-500 py-8">
                   No piutang records found
@@ -761,7 +789,7 @@ export default function PiutangPage() {
               .flatMap(([storeId, customers]) => {
                 const store = stores.find((s) => s.id === parseInt(storeId));
                 if (!store) return [];
-                return customers.map(item => ({ ...item, store }));
+                return customers.map((item) => ({ ...item, store }));
               })
               .map((item) => (
                 <Card
@@ -769,193 +797,185 @@ export default function PiutangPage() {
                   className="overflow-hidden"
                   data-testid={`card-customer-${item.customer.id}`}
                 >
-                        <Collapsible
-                          open={expandedCustomers.has(item.customer.id)}
-                          onOpenChange={() =>
-                            toggleCustomerExpansion(item.customer.id)
-                          }
-                        >
-                          <CollapsibleTrigger asChild>
-                            <CardHeader className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                  <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                                    <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                  <Collapsible
+                    open={expandedCustomers.has(item.customer.id)}
+                    onOpenChange={() =>
+                      toggleCustomerExpansion(item.customer.id)
+                    }
+                  >
+                    <CollapsibleTrigger asChild>
+                      <CardHeader className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                              <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3
+                                  className="text-lg font-semibold text-gray-900 dark:text-gray-100"
+                                  data-testid={`text-customer-name-${item.customer.id}`}
+                                >
+                                  {item.customer.name}
+                                </h3>
+                                {getCustomerTypeBadge(item.customer)}
+                                {getInternalWarningBadge(
+                                  item.customer,
+                                  item.remainingDebt,
+                                )}
+                              </div>
+                              <div className="mb-2">
+                                <Badge
+                                  variant="outline"
+                                  className="bg-purple-50 text-purple-700 border-purple-300"
+                                  data-testid={`badge-store-${item.customer.id}`}
+                                >
+                                  {item.store.name} ({item.store.id})
+                                </Badge>
+                              </div>
+                              <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
+                                <span
+                                  data-testid={`text-total-debt-${item.customer.id}`}
+                                >
+                                  Total Debt: {formatRupiah(item.totalDebt)}
+                                </span>
+                                <span
+                                  data-testid={`text-remaining-debt-${item.customer.id}`}
+                                >
+                                  Remaining: {formatRupiah(item.remainingDebt)}
+                                </span>
+                              </div>
+                              {(isInternalEmployee(item.customer) ||
+                                isUserBasedCustomer(item.customer)) &&
+                                item.remainingDebt > 0 && (
+                                  <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
+                                    <p className="text-sm text-orange-800 flex items-center gap-1">
+                                      <AlertTriangle className="h-4 w-4" />
+                                      <strong>Warning:</strong> This is{" "}
+                                      {isUserBasedCustomer(item.customer)
+                                        ? "a user account"
+                                        : "an internal employee"}{" "}
+                                      with outstanding debt. Please follow
+                                      company policy for{" "}
+                                      {isUserBasedCustomer(item.customer)
+                                        ? "user account"
+                                        : "employee"}{" "}
+                                      receivables.
+                                    </p>
                                   </div>
-                                  <div>
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <h3
-                                        className="text-lg font-semibold text-gray-900 dark:text-gray-100"
-                                        data-testid={`text-customer-name-${item.customer.id}`}
-                                      >
-                                        {item.customer.name}
-                                      </h3>
-                                      {getCustomerTypeBadge(item.customer)}
-                                      {getInternalWarningBadge(
-                                        item.customer,
-                                        item.remainingDebt,
-                                      )}
-                                    </div>
-                                    <div className="mb-2">
-                                      <Badge
-                                        variant="outline"
-                                        className="bg-purple-50 text-purple-700 border-purple-300"
-                                        data-testid={`badge-store-${item.customer.id}`}
-                                      >
-                                        {item.store.name} ({item.store.id})
-                                      </Badge>
-                                    </div>
-                                    <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
-                                      <span
-                                        data-testid={`text-total-debt-${item.customer.id}`}
-                                      >
-                                        Total Debt:{" "}
-                                        {formatRupiah(item.totalDebt)}
-                                      </span>
-                                      <span
-                                        data-testid={`text-remaining-debt-${item.customer.id}`}
-                                      >
-                                        Remaining:{" "}
-                                        {formatRupiah(item.remainingDebt)}
-                                      </span>
-                                    </div>
-                                    {(isInternalEmployee(item.customer) ||
-                                      isUserBasedCustomer(item.customer)) &&
-                                      item.remainingDebt > 0 && (
-                                        <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
-                                          <p className="text-sm text-orange-800 flex items-center gap-1">
-                                            <AlertTriangle className="h-4 w-4" />
-                                            <strong>Warning:</strong> This is{" "}
-                                            {isUserBasedCustomer(item.customer)
-                                              ? "a user account"
-                                              : "an internal employee"}{" "}
-                                            with outstanding debt. Please follow
-                                            company policy for{" "}
-                                            {isUserBasedCustomer(item.customer)
-                                              ? "user account"
-                                              : "employee"}{" "}
-                                            receivables.
-                                          </p>
-                                        </div>
-                                      )}
+                                )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={
+                                item.remainingDebt > 0
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                            >
+                              {item.piutangRecords.length} Record
+                              {item.piutangRecords.length !== 1 ? "s" : ""}
+                            </Badge>
+                            {expandedCustomers.has(item.customer.id) ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                          </div>
+                        </div>
+                      </CardHeader>
+                    </CollapsibleTrigger>
+
+                    <CollapsibleContent>
+                      <CardContent className="pt-0">
+                        <div className="space-y-3">
+                          {item.piutangRecords.map((piutang) => {
+                            const remainingAmount =
+                              calculateRemainingDebt(piutang);
+                            return (
+                              <div
+                                key={piutang.id}
+                                className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800"
+                                data-testid={`card-piutang-${piutang.id}`}
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <Receipt className="h-4 w-4 text-gray-500" />
+                                    <span
+                                      className="font-medium"
+                                      data-testid={`text-description-${piutang.id}`}
+                                    >
+                                      {piutang.description}
+                                    </span>
+                                    {getStatusBadge(piutang)}
                                   </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge
-                                    variant={
-                                      item.remainingDebt > 0
-                                        ? "destructive"
-                                        : "secondary"
-                                    }
-                                  >
-                                    {item.piutangRecords.length} Record
-                                    {item.piutangRecords.length !== 1
-                                      ? "s"
-                                      : ""}
-                                  </Badge>
-                                  {expandedCustomers.has(item.customer.id) ? (
-                                    <ChevronDown className="h-4 w-4" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4" />
+                                  {remainingAmount > 0 && (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => openPaymentModal(piutang)}
+                                      data-testid={`button-pay-${piutang.id}`}
+                                    >
+                                      Make Payment
+                                    </Button>
                                   )}
                                 </div>
-                              </div>
-                            </CardHeader>
-                          </CollapsibleTrigger>
 
-                          <CollapsibleContent>
-                            <CardContent className="pt-0">
-                              <div className="space-y-3">
-                                {item.piutangRecords.map((piutang) => {
-                                  const remainingAmount =
-                                    calculateRemainingDebt(piutang);
-                                  return (
-                                    <div
-                                      key={piutang.id}
-                                      className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800"
-                                      data-testid={`card-piutang-${piutang.id}`}
-                                    >
-                                      <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-2">
-                                          <Receipt className="h-4 w-4 text-gray-500" />
-                                          <span
-                                            className="font-medium"
-                                            data-testid={`text-description-${piutang.id}`}
-                                          >
-                                            {piutang.description}
-                                          </span>
-                                          {getStatusBadge(piutang)}
-                                        </div>
-                                        {remainingAmount > 0 && (
-                                          <Button
-                                            size="sm"
-                                            onClick={() =>
-                                              openPaymentModal(piutang)
-                                            }
-                                            data-testid={`button-pay-${piutang.id}`}
-                                          >
-                                            Make Payment
-                                          </Button>
+                                <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400">
+                                  <div>
+                                    <p>
+                                      Total Amount:{" "}
+                                      <span
+                                        className="font-medium text-gray-900 dark:text-gray-100"
+                                        data-testid={`text-total-amount-${piutang.id}`}
+                                      >
+                                        {formatRupiah(
+                                          parseFloat(piutang.amount),
                                         )}
-                                      </div>
-
-                                      <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400">
-                                        <div>
-                                          <p>
-                                            Total Amount:{" "}
-                                            <span
-                                              className="font-medium text-gray-900 dark:text-gray-100"
-                                              data-testid={`text-total-amount-${piutang.id}`}
-                                            >
-                                              {formatRupiah(
-                                                parseFloat(piutang.amount),
-                                              )}
-                                            </span>
-                                          </p>
-                                          <p>
-                                            Paid Amount:{" "}
-                                            <span
-                                              className="font-medium text-green-600"
-                                              data-testid={`text-paid-amount-${piutang.id}`}
-                                            >
-                                              {formatRupiah(
-                                                parseFloat(
-                                                  piutang.paidAmount || "0",
-                                                ),
-                                              )}
-                                            </span>
-                                          </p>
-                                        </div>
-                                        <div>
-                                          <p>
-                                            Remaining:{" "}
-                                            <span
-                                              className="font-medium text-red-600"
-                                              data-testid={`text-remaining-amount-${piutang.id}`}
-                                            >
-                                              {formatRupiah(remainingAmount)}
-                                            </span>
-                                          </p>
-                                          {piutang.dueDate && (
-                                            <p className="flex items-center gap-1">
-                                              <Calendar className="h-3 w-3" />
-                                              Due:{" "}
-                                              {new Date(
-                                                piutang.dueDate,
-                                              ).toLocaleDateString()}
-                                            </p>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
+                                      </span>
+                                    </p>
+                                    <p>
+                                      Paid Amount:{" "}
+                                      <span
+                                        className="font-medium text-green-600"
+                                        data-testid={`text-paid-amount-${piutang.id}`}
+                                      >
+                                        {formatRupiah(
+                                          parseFloat(piutang.paidAmount || "0"),
+                                        )}
+                                      </span>
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p>
+                                      Remaining:{" "}
+                                      <span
+                                        className="font-medium text-red-600"
+                                        data-testid={`text-remaining-amount-${piutang.id}`}
+                                      >
+                                        {formatRupiah(remainingAmount)}
+                                      </span>
+                                    </p>
+                                    {piutang.dueDate && (
+                                      <p className="flex items-center gap-1">
+                                        <Calendar className="h-3 w-3" />
+                                        Due:{" "}
+                                        {new Date(
+                                          piutang.dueDate,
+                                        ).toLocaleDateString()}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                            </CardContent>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      </Card>
-                ))}
+                            );
+                          })}
+                        </div>
+                      </CardContent>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </Card>
+              ))}
           </div>
         ) : (
           <Card>
