@@ -314,9 +314,8 @@ export default function PiutangPage() {
             item.piutangRecords.length > 0,
         );
 
-      if (customersWithPiutang.length > 0) {
-        grouped[store.id] = customersWithPiutang;
-      }
+      // Always include the store in grouped data, even if no customers with piutang
+      grouped[store.id] = customersWithPiutang;
     });
 
     return grouped;
