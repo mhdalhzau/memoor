@@ -1406,36 +1406,38 @@ export class DatabaseStorage implements IStorage {
   // Find actual manager user and create/get corresponding customer record
   async findOrCreateCustomerForManagerUser(storeId: number): Promise<Customer | undefined> {
     try {
-      // PRIORITY: First check for the specific user ID that should be the default QRIS handler
-      const defaultQrisUserId = '40603306-34ce-4e7b-845d-32c2fc4aee93';
-      const defaultQrisUser = await this.getUser(defaultQrisUserId);
+      let managerUser: User | undefined;
       
-      let managerUser: User;
-      if (defaultQrisUser) {
-        managerUser = defaultQrisUser;
-        console.log(`Using default QRIS user ${managerUser.name} for QRIS piutang in store ${storeId}`);
-      } else {
-        // Fallback: try to find manager or admin users assigned to this store
-        const storeUsers = await db.select({
-          userId: userStores.userId,
-          user: users
-        })
-        .from(userStores)
-        .innerJoin(users, eq(userStores.userId, users.id))
-        .where(
-          and(
-            eq(userStores.storeId, storeId),
-            or(
-              eq(users.role, 'manager'),
-              eq(users.role, 'administrasi')
-            )
+      // PRIORITY 1: First try to find manager or admin users assigned to this specific store
+      const storeUsers = await db.select({
+        userId: userStores.userId,
+        user: users
+      })
+      .from(userStores)
+      .innerJoin(users, eq(userStores.userId, users.id))
+      .where(
+        and(
+          eq(userStores.storeId, storeId),
+          or(
+            eq(users.role, 'manager'),
+            eq(users.role, 'administrasi')
           )
-        );
+        )
+      );
 
-        if (storeUsers.length > 0) {
-          managerUser = storeUsers[0].user;
+      if (storeUsers.length > 0) {
+        managerUser = storeUsers[0].user;
+        console.log(`✅ Using store-specific manager ${managerUser.name} for QRIS piutang in store ${storeId}`);
+      } else {
+        // PRIORITY 2: If no store-specific manager found, check for the default QRIS handler
+        const defaultQrisUserId = '40603306-34ce-4e7b-845d-32c2fc4aee93';
+        const defaultQrisUser = await this.getUser(defaultQrisUserId);
+        
+        if (defaultQrisUser) {
+          managerUser = defaultQrisUser;
+          console.log(`⚠️ No store-specific manager found for store ${storeId}, using default QRIS user ${managerUser.name}`);
         } else {
-          // If no manager assigned to this store, find any manager/admin user
+          // PRIORITY 3: If default user not found, find any manager/admin user
           const anyManager = await db.select().from(users).where(
             or(
               eq(users.role, 'manager'),
@@ -1444,12 +1446,12 @@ export class DatabaseStorage implements IStorage {
           ).limit(1);
 
           if (anyManager.length === 0) {
-            console.warn(`No manager user found for store ${storeId} or in system`);
+            console.warn(`❌ No manager user found for store ${storeId} or in system`);
             return undefined;
           }
           
           managerUser = anyManager[0];
-          console.log(`Using general manager user ${managerUser.name} for QRIS piutang in store ${storeId}`);
+          console.log(`⚠️ Using fallback general manager ${managerUser.name} for QRIS piutang in store ${storeId}`);
         }
       }
 
