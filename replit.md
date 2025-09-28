@@ -44,6 +44,14 @@ This is a multi-role employee management system built with React, TypeScript, Ex
 ✅ **Improved Fallback System**: Enhanced manager user selection logic with proper store-specific priority and robust fallback mechanisms
 ✅ **System Integrity**: Each store now maintains its own manager customer records for QRIS transactions, eliminating cross-store data confusion
 
+## Manual Cashflow & Cascading Deletes Implementation (September 28, 2025)
+✅ **Manual Cashflow Control**: Removed automatic cashflow creation when sales records are created - users now have full control over manual cashflow input
+✅ **Cascading Delete Architecture**: Implemented proper data relationships with salesId linking between sales, cashflow, and piutang records
+✅ **Atomic Transaction Deletes**: Enhanced deleteSales method to use database transactions ensuring all related records (cashflow + piutang) are deleted together
+✅ **QRIS Integration Enhancement**: Updated createQrisPiutangForManager to properly link piutang records to sales records via salesId field
+✅ **Data Integrity**: Prevents orphaned records and ensures clean deletion of related data across sales, cashflow, and piutang tables
+✅ **Schema Updates**: Added salesId field to piutang table schema for proper relational integrity (pending database schema sync)
+
 ✅ MySQL Database Setup Successfully Completed
 Your GitHub-imported business management system now has a fully functional MySQL database setup with comprehensive backup capabilities and data access restrictions. Here's what was accomplished:
 
