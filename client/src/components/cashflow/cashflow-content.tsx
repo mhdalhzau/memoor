@@ -392,13 +392,14 @@ export default function CashflowContent() {
   const filteredCustomers =
     customerSearchTerm.length > 0 ? storeFilteredSearchResults : storeFilteredCustomers;
 
-  // Query for all cashflow data to calculate grand totals
+  // Query for store-specific cashflow data to calculate grand totals for current store
   const { data: allCashflowData = [] } = useQuery<Cashflow[]>({
-    queryKey: ["/api/cashflow"],
+    queryKey: ["/api/cashflow", { storeId: currentStoreId, scope: "totals" }],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/cashflow");
+      const res = await apiRequest("GET", `/api/cashflow?storeId=${currentStoreId}`);
       return await res.json();
     },
+    enabled: !!currentStoreId,
   });
 
   // Calculate totals for each store and overall
@@ -517,7 +518,9 @@ export default function CashflowContent() {
       queryClient.invalidateQueries({
         queryKey: ["/api/cashflow", { storeId: currentStoreId }],
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/cashflow"] });
+      queryClient.invalidateQueries({ 
+        queryKey: ["/api/cashflow", { storeId: currentStoreId, scope: "totals" }] 
+      });
     },
     onError: (error: Error) => {
       console.error("🔥 CASHFLOW MUTATION FAILED:", error);
