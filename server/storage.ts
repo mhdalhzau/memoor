@@ -792,36 +792,9 @@ export class DatabaseStorage implements IStorage {
       const result = await db.select().from(sales).where(eq(sales.id, salesId)).limit(1);
       const createdSales = result[0];
       
-      // Auto-create cashflow records and QRIS integration
-      if (createdSales && salesData.totalSales && parseFloat(salesData.totalSales.toString()) > 0) {
-        try {
-          // Create cashflow record for cash sales (if any)
-          if (salesData.totalCash && parseFloat(salesData.totalCash.toString()) > 0) {
-            await this.createCashflow({
-              storeId: createdSales.storeId,
-              category: 'Income',
-              type: 'Sales',
-              amount: salesData.totalCash,
-              description: `Cash Sales ${new Date(createdSales.date).toISOString().split('T')[0]}`,
-              date: createdSales.date
-            }, createdSales.userId || undefined);
-          }
-
-          // Handle QRIS payments - create piutang for manager and QRIS fee expense
-          if (salesData.totalQris && parseFloat(salesData.totalQris.toString()) > 0) {
-            try {
-              // Create piutang for QRIS amount to manager and QRIS fee expense
-              await this.createQrisPiutangForManager(createdSales);
-            } catch (qrisError) {
-              console.error('Error creating QRIS piutang and expense:', qrisError);
-              // Continue with other cashflow operations
-            }
-          }
-        } catch (cashflowError) {
-          console.error('Error creating automatic cashflow records:', cashflowError);
-          // Don't throw error, sales record is more important
-        }
-      }
+      // REMOVED: Automatic cashflow creation - will be input manually
+      // Note: Sales data is now recorded without automatic cashflow integration
+      // Cashflow and QRIS piutang must be managed manually through the cashflow interface
 
       return createdSales;
     } catch (error) {
@@ -832,13 +805,21 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSales(id: string): Promise<void> {
     try {
-      // First delete related cashflow entries to implement cascading delete
-      await this.deleteCashflowBySalesId(id);
+      // Use transaction to ensure atomic cascading delete
+      await db.transaction(async (tx) => {
+        // First delete related cashflow entries to implement cascading delete
+        await tx.delete(cashflow).where(eq(cashflow.salesId, id));
+        
+        // Delete related piutang entries to implement cascading delete
+        await tx.delete(piutang).where(eq(piutang.salesId, id));
+        
+        // Then delete the sales record
+        await tx.delete(sales).where(eq(sales.id, id));
+      });
       
-      // Then delete the sales record
-      await db.delete(sales).where(eq(sales.id, id));
+      console.log(`✅ Successfully deleted sales record ${id} with cascading deletes for related cashflow and piutang records`);
     } catch (error) {
-      console.error('Error deleting sales:', error);
+      console.error('Error deleting sales with cascading deletes:', error);
       throw error;
     }
   }
@@ -906,6 +887,15 @@ export class DatabaseStorage implements IStorage {
       await db.delete(cashflow).where(eq(cashflow.salesId, salesId));
     } catch (error) {
       console.error('Error deleting cashflow by salesId:', error);
+      throw error;
+    }
+  }
+
+  async deletePiutangBySalesId(salesId: string): Promise<void> {
+    try {
+      await db.delete(piutang).where(eq(piutang.salesId, salesId));
+    } catch (error) {
+      console.error('Error deleting piutang by salesId:', error);
       throw error;
     }
   }
@@ -1527,6 +1517,7 @@ export class DatabaseStorage implements IStorage {
         id: randomUUID(),
         customerId: managerCustomer.id, // Use manager's customer record ID
         storeId: salesRecord.storeId,
+        salesId: salesRecord.id, // Link to sales record for cascading delete
         amount: qrisAmount.toString(),
         description: `QRIS payment from sales ${new Date(salesRecord.date).toISOString().split('T')[0]} - awaiting transfer to store`,
         status: "pending",

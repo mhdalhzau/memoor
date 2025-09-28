@@ -210,6 +210,7 @@ export const piutang = mysqlTable("piutang", {
   id: varchar("piutang_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   customerId: varchar("customer_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
+  salesId: varchar("sales_id", { length: 36 }), // Link to sales table
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
   description: text("description").notNull(),
   dueDate: timestamp("due_date"),
