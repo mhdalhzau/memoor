@@ -61,7 +61,7 @@ export const attendance = mysqlTable("attendance", {
   checkOut: text("check_out"),
   shift: text("shift"), // auto-detected: 'pagi', 'siang', 'malam'
   latenessMinutes: int("lateness_minutes").default(0), // telat berapa menit
-  earlyArrivalMinutes: int("early_arrival_minutes").default(0), // datang awal berapa menit
+  // earlyArrivalMinutes: int("early_arrival_minutes").default(0), // datang awal berapa menit - TEMPORARY DISABLED
   overtimeMinutes: int("overtime_minutes").default(0), // lembur berapa menit
   breakDuration: int("break_duration").default(0), // in minutes
   overtime: decimal("overtime", { precision: 4, scale: 2 }).default("0"), // in hours (kept for compatibility)
