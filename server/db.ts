@@ -14,7 +14,8 @@ const pool = mysql.createPool({
   uri: databaseUrl,
   connectionLimit: 25,
   acquireTimeout: 30000,
-  timeout: 2000,
+  connectTimeout: 2000,
+  ssl: databaseUrl.includes('ssl=true') ? { rejectUnauthorized: false } : false,
 });
 
 // Test database connection
