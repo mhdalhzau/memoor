@@ -93,21 +93,22 @@ const cashflowSchema = z
       errorMap: () => ({ message: "Please select a type" }),
     }),
     amount: z.coerce.number().positive("Amount must be positive").transform(String),
-    description: z.string().optional(),
+    description: z.string().optional().transform(val => val === "" ? undefined : val),
     storeId: z.coerce.number(),
     paymentStatus: z.enum(["lunas", "belum_lunas"]).optional(),
-    customerId: z.string().optional(),
+    customerId: z.string().optional().transform(val => val === "" ? undefined : val),
+    piutangId: z.string().optional().transform(val => val === "" ? undefined : val),
 
-    // Additional fields for Pembelian Minyak - transform numbers to strings
-    jumlahGalon: z.coerce.number().min(0).optional().transform(val => val?.toString()),
-    pajakOngkos: z.coerce.number().min(0).optional().transform(val => val?.toString()),
-    pajakTransfer: z.coerce.number().min(0).optional().transform(val => val?.toString()),
-    totalPengeluaran: z.coerce.number().min(0).optional().transform(val => val?.toString()),
+    // Additional fields for Pembelian Minyak - transform numbers to strings and handle empty values
+    jumlahGalon: z.coerce.number().min(0).optional().transform(val => val === 0 ? undefined : val?.toString()),
+    pajakOngkos: z.coerce.number().min(0).optional().transform(val => val === 0 ? undefined : val?.toString()),
+    pajakTransfer: z.coerce.number().min(0).optional().transform(val => val === 0 ? undefined : val?.toString()),
+    totalPengeluaran: z.coerce.number().min(0).optional().transform(val => val === 0 ? undefined : val?.toString()),
 
-    // Additional fields for Transfer Rekening - transform numbers to strings
+    // Additional fields for Transfer Rekening - transform numbers to strings and handle empty values  
     konter: z.enum(["Dia store", "manual"]).optional(),
-    pajakTransferRekening: z.coerce.number().min(0).optional().transform(val => val?.toString()),
-    hasil: z.coerce.number().min(0).optional().transform(val => val?.toString()),
+    pajakTransferRekening: z.coerce.number().min(0).optional().transform(val => val === 0 ? undefined : val?.toString()),
+    hasil: z.coerce.number().min(0).optional().transform(val => val === 0 ? undefined : val?.toString()),
   })
   .superRefine((data, ctx) => {
     // Validate customer for unpaid debt
@@ -162,6 +163,7 @@ export default function CashflowContent() {
       description: "",
       paymentStatus: "lunas",
       customerId: "",
+      piutangId: "",
       jumlahGalon: 0,
       pajakOngkos: 0,
       pajakTransfer: 2500,
