@@ -165,10 +165,16 @@ export default function CashflowContent() {
 
   // Set default tab to first available store when stores are loaded
   useEffect(() => {
+    console.log("🏪 STORES EFFECT TRIGGERED");
+    console.log("📊 Stores:", stores);
+    console.log("🔖 Current Active Tab:", activeTab);
+    
     if (stores.length > 0 && !activeTab) {
       const firstStoreTab = `store-${stores[0].id}`;
+      console.log("🎯 Setting default tab:", firstStoreTab);
       setActiveTab(firstStoreTab);
       form.setValue("storeId", stores[0].id);
+      console.log("✅ Default store ID set:", stores[0].id);
     }
   }, [stores, activeTab, form]);
 
@@ -184,9 +190,17 @@ export default function CashflowContent() {
 
   // Update form storeId when tab changes
   const handleTabChange = (value: string) => {
+    console.log("🔄 TAB CHANGE TRIGGERED");
+    console.log("📋 Previous Tab:", activeTab);
+    console.log("🎯 New Tab:", value);
+    
     setActiveTab(value);
     const storeId = parseInt(value.replace("store-", ""));
+    console.log("🏪 Extracted Store ID:", storeId);
+    
     form.setValue("storeId", storeId);
+    console.log("✅ Form Store ID updated to:", storeId);
+    console.log("📊 Current form values:", form.getValues());
   };
 
   const watchType = form.watch("type");
@@ -451,25 +465,52 @@ export default function CashflowContent() {
 
   const submitCashflowMutation = useMutation({
     mutationFn: async (data: CashflowData) => {
-      const res = await apiRequest("POST", "/api/cashflow", data);
-      return await res.json();
+      console.log("🚀 CASHFLOW MUTATION STARTED");
+      console.log("📝 Data being sent:", JSON.stringify(data, null, 2));
+      console.log("🏪 Current Store ID:", currentStoreId);
+      console.log("📊 Active Tab:", activeTab);
+      
+      try {
+        const res = await apiRequest("POST", "/api/cashflow", data);
+        console.log("✅ API Response Status:", res.status);
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error("❌ API Error Response:", errorText);
+          throw new Error(`API Error ${res.status}: ${errorText}`);
+        }
+        
+        const result = await res.json();
+        console.log("📥 API Response Data:", result);
+        return result;
+      } catch (error) {
+        console.error("💥 CASHFLOW MUTATION ERROR:", error);
+        throw error;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("🎉 CASHFLOW MUTATION SUCCESS:", data);
       toast({
-        title: "Success",
+        title: "✅ Success",
         description: "Cashflow entry saved successfully!",
       });
       form.reset();
       queryClient.invalidateQueries({
         queryKey: ["/api/cashflow", { storeId: currentStoreId }],
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/cashflow"] });
     },
     onError: (error: Error) => {
+      console.error("🔥 CASHFLOW MUTATION FAILED:", error);
+      console.error("📋 Error Stack:", error.stack);
       toast({
-        title: "Error",
-        description: error.message,
+        title: "❌ Error Cashflow",
+        description: `GAGAL SIMPAN: ${error.message}`,
         variant: "destructive",
       });
+      
+      // Show aggressive debugging alert
+      alert(`🚨 CASHFLOW ERROR ALERT 🚨\n\nError: ${error.message}\n\nCheck console for details!`);
     },
   });
 
@@ -501,7 +542,51 @@ export default function CashflowContent() {
   });
 
   const onSubmit = (data: CashflowData) => {
-    console.log("Payload Cashflow =>", JSON.stringify(data, null, 2));
+    console.log("🔥 CASHFLOW SUBMIT TRIGGERED!");
+    console.log("📋 Form Data:", JSON.stringify(data, null, 2));
+    console.log("🏪 Store ID Check:", data.storeId);
+    console.log("📊 Active Tab Check:", activeTab);
+    console.log("🏬 Current Store ID:", currentStoreId);
+    console.log("🔄 Mutation Status:", {
+      isLoading: submitCashflowMutation.isPending,
+      isError: submitCashflowMutation.isError,
+      error: submitCashflowMutation.error
+    });
+    
+    // Aggressive validation checks
+    if (!data.storeId) {
+      alert("🚨 ERROR: Store ID is missing!");
+      console.error("❌ Store ID validation failed:", data.storeId);
+      return;
+    }
+    
+    if (!data.amount || data.amount <= 0) {
+      alert("🚨 ERROR: Amount must be greater than 0!");
+      console.error("❌ Amount validation failed:", data.amount);
+      return;
+    }
+    
+    if (!data.category) {
+      alert("🚨 ERROR: Category is required!");
+      console.error("❌ Category validation failed:", data.category);
+      return;
+    }
+    
+    if (!data.type) {
+      alert("🚨 ERROR: Type is required!");
+      console.error("❌ Type validation failed:", data.type);
+      return;
+    }
+    
+    // Check form errors
+    const formErrors = form.formState.errors;
+    if (Object.keys(formErrors).length > 0) {
+      console.error("❌ FORM VALIDATION ERRORS:", formErrors);
+      alert(`🚨 FORM ERRORS:\n${JSON.stringify(formErrors, null, 2)}`);
+      return;
+    }
+    
+    console.log("✅ All validations passed, submitting...");
     submitCashflowMutation.mutate(data);
   };
 
@@ -1175,6 +1260,19 @@ export default function CashflowContent() {
                           className="w-full"
                           disabled={submitCashflowMutation.isPending}
                           data-testid="button-submit-cashflow"
+                          onClick={(e) => {
+                            console.log("🚨 SUBMIT BUTTON CLICKED (Store 1)");
+                            console.log("🔄 Button Event:", e);
+                            console.log("⚡ Is Disabled:", submitCashflowMutation.isPending);
+                            console.log("📋 Current Form Values:", form.getValues());
+                            console.log("❌ Form Errors:", form.formState.errors);
+                            console.log("✅ Form Valid:", form.formState.isValid);
+                            
+                            if (submitCashflowMutation.isPending) {
+                              alert("🚨 BUTTON DISABLED: Mutation is pending!");
+                              e.preventDefault();
+                            }
+                          }}
                         >
                           {submitCashflowMutation.isPending
                             ? "Adding..."
@@ -1802,6 +1900,19 @@ export default function CashflowContent() {
                         className="w-full"
                         disabled={submitCashflowMutation.isPending}
                         data-testid="button-submit-cashflow"
+                        onClick={(e) => {
+                          console.log("🚨 SUBMIT BUTTON CLICKED (Store 2)");
+                          console.log("🔄 Button Event:", e);
+                          console.log("⚡ Is Disabled:", submitCashflowMutation.isPending);
+                          console.log("📋 Current Form Values:", form.getValues());
+                          console.log("❌ Form Errors:", form.formState.errors);
+                          console.log("✅ Form Valid:", form.formState.isValid);
+                          
+                          if (submitCashflowMutation.isPending) {
+                            alert("🚨 BUTTON DISABLED: Mutation is pending!");
+                            e.preventDefault();
+                          }
+                        }}
                       >
                         {submitCashflowMutation.isPending
                           ? "Adding..."
