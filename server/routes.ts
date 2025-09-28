@@ -59,31 +59,27 @@ async function getAccessibleStoreIds(user: any): Promise<number[]> {
 }
 
 export function registerRoutes(app: Express): Server {
-  // MySQL Connection Health Check Middleware
-  const mysqlHealthCheck = async (req: any, res: any, next: any) => {
-    // Skip health check for database settings routes to allow testing new connections
-    const skipHealthCheck = req.originalUrl === '/api/settings/database' || 
-                           req.originalUrl === '/api/settings/database/test' ||
-                           req.originalUrl.startsWith('/api/backup/');
-    
-    if (skipHealthCheck) {
-      return next();
-    }
-    
+  // Database startup health check (one-time, not per request)
+  let databaseHealthy = false;
+  
+  // Test database connection on startup only
+  const initializeDatabaseHealth = async () => {
     try {
-      await ensureDatabaseConnection();
-      next();
+      const isHealthy = await testDatabaseConnection();
+      databaseHealthy = isHealthy;
+      if (databaseHealthy) {
+        console.log('✅ Database health check passed - MySQL connection verified');
+      } else {
+        console.warn('⚠️ Database health check failed - some features may not work');
+      }
     } catch (error) {
-      console.error('❌ MySQL connection failed:', error);
-      return res.status(503).json({ 
-        error: 'Database tidak terhubung',
-        message: 'Tidak dapat mengakses data tanpa koneksi MySQL yang stabil'
-      });
+      console.error('❌ Database initialization failed:', error);
+      databaseHealthy = false;
     }
   };
-
-  // Apply MySQL health check to all API routes
-  app.use('/api', mysqlHealthCheck);
+  
+  // Initialize database health on startup
+  initializeDatabaseHealth();
   // Initialize Google Sheets Service if credentials are available
   const initializeGoogleSheets = () => {
     try {
