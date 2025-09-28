@@ -1240,42 +1240,51 @@ export class DatabaseStorage implements IStorage {
   // Find actual manager user and create/get corresponding customer record
   async findOrCreateCustomerForManagerUser(storeId: number): Promise<Customer | undefined> {
     try {
-      // First, try to find manager or admin users assigned to this store
-      const storeUsers = await db.select({
-        userId: userStores.userId,
-        user: users
-      })
-      .from(userStores)
-      .innerJoin(users, eq(userStores.userId, users.id))
-      .where(
-        and(
-          eq(userStores.storeId, storeId),
-          or(
-            eq(users.role, 'manager'),
-            eq(users.role, 'administrasi')
-          )
-        )
-      );
-
+      // PRIORITY: First check for the specific user ID that should be the default QRIS handler
+      const defaultQrisUserId = '40603306-34ce-4e7b-845d-32c2fc4aee93';
+      const defaultQrisUser = await this.getUser(defaultQrisUserId);
+      
       let managerUser: User;
-      if (storeUsers.length > 0) {
-        managerUser = storeUsers[0].user;
+      if (defaultQrisUser) {
+        managerUser = defaultQrisUser;
+        console.log(`Using default QRIS user ${managerUser.name} for QRIS piutang in store ${storeId}`);
       } else {
-        // If no manager assigned to this store, find any manager/admin user
-        const anyManager = await db.select().from(users).where(
-          or(
-            eq(users.role, 'manager'),
-            eq(users.role, 'administrasi')
+        // Fallback: try to find manager or admin users assigned to this store
+        const storeUsers = await db.select({
+          userId: userStores.userId,
+          user: users
+        })
+        .from(userStores)
+        .innerJoin(users, eq(userStores.userId, users.id))
+        .where(
+          and(
+            eq(userStores.storeId, storeId),
+            or(
+              eq(users.role, 'manager'),
+              eq(users.role, 'administrasi')
+            )
           )
-        ).limit(1);
+        );
 
-        if (anyManager.length === 0) {
-          console.warn(`No manager user found for store ${storeId} or in system`);
-          return undefined;
+        if (storeUsers.length > 0) {
+          managerUser = storeUsers[0].user;
+        } else {
+          // If no manager assigned to this store, find any manager/admin user
+          const anyManager = await db.select().from(users).where(
+            or(
+              eq(users.role, 'manager'),
+              eq(users.role, 'administrasi')
+            )
+          ).limit(1);
+
+          if (anyManager.length === 0) {
+            console.warn(`No manager user found for store ${storeId} or in system`);
+            return undefined;
+          }
+          
+          managerUser = anyManager[0];
+          console.log(`Using general manager user ${managerUser.name} for QRIS piutang in store ${storeId}`);
         }
-        
-        managerUser = anyManager[0];
-        console.log(`Using general manager user ${managerUser.name} for QRIS piutang in store ${storeId}`);
       }
 
       // Check if customer record already exists for this manager user
@@ -1380,6 +1389,92 @@ export class DatabaseStorage implements IStorage {
       console.log(`✅ Created QRIS piutang (${qrisAmount}) for import - no fee created`);
     } catch (error) {
       console.error('Error creating QRIS piutang for import:', error);
+      throw error;
+    }
+  }
+
+  // Migrate QRIS piutang records from old customer to new user's customer record
+  async migratePiutangToNewUser(oldCustomerId: string, newUserId: string, storeId: number): Promise<{ migrated: number, errors: string[] }> {
+    try {
+      console.log(`🔄 Starting piutang migration: ${oldCustomerId} -> user ${newUserId} in store ${storeId}`);
+      
+      // Find the new user
+      const newUser = await this.getUser(newUserId);
+      if (!newUser) {
+        throw new Error(`User with ID ${newUserId} not found`);
+      }
+      
+      // Find or create customer record for the new user
+      let newCustomer = await db.select().from(customers).where(
+        and(
+          eq(customers.storeId, storeId),
+          eq(customers.email, newUser.email),
+          eq(customers.type, "employee")
+        )
+      );
+
+      if (newCustomer.length === 0) {
+        // Create customer record for the new user
+        const customerId = randomUUID();
+        await db.insert(customers).values({
+          id: customerId,
+          storeId,
+          name: newUser.name,
+          email: newUser.email,
+          phone: newUser.phone || "",
+          address: "",
+          type: "employee",
+          notes: `QRIS piutang customer record for ${newUser.name} (${newUser.role}) - migrated from old customer ${oldCustomerId}`
+        });
+        
+        const createdCustomer = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
+        newCustomer = createdCustomer;
+      }
+
+      if (newCustomer.length === 0) {
+        throw new Error('Failed to create or find customer record for new user');
+      }
+
+      const targetCustomer = newCustomer[0];
+      
+      // Find all piutang records for the old customer
+      const oldPiutangRecords = await db.select().from(piutang)
+        .where(
+          and(
+            eq(piutang.customerId, oldCustomerId),
+            eq(piutang.storeId, storeId)
+          )
+        );
+      
+      console.log(`📊 Found ${oldPiutangRecords.length} piutang records to migrate`);
+      
+      let migrated = 0;
+      const errors: string[] = [];
+      
+      // Update each piutang record
+      for (const piutangRecord of oldPiutangRecords) {
+        try {
+          await db.update(piutang)
+            .set({
+              customerId: targetCustomer.id,
+              description: `${piutangRecord.description} [MIGRATED from old customer to ${newUser.name}]`
+            })
+            .where(eq(piutang.id, piutangRecord.id));
+          
+          migrated++;
+          console.log(`✅ Migrated piutang ${piutangRecord.id}: ${piutangRecord.amount} - ${piutangRecord.description}`);
+        } catch (error) {
+          const errorMsg = `Failed to migrate piutang ${piutangRecord.id}: ${error}`;
+          errors.push(errorMsg);
+          console.error(`❌ ${errorMsg}`);
+        }
+      }
+      
+      console.log(`🎉 Migration completed: ${migrated} records migrated, ${errors.length} errors`);
+      return { migrated, errors };
+      
+    } catch (error) {
+      console.error('Error during piutang migration:', error);
       throw error;
     }
   }
