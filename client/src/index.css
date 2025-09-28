@@ -304,3 +304,13 @@
     padding: 2mm !important;
   }
 }
+
+/* Global safety rules for Radix UI overlays - prevent invisible overlays from blocking interactions */
+[data-radix-portal] [data-state='closed'] {
+  pointer-events: none !important;
+}
+
+/* Ensure no global pointer-events blocking */
+html, body, #root {
+  pointer-events: auto !important;
+}
