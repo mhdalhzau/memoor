@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, boolean, serial } from "drizzle-orm/pg-core";
+import { mysqlTable, text, varchar, int, decimal, timestamp, boolean } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -14,8 +14,8 @@ export const TRANSACTION_TYPES = {
 } as const;
 
 // Users table - Map TypeScript 'id' property to database 'user_id' column
-export const users = pgTable("users", {
-  id: varchar("user_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const users = mysqlTable("users", {
+  id: varchar("user_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   email: varchar("email", { length: 255 }).notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
@@ -26,16 +26,16 @@ export const users = pgTable("users", {
 });
 
 // User-Store assignment table - Map TypeScript 'id' property to database 'user_store_id' column
-export const userStores = pgTable("user_stores", {
-  id: varchar("user_store_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const userStores = mysqlTable("user_stores", {
+  id: varchar("user_store_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   userId: varchar("user_id", { length: 36 }).notNull(),
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Stores table - Map TypeScript 'id' property to database 'store_id' column
-export const stores = pgTable("stores", {
-  id: serial("store_id").primaryKey(),
+export const stores = mysqlTable("stores", {
+  id: int("store_id").primaryKey().autoincrement(),
   name: text("name").notNull(),
   address: text("address"),
   phone: text("phone"),
@@ -52,18 +52,18 @@ export const stores = pgTable("stores", {
 });
 
 // Attendance table - Map TypeScript 'id' property to database 'attendance_id' column
-export const attendance = pgTable("attendance", {
-  id: varchar("attendance_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const attendance = mysqlTable("attendance", {
+  id: varchar("attendance_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   userId: varchar("user_id", { length: 36 }).notNull(),
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   date: timestamp("date").defaultNow(),
   checkIn: text("check_in"),
   checkOut: text("check_out"),
   shift: text("shift"), // auto-detected: 'pagi', 'siang', 'malam'
-  latenessMinutes: integer("lateness_minutes").default(0), // telat berapa menit
-  earlyArrivalMinutes: integer("early_arrival_minutes").default(0), // datang awal berapa menit
-  overtimeMinutes: integer("overtime_minutes").default(0), // lembur berapa menit
-  breakDuration: integer("break_duration").default(0), // in minutes
+  latenessMinutes: int("lateness_minutes").default(0), // telat berapa menit
+  earlyArrivalMinutes: int("early_arrival_minutes").default(0), // datang awal berapa menit
+  overtimeMinutes: int("overtime_minutes").default(0), // lembur berapa menit
+  breakDuration: int("break_duration").default(0), // in minutes
   overtime: decimal("overtime", { precision: 4, scale: 2 }).default("0"), // in hours (kept for compatibility)
   notes: text("notes"),
   attendanceStatus: text("attendance_status").default("belum_diatur"), // 'belum_diatur', 'hadir', 'cuti', 'alpha'
@@ -72,13 +72,13 @@ export const attendance = pgTable("attendance", {
 });
 
 // Sales table - Map TypeScript 'id' property to database 'sales_id' column
-export const sales = pgTable("sales", {
-  id: varchar("sales_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  storeId: integer("store_id").notNull(),
+export const sales = mysqlTable("sales", {
+  id: varchar("sales_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
+  storeId: int("store_id").notNull(),
   userId: varchar("user_id", { length: 36 }), // Staff who submitted the data
   date: timestamp("date").defaultNow(),
   totalSales: decimal("total_sales", { precision: 12, scale: 2 }).notNull(),
-  transactions: integer("transactions").notNull(),
+  transactions: int("transactions").notNull(),
   averageTicket: decimal("average_ticket", { precision: 12, scale: 2 }),
   // Payment breakdown
   totalQris: decimal("total_qris", { precision: 12, scale: 2 }).default("0"),
@@ -102,9 +102,9 @@ export const sales = pgTable("sales", {
 });
 
 // Cashflow table - Map TypeScript 'id' property to database 'cashflow_id' column
-export const cashflow = pgTable("cashflow", {
-  id: varchar("cashflow_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  storeId: integer("store_id").notNull(),
+export const cashflow = mysqlTable("cashflow", {
+  id: varchar("cashflow_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
+  storeId: int("store_id").notNull(),
   category: text("category").notNull(), // 'Income', 'Expense', 'Investment'
   type: text("type").notNull(), // 'Sales', 'Inventory', 'Utilities', 'Salary', 'Other', 'Pembelian Minyak', 'Transfer Rekening'
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
@@ -127,10 +127,10 @@ export const cashflow = pgTable("cashflow", {
 });
 
 // Payroll table - Map TypeScript 'id' property to database 'payroll_id' column
-export const payroll = pgTable("payroll", {
-  id: varchar("payroll_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const payroll = mysqlTable("payroll", {
+  id: varchar("payroll_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   userId: varchar("user_id", { length: 36 }).notNull(),
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   month: text("month").notNull(), // 'YYYY-MM'
   baseSalary: decimal("base_salary", { precision: 10, scale: 2 }).notNull(),
   overtimePay: decimal("overtime_pay", { precision: 10, scale: 2 }).default("0"),
@@ -143,10 +143,10 @@ export const payroll = pgTable("payroll", {
 });
 
 // Proposals table - Map TypeScript 'id' property to database 'proposal_id' column
-export const proposals = pgTable("proposals", {
-  id: varchar("proposal_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const proposals = mysqlTable("proposals", {
+  id: varchar("proposal_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   userId: varchar("user_id", { length: 36 }).notNull(),
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   title: text("title").notNull(),
   category: text("category").notNull(), // 'Equipment', 'Process Improvement', 'Training', 'Other'
   estimatedCost: decimal("estimated_cost", { precision: 10, scale: 2 }),
@@ -158,10 +158,10 @@ export const proposals = pgTable("proposals", {
 });
 
 // Overtime table - Map TypeScript 'id' property to database 'overtime_id' column
-export const overtime = pgTable("overtime", {
-  id: varchar("overtime_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const overtime = mysqlTable("overtime", {
+  id: varchar("overtime_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   userId: varchar("user_id", { length: 36 }).notNull(),
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   date: timestamp("date").notNull(),
   hours: decimal("hours", { precision: 4, scale: 2 }).notNull(),
   reason: text("reason").notNull(),
@@ -172,8 +172,8 @@ export const overtime = pgTable("overtime", {
 });
 
 // Setoran table - Map TypeScript 'id' property to database 'setoran_id' column
-export const setoran = pgTable("setoran", {
-  id: varchar("setoran_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const setoran = mysqlTable("setoran", {
+  id: varchar("setoran_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   employeeName: text("employee_name").notNull(),
   employeeId: varchar("employee_id", { length: 36 }), // Add employee ID reference
   jamMasuk: text("jam_masuk").notNull(),
@@ -193,22 +193,22 @@ export const setoran = pgTable("setoran", {
 });
 
 // Customers table - Map TypeScript 'id' property to database 'customer_id' column
-export const customers = pgTable("customers", {
-  id: varchar("customer_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const customers = mysqlTable("customers", {
+  id: varchar("customer_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
   address: text("address"),
   type: text("type").default("customer"), // 'customer', 'employee'
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Piutang table - Map TypeScript 'id' property to database 'piutang_id' column
-export const piutang = pgTable("piutang", {
-  id: varchar("piutang_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const piutang = mysqlTable("piutang", {
+  id: varchar("piutang_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   customerId: varchar("customer_id", { length: 36 }).notNull(),
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
   description: text("description").notNull(),
   dueDate: timestamp("due_date"),
@@ -220,8 +220,8 @@ export const piutang = pgTable("piutang", {
 });
 
 // Suppliers table - Map TypeScript 'id' property to database 'supplier_id' column
-export const suppliers = pgTable("suppliers", {
-  id: varchar("supplier_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const suppliers = mysqlTable("suppliers", {
+  id: varchar("supplier_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   name: text("name").notNull(),
   contactPerson: text("contact_person"),
   phone: text("phone"),
@@ -229,13 +229,13 @@ export const suppliers = pgTable("suppliers", {
   address: text("address"),
   description: text("description"),
   status: text("status").default("active"), // 'active', 'inactive'
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Products table - Map TypeScript 'id' property to database 'product_id' column
-export const products = pgTable("products", {
-  id: varchar("product_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const products = mysqlTable("products", {
+  id: varchar("product_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   name: text("name").notNull(),
   description: text("description"),
   sku: text("sku"),
@@ -245,15 +245,15 @@ export const products = pgTable("products", {
   sellingPrice: decimal("selling_price", { precision: 12, scale: 2 }),
   supplierId: varchar("supplier_id", { length: 36 }),
   status: text("status").default("active"), // 'active', 'inactive'
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Inventory table - Map TypeScript 'id' property to database 'inventory_id' column
-export const inventory = pgTable("inventory", {
-  id: varchar("inventory_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const inventory = mysqlTable("inventory", {
+  id: varchar("inventory_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   productId: varchar("product_id", { length: 36 }).notNull(),
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   currentStock: decimal("current_stock", { precision: 10, scale: 3 }).default("0"),
   minimumStock: decimal("minimum_stock", { precision: 10, scale: 3 }).default("0"),
   maximumStock: decimal("maximum_stock", { precision: 10, scale: 3 }),
@@ -262,10 +262,10 @@ export const inventory = pgTable("inventory", {
 });
 
 // Inventory Transactions table - Map TypeScript 'id' property to database 'inventory_transaction_id' column
-export const inventoryTransactions = pgTable("inventory_transactions", {
-  id: varchar("inventory_transaction_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const inventoryTransactions = mysqlTable("inventory_transactions", {
+  id: varchar("inventory_transaction_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   productId: varchar("product_id", { length: 36 }).notNull(),
-  storeId: integer("store_id").notNull(),
+  storeId: int("store_id").notNull(),
   type: text("type").notNull(), // 'in', 'out', 'adjustment'
   quantity: decimal("quantity", { precision: 10, scale: 3 }).notNull(),
   referenceType: text("reference_type"), // 'sale', 'purchase', 'adjustment', etc.
@@ -276,9 +276,9 @@ export const inventoryTransactions = pgTable("inventory_transactions", {
 });
 
 // Wallets table - Map TypeScript 'id' property to database 'wallet_id' column
-export const wallets = pgTable("wallets", {
-  id: varchar("wallet_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  storeId: integer("store_id").notNull(),
+export const wallets = mysqlTable("wallets", {
+  id: varchar("wallet_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
+  storeId: int("store_id").notNull(),
   name: text("name").notNull(), // 'Bank BCA', 'Bank BRI', 'Cash', 'E-Wallet'
   type: text("type").notNull(), // 'bank', 'cash', 'ewallet'
   balance: decimal("balance", { precision: 15, scale: 2 }).default("0"),
@@ -290,8 +290,8 @@ export const wallets = pgTable("wallets", {
 });
 
 // Payroll Configuration table - Map TypeScript 'id' property to database 'payroll_config_id' column
-export const payrollConfig = pgTable("payroll_config", {
-  id: varchar("payroll_config_id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+export const payrollConfig = mysqlTable("payroll_config", {
+  id: varchar("payroll_config_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   payrollCycle: text("payroll_cycle").notNull().default("30"), // '28' or '30' days
   overtimeRate: decimal("overtime_rate", { precision: 10, scale: 2 }).notNull().default("10000"), // Rate per hour
   startDate: text("start_date").notNull(), // ISO date string

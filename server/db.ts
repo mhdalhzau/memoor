@@ -4,11 +4,11 @@ import * as schema from '@shared/schema';
 import fs from 'fs';
 import path from 'path';
 
-// Get database URL from environment variables or fallback to example
-const databaseUrl = process.env.DATABASE_URL || process.env.MYSQL_DATABASE_URL || 'mysql://avnadmin:AVNS_Woo6_cb4krTtGU7mJQi@marlokk-mhdalhzau.j.aivencloud.com:18498/defaultdb?ssl-mode=REQUIRED';
+// Use MySQL database URL from environment variables only (security requirement)
+const databaseUrl = process.env.MYSQL_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error('DATABASE_URL or MYSQL_DATABASE_URL environment variable is required for database connection');
+  throw new Error('MYSQL_DATABASE_URL or DATABASE_URL environment variable is required for MySQL database connection');
 }
 
 // Configure SSL for Aiven MySQL connection
