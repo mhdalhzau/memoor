@@ -117,7 +117,7 @@ export default function PiutangPage() {
   console.log("👥 PiutangPage: Customers data:", customers);
 
   // Fetch all piutang records from all stores
-  const { data: piutangResponse, isLoading } = useQuery<{
+  const { data: piutangResponse, isLoading, refetch: refetchPiutang } = useQuery<{
     data: Piutang[];
     total: number;
     hasMore: boolean;
@@ -126,8 +126,11 @@ export default function PiutangPage() {
   }>({
     queryKey: ["/api/piutang"],
     queryFn: async () => {
+      console.log("🔄 PiutangPage: Fetching piutang data from API...");
       const res = await apiRequest("GET", "/api/piutang");
-      return await res.json();
+      const data = await res.json();
+      console.log("💰 PiutangPage: API response:", data);
+      return data;
     },
     enabled: !!user,
     staleTime: 0,
@@ -141,6 +144,20 @@ export default function PiutangPage() {
 
   console.log("💰 PiutangPage: Piutang records:", piutangRecords);
   console.log("📊 PiutangPage: Loading state:", isLoading);
+  
+  // Log store distribution of piutang data
+  React.useEffect(() => {
+    if (piutangRecords.length > 0) {
+      const storeDistribution = piutangRecords.reduce((acc, record) => {
+        acc[record.storeId] = (acc[record.storeId] || 0) + 1;
+        return acc;
+      }, {} as Record<number, number>);
+      
+      console.log("📊 PiutangPage: Piutang distribution by store:", storeDistribution);
+      console.log("🏪 PiutangPage: Records from Tiban Hills (Store 1):", storeDistribution[1] || 0);
+      console.log("🏪 PiutangPage: Records from Patam Lestari (Store 2):", storeDistribution[2] || 0);
+    }
+  }, [piutangRecords]);
 
   // Piutang form for adding new debt
   const piutangForm = useForm<InsertPiutang>({
@@ -446,6 +463,27 @@ export default function PiutangPage() {
     );
   };
 
+  // Calculate store-level summary statistics
+  const storeSummaries = React.useMemo(() => {
+    if (!piutangRecords || !stores) return [];
+    
+    return stores.map(store => {
+      const storeRecords = piutangRecords.filter(record => record.storeId === store.id);
+      const totalDebt = storeRecords.reduce((sum, record) => sum + parseFloat(record.amount), 0);
+      const totalPaid = storeRecords.reduce((sum, record) => sum + parseFloat(record.paidAmount || '0'), 0);
+      const remaining = totalDebt - totalPaid;
+      
+      return {
+        store,
+        recordCount: storeRecords.length,
+        totalDebt,
+        totalPaid,
+        remaining,
+        customers: new Set(storeRecords.map(r => r.customerId)).size
+      };
+    });
+  }, [piutangRecords, stores]);
+
   if (isLoading) {
     return (
       <div className="container mx-auto py-8">
@@ -466,6 +504,46 @@ export default function PiutangPage() {
 
   return (
     <div className="container mx-auto py-8">
+      {/* Store Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {storeSummaries.map((summary) => (
+          <Card key={summary.store.id} className="border-l-4 border-l-blue-500">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100" data-testid={`text-store-name-${summary.store.id}`}>
+                    {summary.store.name}
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {summary.customers} customers, {summary.recordCount} records
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-semibold text-red-600" data-testid={`text-remaining-debt-${summary.store.id}`}>
+                    {formatRupiah(summary.remaining)}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Outstanding debt
+                  </p>
+                </div>
+              </div>
+              <div className="mt-2 pt-2 border-t border-gray-100">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Total Debt:</span>
+                  <span data-testid={`text-total-debt-${summary.store.id}`}>{formatRupiah(summary.totalDebt)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Total Paid:</span>
+                  <span className="text-green-600" data-testid={`text-total-paid-${summary.store.id}`}>
+                    {formatRupiah(summary.totalPaid)}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
@@ -482,6 +560,33 @@ export default function PiutangPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            onClick={() => {
+              console.log("🔄 Manual refresh piutang data");
+              refetchPiutang();
+              queryClient.invalidateQueries({ queryKey: ["/api/piutang"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/stores"] });
+            }}
+            variant="outline"
+            className="text-blue-600 border-blue-200 hover:bg-blue-50"
+            data-testid="button-refresh-piutang"
+          >
+            <svg
+              className="h-4 w-4 mr-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            Refresh Data
+          </Button>
           <SyncButton
             dataType="piutang"
             variant="outline"

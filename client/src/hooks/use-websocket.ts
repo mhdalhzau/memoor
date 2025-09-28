@@ -117,14 +117,14 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     // Subscribe to store-specific data based on user role
     if (user.role === 'administrasi') {
       // Admin can see all data
-      ['customers', 'products', 'sales', 'attendance', 'cashflow', 'payroll'].forEach(table => {
+      ['customers', 'products', 'sales', 'attendance', 'cashflow', 'payroll', 'piutang'].forEach(table => {
         socket.emit('subscribe', { table });
       });
     } else {
       // Regular users see store-specific data
       // Note: We'll get user stores from an API call or context
       // For now, subscribing to global data
-      ['customers', 'products', 'sales', 'attendance', 'cashflow'].forEach(table => {
+      ['customers', 'products', 'sales', 'attendance', 'cashflow', 'piutang'].forEach(table => {
         socket.emit('subscribe', { table });
       });
     }

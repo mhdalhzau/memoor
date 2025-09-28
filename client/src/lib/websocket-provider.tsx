@@ -39,12 +39,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // Subscribe based on user role
       if (user.role === 'administrasi') {
         // Admin gets all data
-        ['customers', 'products', 'sales', 'attendance', 'cashflow', 'payroll', 'proposals'].forEach(table => {
+        ['customers', 'products', 'sales', 'attendance', 'cashflow', 'payroll', 'proposals', 'piutang'].forEach(table => {
           subscribe(table);
         });
       } else {
         // Regular users get basic data
-        ['customers', 'products', 'sales', 'attendance'].forEach(table => {
+        ['customers', 'products', 'sales', 'attendance', 'piutang'].forEach(table => {
           subscribe(table);
         });
       }
