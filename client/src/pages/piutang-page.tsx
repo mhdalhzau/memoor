@@ -5,18 +5,62 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Users, DollarSign, ChevronDown, ChevronRight, Receipt, Calendar, AlertCircle, CheckCircle, Search, AlertTriangle, UserCheck } from "lucide-react";
+import {
+  Plus,
+  Users,
+  DollarSign,
+  ChevronDown,
+  ChevronRight,
+  Receipt,
+  Calendar,
+  AlertCircle,
+  CheckCircle,
+  Search,
+  AlertTriangle,
+  UserCheck,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Customer, Piutang, insertPiutangSchema, type InsertPiutang, type User, type Store } from "@shared/schema";
+import {
+  Customer,
+  Piutang,
+  insertPiutangSchema,
+  type InsertPiutang,
+  type User,
+  type Store,
+} from "@shared/schema";
 import { SyncButton } from "@/components/ui/sync-button";
 import { formatRupiah } from "@/lib/utils";
 
@@ -26,7 +70,7 @@ interface UnifiedCustomer {
   name: string;
   email?: string;
   phone?: string;
-  type: 'customer' | 'employee' | 'user_based';
+  type: "customer" | "employee" | "user_based";
   storeId?: number;
 }
 
@@ -43,14 +87,18 @@ export default function PiutangPage() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [paymentModalData, setPaymentModalData] = useState<Piutang | null>(null);
-  const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
+  const [paymentModalData, setPaymentModalData] = useState<Piutang | null>(
+    null,
+  );
+  const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(
+    new Set(),
+  );
   const [activeTab, setActiveTab] = useState<string | null>(null);
 
   // Fetch stores data for tab management
   const { data: stores = [] } = useQuery<Store[]>({
     queryKey: ["/api/stores"],
-    enabled: !!user
+    enabled: !!user,
   });
 
   // Set default active tab when stores load
@@ -71,10 +119,13 @@ export default function PiutangPage() {
     queryKey: ["/api/customers", currentStoreId],
     queryFn: async () => {
       if (!currentStoreId) throw new Error("Store ID is required");
-      const res = await apiRequest("GET", `/api/customers?storeId=${currentStoreId}`);
+      const res = await apiRequest(
+        "GET",
+        `/api/customers?storeId=${currentStoreId}`,
+      );
       return await res.json();
     },
-    enabled: !!user && !!currentStoreId
+    enabled: !!user && !!currentStoreId,
   });
 
   // Define the pagination response type - now with store filtering
@@ -100,13 +151,15 @@ export default function PiutangPage() {
   });
 
   // Extract the piutang records from the pagination response with proper safety checks
-  const piutangRecords = Array.isArray(piutangResponse?.data) ? piutangResponse.data : [];
+  const piutangRecords = Array.isArray(piutangResponse?.data)
+    ? piutangResponse.data
+    : [];
 
   // Handle tab change
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     const storeId = parseInt(value.replace("store-", ""));
-    
+
     // Update form storeId when tab changes
     piutangForm.setValue("storeId", storeId);
   };
@@ -153,7 +206,9 @@ export default function PiutangPage() {
       piutangForm.reset();
       setIsAddModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/piutang"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/piutang", currentStoreId] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/piutang", currentStoreId],
+      });
     },
     onError: (error: Error) => {
       toast({
@@ -166,7 +221,13 @@ export default function PiutangPage() {
 
   // Payment mutation using atomic endpoint
   const paymentMutation = useMutation({
-    mutationFn: async ({ piutangId, amount }: { piutangId: string; amount: string }) => {
+    mutationFn: async ({
+      piutangId,
+      amount,
+    }: {
+      piutangId: string;
+      amount: string;
+    }) => {
       const res = await apiRequest("POST", `/api/piutang/${piutangId}/pay`, {
         amount,
         description: "Installment payment", // Add required description field
@@ -181,9 +242,13 @@ export default function PiutangPage() {
       paymentForm.reset();
       setPaymentModalData(null);
       queryClient.invalidateQueries({ queryKey: ["/api/piutang"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/piutang", currentStoreId] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/piutang", currentStoreId],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/cashflow"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/cashflow", currentStoreId] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/cashflow", currentStoreId],
+      });
     },
     onError: (error: Error) => {
       toast({
@@ -196,37 +261,51 @@ export default function PiutangPage() {
 
   // Unified customers from backend (includes external customers, employees, and user-based customers)
   const safeCustomers = Array.isArray(customers) ? customers : [];
-  
+
   const unifiedCustomers: UnifiedCustomer[] = safeCustomers
-    .filter(c => c && c.id)
-    .filter(c => currentStoreId ? c.storeId === currentStoreId : true) // Filter by current store
-    .map(c => ({
+    .filter((c) => c && c.id)
+    .filter((c) => (currentStoreId ? c.storeId === currentStoreId : true)) // Filter by current store
+    .map((c) => ({
       id: c.id,
       name: c.name,
       email: c.email,
       phone: c.phone,
-      type: c.type as 'customer' | 'employee' | 'user_based',
-      storeId: c.storeId
+      type: c.type as "customer" | "employee" | "user_based",
+      storeId: c.storeId,
     }));
 
   // Group piutang by unified customer and calculate totals with safety checks
   const customersWithPiutang: CustomerWithPiutang[] = React.useMemo(() => {
     // Don't calculate if we're still loading or if data is not ready
-    if (isLoading || !Array.isArray(piutangRecords) || !Array.isArray(unifiedCustomers)) {
+    if (
+      isLoading ||
+      !Array.isArray(piutangRecords) ||
+      !Array.isArray(unifiedCustomers)
+    ) {
       return [];
     }
 
     return unifiedCustomers
-      .filter(customer => customer && customer.id) // Ensure customer is valid
+      .filter((customer) => customer && customer.id) // Ensure customer is valid
       .map((customer) => {
         // Add extra safety check for piutangRecords before filtering
-        const safePiutangRecords = Array.isArray(piutangRecords) ? piutangRecords : [];
-        const customerPiutang = safePiutangRecords.filter(p => p && p.customerId === customer.id);
-        
-        const totalDebt = customerPiutang.reduce((sum, p) => sum + (p && p.amount ? parseFloat(p.amount) : 0), 0);
-        const totalPaid = customerPiutang.reduce((sum, p) => sum + (p && p.paidAmount ? parseFloat(p.paidAmount) : 0), 0);
+        const safePiutangRecords = Array.isArray(piutangRecords)
+          ? piutangRecords
+          : [];
+        const customerPiutang = safePiutangRecords.filter(
+          (p) => p && p.customerId === customer.id,
+        );
+
+        const totalDebt = customerPiutang.reduce(
+          (sum, p) => sum + (p && p.amount ? parseFloat(p.amount) : 0),
+          0,
+        );
+        const totalPaid = customerPiutang.reduce(
+          (sum, p) => sum + (p && p.paidAmount ? parseFloat(p.paidAmount) : 0),
+          0,
+        );
         const remainingDebt = totalDebt - totalPaid;
-        
+
         return {
           customer,
           piutangRecords: customerPiutang,
@@ -235,7 +314,12 @@ export default function PiutangPage() {
           remainingDebt,
         };
       })
-      .filter((item) => item && Array.isArray(item.piutangRecords) && item.piutangRecords.length > 0); // Only show customers with debt
+      .filter(
+        (item) =>
+          item &&
+          Array.isArray(item.piutangRecords) &&
+          item.piutangRecords.length > 0,
+      ); // Only show customers with debt
   }, [unifiedCustomers, piutangRecords, isLoading]);
 
   // Filter customers based on search term with safety checks
@@ -243,10 +327,10 @@ export default function PiutangPage() {
     if (!Array.isArray(customersWithPiutang)) {
       return [];
     }
-    
+
     return customersWithPiutang.filter((item) => {
       if (!item || !item.customer) return false;
-      
+
       const searchLower = searchTerm.toLowerCase();
       return (
         (item.customer.name || "").toLowerCase().includes(searchLower) ||
@@ -278,7 +362,9 @@ export default function PiutangPage() {
     }
 
     // Validate that the selected customer belongs to the current store
-    const selectedCustomer = unifiedCustomers.find(c => c.id === data.customerId);
+    const selectedCustomer = unifiedCustomers.find(
+      (c) => c.id === data.customerId,
+    );
     if (selectedCustomer && selectedCustomer.storeId !== currentStoreId) {
       toast({
         title: "Error",
@@ -306,7 +392,8 @@ export default function PiutangPage() {
 
   const openPaymentModal = (piutang: Piutang) => {
     setPaymentModalData(piutang);
-    const remaining = parseFloat(piutang.amount) - parseFloat(piutang.paidAmount || "0");
+    const remaining =
+      parseFloat(piutang.amount) - parseFloat(piutang.paidAmount || "0");
     paymentForm.reset({ amount: remaining.toString() });
   };
 
@@ -322,13 +409,25 @@ export default function PiutangPage() {
     return customer.type === "user_based";
   };
 
-  const getInternalWarningBadge = (customer: UnifiedCustomer, remainingDebt: number) => {
-    if ((!isInternalEmployee(customer) && !isUserBasedCustomer(customer)) || remainingDebt <= 0) return null;
-    
+  const getInternalWarningBadge = (
+    customer: UnifiedCustomer,
+    remainingDebt: number,
+  ) => {
+    if (
+      (!isInternalEmployee(customer) && !isUserBasedCustomer(customer)) ||
+      remainingDebt <= 0
+    )
+      return null;
+
     return (
-      <Badge variant="destructive" className="bg-orange-100 text-orange-800 border-orange-300">
+      <Badge
+        variant="destructive"
+        className="bg-orange-100 text-orange-800 border-orange-300"
+      >
         <AlertTriangle className="h-3 w-3 mr-1" />
-        {isUserBasedCustomer(customer) ? 'User Account Debt' : 'Internal Employee Debt'}
+        {isUserBasedCustomer(customer)
+          ? "User Account Debt"
+          : "Internal Employee Debt"}
       </Badge>
     );
   };
@@ -336,7 +435,10 @@ export default function PiutangPage() {
   const getCustomerTypeBadge = (customer: UnifiedCustomer) => {
     if (isUserBasedCustomer(customer)) {
       return (
-        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+        <Badge
+          variant="outline"
+          className="bg-blue-50 text-blue-700 border-blue-300"
+        >
           <UserCheck className="h-3 w-3 mr-1" />
           User Account
         </Badge>
@@ -344,7 +446,10 @@ export default function PiutangPage() {
     }
     if (isInternalEmployee(customer)) {
       return (
-        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
+        <Badge
+          variant="outline"
+          className="bg-orange-50 text-orange-700 border-orange-300"
+        >
           <UserCheck className="h-3 w-3 mr-1" />
           Employee
         </Badge>
@@ -359,7 +464,8 @@ export default function PiutangPage() {
   };
 
   const getStatusBadge = (piutang: Piutang) => {
-    const isFullyPaid = piutang.status === "lunas" || calculateRemainingDebt(piutang) <= 0;
+    const isFullyPaid =
+      piutang.status === "lunas" || calculateRemainingDebt(piutang) <= 0;
     return isFullyPaid ? (
       <Badge variant="secondary" className="bg-green-100 text-green-800">
         <CheckCircle className="h-3 w-3 mr-1" />
@@ -380,7 +486,10 @@ export default function PiutangPage() {
           <div className="h-8 bg-gray-200 rounded animate-pulse"></div>
           <div className="grid gap-4">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 bg-gray-200 rounded animate-pulse"></div>
+              <div
+                key={i}
+                className="h-32 bg-gray-200 rounded animate-pulse"
+              ></div>
             ))}
           </div>
         </div>
@@ -394,7 +503,10 @@ export default function PiutangPage() {
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100" data-testid="title-piutang-management">
+            <h1
+              className="text-3xl font-bold text-gray-900 dark:text-gray-100"
+              data-testid="title-piutang-management"
+            >
               Accounts Receivable (Piutang)
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-2">
@@ -403,162 +515,200 @@ export default function PiutangPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <SyncButton 
+          <SyncButton
             dataType="piutang"
             variant="outline"
             className="text-orange-600 border-orange-200 hover:bg-orange-50"
           />
-          <Dialog open={isAddModalOpen} onOpenChange={(open) => open ? setIsAddModalOpen(true) : setIsAddModalOpen(false)}>
+          <Dialog
+            open={isAddModalOpen}
+            onOpenChange={(open) =>
+              open ? setIsAddModalOpen(true) : setIsAddModalOpen(false)
+            }
+          >
             <DialogTrigger asChild>
-              <Button className="flex items-center gap-2" data-testid="button-add-piutang">
+              <Button
+                className="flex items-center gap-2"
+                data-testid="button-add-piutang"
+              >
                 <Plus className="h-4 w-4" />
                 Add Debt Record
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Receipt className="h-5 w-5" />
-                Add New Debt Record
-              </DialogTitle>
-              <DialogDescription>
-                Create a new debt record for a customer
-              </DialogDescription>
-            </DialogHeader>
-            
-            <Form {...piutangForm}>
-              <form onSubmit={piutangForm.handleSubmit(onSubmitPiutang)} className="space-y-4">
-                <FormField
-                  control={piutangForm.control}
-                  name="customerId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Customer *</FormLabel>
-                      <FormControl>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <SelectTrigger data-testid="select-customer">
-                            <SelectValue placeholder="Select customer" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {unifiedCustomers.map((customer) => (
-                              <SelectItem key={customer.id} value={customer.id}>
-                                <div className="flex items-center gap-2">
-                                  <span>{customer.name}</span>
-                                  <Badge 
-                                    variant="outline" 
-                                    className={
-                                      customer.type === 'staff_member' 
-                                        ? "bg-blue-50 text-blue-700 border-blue-300"
-                                        : customer.type === 'internal_employee'
-                                        ? "bg-orange-50 text-orange-700 border-orange-300"
-                                        : "bg-gray-50 text-gray-700"
-                                    }
-                                  >
-                                    {customer.type === 'staff_member' ? 'Staff' : 
-                                     customer.type === 'internal_employee' ? 'Employee' : 'Customer'}
-                                  </Badge>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Receipt className="h-5 w-5" />
+                  Add New Debt Record
+                </DialogTitle>
+                <DialogDescription>
+                  Create a new debt record for a customer
+                </DialogDescription>
+              </DialogHeader>
 
-                <FormField
-                  control={piutangForm.control}
-                  name="amount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Debt Amount *</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number"
-                          step="0.01"
-                          placeholder="Enter debt amount"
-                          data-testid="input-amount"
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <Form {...piutangForm}>
+                <form
+                  onSubmit={piutangForm.handleSubmit(onSubmitPiutang)}
+                  className="space-y-4"
+                >
+                  <FormField
+                    control={piutangForm.control}
+                    name="customerId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Customer *</FormLabel>
+                        <FormControl>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                          >
+                            <SelectTrigger data-testid="select-customer">
+                              <SelectValue placeholder="Select customer" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {unifiedCustomers.map((customer) => (
+                                <SelectItem
+                                  key={customer.id}
+                                  value={customer.id}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span>{customer.name}</span>
+                                    <Badge
+                                      variant="outline"
+                                      className={
+                                        customer.type === "staff_member"
+                                          ? "bg-blue-50 text-blue-700 border-blue-300"
+                                          : customer.type ===
+                                              "internal_employee"
+                                            ? "bg-orange-50 text-orange-700 border-orange-300"
+                                            : "bg-gray-50 text-gray-700"
+                                      }
+                                    >
+                                      {customer.type === "staff_member"
+                                        ? "Staff"
+                                        : customer.type === "internal_employee"
+                                          ? "Employee"
+                                          : "Customer"}
+                                    </Badge>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={piutangForm.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description *</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Enter description of the debt"
-                          data-testid="input-description"
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <FormField
+                    control={piutangForm.control}
+                    name="amount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Debt Amount *</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Enter debt amount"
+                            data-testid="input-amount"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={piutangForm.control}
-                  name="dueDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Due Date</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="date"
-                          data-testid="input-due-date"
-                          value={field.value ? new Date(field.value).toISOString().split('T')[0] : ""}
-                          onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <FormField
+                    control={piutangForm.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description *</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Enter description of the debt"
+                            data-testid="input-description"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <div className="flex gap-2 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => setIsAddModalOpen(false)}
-                    data-testid="button-cancel"
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    type="submit" 
-                    className="flex-1"
-                    disabled={createPiutangMutation.isPending}
-                    data-testid="button-save"
-                  >
-                    {createPiutangMutation.isPending ? "Saving..." : "Save Debt Record"}
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+                  <FormField
+                    control={piutangForm.control}
+                    name="dueDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Due Date</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="date"
+                            data-testid="input-due-date"
+                            value={
+                              field.value
+                                ? new Date(field.value)
+                                    .toISOString()
+                                    .split("T")[0]
+                                : ""
+                            }
+                            onChange={(e) =>
+                              field.onChange(
+                                e.target.value
+                                  ? new Date(e.target.value)
+                                  : undefined,
+                              )
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="flex gap-2 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setIsAddModalOpen(false)}
+                      data-testid="button-cancel"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="flex-1"
+                      disabled={createPiutangMutation.isPending}
+                      data-testid="button-save"
+                    >
+                      {createPiutangMutation.isPending
+                        ? "Saving..."
+                        : "Save Debt Record"}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
       {/* Store Tabs for Piutang Management */}
       {stores.length > 1 ? (
-        <Tabs value={activeTab || ""} onValueChange={handleTabChange} className="w-full">
+        <Tabs
+          value={activeTab || ""}
+          onValueChange={handleTabChange}
+          className="w-full"
+        >
           <TabsList className="grid w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mb-6">
             {stores.map((store) => (
-           </>
-              <TabsTrigger 
-                key={store.id} 
+              <TabsTrigger
+                key={store.id}
                 value={`store-${store.id}`}
                 data-testid={`tab-store-${store.id}`}
               >
@@ -566,7 +716,7 @@ export default function PiutangPage() {
               </TabsTrigger>
             ))}
           </TabsList>
-          
+
           {stores.map((store) => (
             <TabsContent key={store.id} value={`store-${store.id}`}>
               {/* Search */}
@@ -584,124 +734,203 @@ export default function PiutangPage() {
               </div>
               {/* Customer Debt List */}
               <div className="space-y-4">
-        {filteredCustomers.length > 0 ? (
-          filteredCustomers.map((item) => (
-            <Card key={item.customer.id} className="overflow-hidden" data-testid={`card-customer-${item.customer.id}`}>
-              <Collapsible 
-                open={expandedCustomers.has(item.customer.id)} 
-                onOpenChange={() => toggleCustomerExpansion(item.customer.id)}
-              >
-                <CollapsibleTrigger asChild>
-                  <CardHeader className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                          <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100" data-testid={`text-customer-name-${item.customer.id}`}>
-                              {item.customer.name}
-                            </h3>
-                            {getCustomerTypeBadge(item.customer)}
-                            {getInternalWarningBadge(item.customer, item.remainingDebt)}
-                          </div>
-                          <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
-                            <span data-testid={`text-total-debt-${item.customer.id}`}>
-                              Total Debt: {formatRupiah(item.totalDebt)}
-                            </span>
-                            <span data-testid={`text-remaining-debt-${item.customer.id}`}>
-                              Remaining: {formatRupiah(item.remainingDebt)}
-                            </span>
-                          </div>
-                          {(isInternalEmployee(item.customer) || isUserBasedCustomer(item.customer)) && item.remainingDebt > 0 && (
-                            <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
-                              <p className="text-sm text-orange-800 flex items-center gap-1">
-                                <AlertTriangle className="h-4 w-4" />
-                                <strong>Warning:</strong> This is {isUserBasedCustomer(item.customer) ? 'a user account' : 'an internal employee'} with outstanding debt. Please follow company policy for {isUserBasedCustomer(item.customer) ? 'user account' : 'employee'} receivables.
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={item.remainingDebt > 0 ? "destructive" : "secondary"}>
-                          {item.piutangRecords.length} Record{item.piutangRecords.length !== 1 ? 's' : ''}
-                        </Badge>
-                        {expandedCustomers.has(item.customer.id) ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                      </div>
-                    </div>
-                  </CardHeader>
-                </CollapsibleTrigger>
-
-                <CollapsibleContent>
-                  <CardContent className="pt-0">
-                    <div className="space-y-3">
-                      {item.piutangRecords.map((piutang) => {
-                        const remainingAmount = calculateRemainingDebt(piutang);
-                        return (
-                          <div 
-                            key={piutang.id} 
-                            className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800"
-                            data-testid={`card-piutang-${piutang.id}`}
-                          >
-                            <div className="flex items-center justify-between mb-2">
+                {filteredCustomers.length > 0 ? (
+                  filteredCustomers.map((item) => (
+                    <Card
+                      key={item.customer.id}
+                      className="overflow-hidden"
+                      data-testid={`card-customer-${item.customer.id}`}
+                    >
+                      <Collapsible
+                        open={expandedCustomers.has(item.customer.id)}
+                        onOpenChange={() =>
+                          toggleCustomerExpansion(item.customer.id)
+                        }
+                      >
+                        <CollapsibleTrigger asChild>
+                          <CardHeader className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                                  <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h3
+                                      className="text-lg font-semibold text-gray-900 dark:text-gray-100"
+                                      data-testid={`text-customer-name-${item.customer.id}`}
+                                    >
+                                      {item.customer.name}
+                                    </h3>
+                                    {getCustomerTypeBadge(item.customer)}
+                                    {getInternalWarningBadge(
+                                      item.customer,
+                                      item.remainingDebt,
+                                    )}
+                                  </div>
+                                  <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
+                                    <span
+                                      data-testid={`text-total-debt-${item.customer.id}`}
+                                    >
+                                      Total Debt: {formatRupiah(item.totalDebt)}
+                                    </span>
+                                    <span
+                                      data-testid={`text-remaining-debt-${item.customer.id}`}
+                                    >
+                                      Remaining:{" "}
+                                      {formatRupiah(item.remainingDebt)}
+                                    </span>
+                                  </div>
+                                  {(isInternalEmployee(item.customer) ||
+                                    isUserBasedCustomer(item.customer)) &&
+                                    item.remainingDebt > 0 && (
+                                      <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
+                                        <p className="text-sm text-orange-800 flex items-center gap-1">
+                                          <AlertTriangle className="h-4 w-4" />
+                                          <strong>Warning:</strong> This is{" "}
+                                          {isUserBasedCustomer(item.customer)
+                                            ? "a user account"
+                                            : "an internal employee"}{" "}
+                                          with outstanding debt. Please follow
+                                          company policy for{" "}
+                                          {isUserBasedCustomer(item.customer)
+                                            ? "user account"
+                                            : "employee"}{" "}
+                                          receivables.
+                                        </p>
+                                      </div>
+                                    )}
+                                </div>
+                              </div>
                               <div className="flex items-center gap-2">
-                                <Receipt className="h-4 w-4 text-gray-500" />
-                                <span className="font-medium" data-testid={`text-description-${piutang.id}`}>
-                                  {piutang.description}
-                                </span>
-                                {getStatusBadge(piutang)}
-                              </div>
-                              {remainingAmount > 0 && (
-                                <Button 
-                                  size="sm" 
-                                  onClick={() => openPaymentModal(piutang)}
-                                  data-testid={`button-pay-${piutang.id}`}
+                                <Badge
+                                  variant={
+                                    item.remainingDebt > 0
+                                      ? "destructive"
+                                      : "secondary"
+                                  }
                                 >
-                                  Make Payment
-                                </Button>
-                              )}
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400">
-                              <div>
-                                <p>Total Amount: <span className="font-medium text-gray-900 dark:text-gray-100" data-testid={`text-total-amount-${piutang.id}`}>{formatRupiah(parseFloat(piutang.amount))}</span></p>
-                                <p>Paid Amount: <span className="font-medium text-green-600" data-testid={`text-paid-amount-${piutang.id}`}>{formatRupiah(parseFloat(piutang.paidAmount || "0"))}</span></p>
-                              </div>
-                              <div>
-                                <p>Remaining: <span className="font-medium text-red-600" data-testid={`text-remaining-amount-${piutang.id}`}>{formatRupiah(remainingAmount)}</span></p>
-                                {piutang.dueDate && (
-                                  <p className="flex items-center gap-1">
-                                    <Calendar className="h-3 w-3" />
-                                    Due: {new Date(piutang.dueDate).toLocaleDateString()}
-                                  </p>
+                                  {item.piutangRecords.length} Record
+                                  {item.piutangRecords.length !== 1 ? "s" : ""}
+                                </Badge>
+                                {expandedCustomers.has(item.customer.id) ? (
+                                  <ChevronDown className="h-4 w-4" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4" />
                                 )}
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Collapsible>
-            </Card>
-          ))
-        ) : (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <DollarSign className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-              <p className="text-gray-600 dark:text-gray-400" data-testid="text-no-piutang">
-                {searchTerm ? "No customers found matching your search." : "No outstanding debts. All customers have paid their debts."}
-              </p>
-            </CardContent>
-          </Card>
-        )}
+                          </CardHeader>
+                        </CollapsibleTrigger>
+
+                        <CollapsibleContent>
+                          <CardContent className="pt-0">
+                            <div className="space-y-3">
+                              {item.piutangRecords.map((piutang) => {
+                                const remainingAmount =
+                                  calculateRemainingDebt(piutang);
+                                return (
+                                  <div
+                                    key={piutang.id}
+                                    className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800"
+                                    data-testid={`card-piutang-${piutang.id}`}
+                                  >
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="flex items-center gap-2">
+                                        <Receipt className="h-4 w-4 text-gray-500" />
+                                        <span
+                                          className="font-medium"
+                                          data-testid={`text-description-${piutang.id}`}
+                                        >
+                                          {piutang.description}
+                                        </span>
+                                        {getStatusBadge(piutang)}
+                                      </div>
+                                      {remainingAmount > 0 && (
+                                        <Button
+                                          size="sm"
+                                          onClick={() =>
+                                            openPaymentModal(piutang)
+                                          }
+                                          data-testid={`button-pay-${piutang.id}`}
+                                        >
+                                          Make Payment
+                                        </Button>
+                                      )}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400">
+                                      <div>
+                                        <p>
+                                          Total Amount:{" "}
+                                          <span
+                                            className="font-medium text-gray-900 dark:text-gray-100"
+                                            data-testid={`text-total-amount-${piutang.id}`}
+                                          >
+                                            {formatRupiah(
+                                              parseFloat(piutang.amount),
+                                            )}
+                                          </span>
+                                        </p>
+                                        <p>
+                                          Paid Amount:{" "}
+                                          <span
+                                            className="font-medium text-green-600"
+                                            data-testid={`text-paid-amount-${piutang.id}`}
+                                          >
+                                            {formatRupiah(
+                                              parseFloat(
+                                                piutang.paidAmount || "0",
+                                              ),
+                                            )}
+                                          </span>
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p>
+                                          Remaining:{" "}
+                                          <span
+                                            className="font-medium text-red-600"
+                                            data-testid={`text-remaining-amount-${piutang.id}`}
+                                          >
+                                            {formatRupiah(remainingAmount)}
+                                          </span>
+                                        </p>
+                                        {piutang.dueDate && (
+                                          <p className="flex items-center gap-1">
+                                            <Calendar className="h-3 w-3" />
+                                            Due:{" "}
+                                            {new Date(
+                                              piutang.dueDate,
+                                            ).toLocaleDateString()}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </CardContent>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </Card>
+                  ))
+                ) : (
+                  <Card>
+                    <CardContent className="p-8 text-center">
+                      <DollarSign className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                      <p
+                        className="text-gray-600 dark:text-gray-400"
+                        data-testid="text-no-piutang"
+                      >
+                        {searchTerm
+                          ? "No customers found matching your search."
+                          : "No outstanding debts. All customers have paid their debts."}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </TabsContent>
           ))}
@@ -727,10 +956,16 @@ export default function PiutangPage() {
           <div className="space-y-4">
             {filteredCustomers.length > 0 ? (
               filteredCustomers.map((item) => (
-                <Card key={item.customer.id} className="overflow-hidden" data-testid={`card-customer-${item.customer.id}`}>
-                  <Collapsible 
-                    open={expandedCustomers.has(item.customer.id)} 
-                    onOpenChange={() => toggleCustomerExpansion(item.customer.id)}
+                <Card
+                  key={item.customer.id}
+                  className="overflow-hidden"
+                  data-testid={`card-customer-${item.customer.id}`}
+                >
+                  <Collapsible
+                    open={expandedCustomers.has(item.customer.id)}
+                    onOpenChange={() =>
+                      toggleCustomerExpansion(item.customer.id)
+                    }
                   >
                     <CollapsibleTrigger asChild>
                       <CardHeader className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
@@ -741,33 +976,61 @@ export default function PiutangPage() {
                             </div>
                             <div>
                               <div className="flex items-center gap-2 mb-1">
-                                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100" data-testid={`text-customer-name-${item.customer.id}`}>
+                                <h3
+                                  className="text-lg font-semibold text-gray-900 dark:text-gray-100"
+                                  data-testid={`text-customer-name-${item.customer.id}`}
+                                >
                                   {item.customer.name}
                                 </h3>
                                 {getCustomerTypeBadge(item.customer)}
-                                {getInternalWarningBadge(item.customer, item.remainingDebt)}
+                                {getInternalWarningBadge(
+                                  item.customer,
+                                  item.remainingDebt,
+                                )}
                               </div>
                               <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
-                                <span data-testid={`text-total-debt-${item.customer.id}`}>
+                                <span
+                                  data-testid={`text-total-debt-${item.customer.id}`}
+                                >
                                   Total Debt: {formatRupiah(item.totalDebt)}
                                 </span>
-                                <span data-testid={`text-remaining-debt-${item.customer.id}`}>
+                                <span
+                                  data-testid={`text-remaining-debt-${item.customer.id}`}
+                                >
                                   Remaining: {formatRupiah(item.remainingDebt)}
                                 </span>
                               </div>
-                              {(isInternalEmployee(item.customer) || isUserBasedCustomer(item.customer)) && item.remainingDebt > 0 && (
-                                <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
-                                  <p className="text-sm text-orange-800 flex items-center gap-1">
-                                    <AlertTriangle className="h-4 w-4" />
-                                    <strong>Warning:</strong> This is {isUserBasedCustomer(item.customer) ? 'a user account' : 'an internal employee'} with outstanding debt. Please follow company policy for {isUserBasedCustomer(item.customer) ? 'user account' : 'employee'} receivables.
-                                  </p>
-                                </div>
-                              )}
+                              {(isInternalEmployee(item.customer) ||
+                                isUserBasedCustomer(item.customer)) &&
+                                item.remainingDebt > 0 && (
+                                  <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
+                                    <p className="text-sm text-orange-800 flex items-center gap-1">
+                                      <AlertTriangle className="h-4 w-4" />
+                                      <strong>Warning:</strong> This is{" "}
+                                      {isUserBasedCustomer(item.customer)
+                                        ? "a user account"
+                                        : "an internal employee"}{" "}
+                                      with outstanding debt. Please follow
+                                      company policy for{" "}
+                                      {isUserBasedCustomer(item.customer)
+                                        ? "user account"
+                                        : "employee"}{" "}
+                                      receivables.
+                                    </p>
+                                  </div>
+                                )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Badge variant={item.remainingDebt > 0 ? "destructive" : "secondary"}>
-                              {item.piutangRecords.length} Record{item.piutangRecords.length !== 1 ? 's' : ''}
+                            <Badge
+                              variant={
+                                item.remainingDebt > 0
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                            >
+                              {item.piutangRecords.length} Record
+                              {item.piutangRecords.length !== 1 ? "s" : ""}
                             </Badge>
                             {expandedCustomers.has(item.customer.id) ? (
                               <ChevronDown className="h-4 w-4" />
@@ -783,24 +1046,28 @@ export default function PiutangPage() {
                       <CardContent className="pt-0">
                         <div className="space-y-3">
                           {item.piutangRecords.map((piutang) => {
-                            const remainingAmount = calculateRemainingDebt(piutang);
+                            const remainingAmount =
+                              calculateRemainingDebt(piutang);
                             return (
-                              <div 
-                                key={piutang.id} 
+                              <div
+                                key={piutang.id}
                                 className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800"
                                 data-testid={`card-piutang-${piutang.id}`}
                               >
                                 <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center gap-2">
                                     <Receipt className="h-4 w-4 text-gray-500" />
-                                    <span className="font-medium" data-testid={`text-description-${piutang.id}`}>
+                                    <span
+                                      className="font-medium"
+                                      data-testid={`text-description-${piutang.id}`}
+                                    >
                                       {piutang.description}
                                     </span>
                                     {getStatusBadge(piutang)}
                                   </div>
                                   {remainingAmount > 0 && (
-                                    <Button 
-                                      size="sm" 
+                                    <Button
+                                      size="sm"
                                       onClick={() => openPaymentModal(piutang)}
                                       data-testid={`button-pay-${piutang.id}`}
                                     >
@@ -808,18 +1075,49 @@ export default function PiutangPage() {
                                     </Button>
                                   )}
                                 </div>
-                                
+
                                 <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400">
                                   <div>
-                                    <p>Total Amount: <span className="font-medium text-gray-900 dark:text-gray-100" data-testid={`text-total-amount-${piutang.id}`}>{formatRupiah(parseFloat(piutang.amount))}</span></p>
-                                    <p>Paid Amount: <span className="font-medium text-green-600" data-testid={`text-paid-amount-${piutang.id}`}>{formatRupiah(parseFloat(piutang.paidAmount || "0"))}</span></p>
+                                    <p>
+                                      Total Amount:{" "}
+                                      <span
+                                        className="font-medium text-gray-900 dark:text-gray-100"
+                                        data-testid={`text-total-amount-${piutang.id}`}
+                                      >
+                                        {formatRupiah(
+                                          parseFloat(piutang.amount),
+                                        )}
+                                      </span>
+                                    </p>
+                                    <p>
+                                      Paid Amount:{" "}
+                                      <span
+                                        className="font-medium text-green-600"
+                                        data-testid={`text-paid-amount-${piutang.id}`}
+                                      >
+                                        {formatRupiah(
+                                          parseFloat(piutang.paidAmount || "0"),
+                                        )}
+                                      </span>
+                                    </p>
                                   </div>
                                   <div>
-                                    <p>Remaining: <span className="font-medium text-red-600" data-testid={`text-remaining-amount-${piutang.id}`}>{formatRupiah(remainingAmount)}</span></p>
+                                    <p>
+                                      Remaining:{" "}
+                                      <span
+                                        className="font-medium text-red-600"
+                                        data-testid={`text-remaining-amount-${piutang.id}`}
+                                      >
+                                        {formatRupiah(remainingAmount)}
+                                      </span>
+                                    </p>
                                     {piutang.dueDate && (
                                       <p className="flex items-center gap-1">
                                         <Calendar className="h-3 w-3" />
-                                        Due: {new Date(piutang.dueDate).toLocaleDateString()}
+                                        Due:{" "}
+                                        {new Date(
+                                          piutang.dueDate,
+                                        ).toLocaleDateString()}
                                       </p>
                                     )}
                                   </div>
@@ -837,8 +1135,13 @@ export default function PiutangPage() {
               <Card>
                 <CardContent className="p-8 text-center">
                   <DollarSign className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                  <p className="text-gray-600 dark:text-gray-400" data-testid="text-no-piutang">
-                    {searchTerm ? "No customers found matching your search." : "No outstanding debts. All customers have paid their debts."}
+                  <p
+                    className="text-gray-600 dark:text-gray-400"
+                    data-testid="text-no-piutang"
+                  >
+                    {searchTerm
+                      ? "No customers found matching your search."
+                      : "No outstanding debts. All customers have paid their debts."}
                   </p>
                 </CardContent>
               </Card>
@@ -848,7 +1151,10 @@ export default function PiutangPage() {
       )}
 
       {/* Payment Modal */}
-      <Dialog open={!!paymentModalData} onOpenChange={(open) => !open && setPaymentModalData(null)}>
+      <Dialog
+        open={!!paymentModalData}
+        onOpenChange={(open) => !open && setPaymentModalData(null)}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -859,19 +1165,25 @@ export default function PiutangPage() {
               Record an installment payment for this debt
             </DialogDescription>
           </DialogHeader>
-          
+
           {paymentModalData && (
             <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Debt Details:</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                Debt Details:
+              </p>
               <p className="font-medium">{paymentModalData.description}</p>
               <p className="text-sm">
-                Remaining: {formatRupiah(calculateRemainingDebt(paymentModalData))}
+                Remaining:{" "}
+                {formatRupiah(calculateRemainingDebt(paymentModalData))}
               </p>
             </div>
           )}
-          
+
           <Form {...paymentForm}>
-            <form onSubmit={paymentForm.handleSubmit(onSubmitPayment)} className="space-y-4">
+            <form
+              onSubmit={paymentForm.handleSubmit(onSubmitPayment)}
+              className="space-y-4"
+            >
               <FormField
                 control={paymentForm.control}
                 name="amount"
@@ -879,12 +1191,12 @@ export default function PiutangPage() {
                   <FormItem>
                     <FormLabel>Payment Amount *</FormLabel>
                     <FormControl>
-                      <Input 
+                      <Input
                         type="number"
                         step="0.01"
                         placeholder="Enter payment amount"
                         data-testid="input-payment-amount"
-                        {...field} 
+                        {...field}
                       />
                     </FormControl>
                     <FormMessage />
@@ -902,13 +1214,15 @@ export default function PiutangPage() {
                 >
                   Cancel
                 </Button>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   className="flex-1"
                   disabled={paymentMutation.isPending}
                   data-testid="button-record-payment"
                 >
-                  {paymentMutation.isPending ? "Recording..." : "Record Payment"}
+                  {paymentMutation.isPending
+                    ? "Recording..."
+                    : "Record Payment"}
                 </Button>
               </div>
             </form>
