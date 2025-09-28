@@ -382,9 +382,15 @@ export default function CashflowContent() {
     enabled: customerSearchTerm.length > 0,
   });
 
-  // Filter customers based on search term
+  // Filter customers based on search term AND current store
+  const storeFilteredCustomers = customers.filter(c => 
+    currentStoreId ? c.storeId === currentStoreId : true
+  );
+  const storeFilteredSearchResults = searchResults.filter(c => 
+    currentStoreId ? c.storeId === currentStoreId : true
+  );
   const filteredCustomers =
-    customerSearchTerm.length > 0 ? searchResults : customers;
+    customerSearchTerm.length > 0 ? storeFilteredSearchResults : storeFilteredCustomers;
 
   // Query for all cashflow data to calculate grand totals
   const { data: allCashflowData = [] } = useQuery<Cashflow[]>({
@@ -542,8 +548,10 @@ export default function CashflowContent() {
       setIsAddCustomerModalOpen(false);
       // Set the newly created customer as selected
       form.setValue("customerId", newCustomer.id);
-      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/customers/search"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers", { storeId: currentStoreId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] }); // Also invalidate base query
+      queryClient.invalidateQueries({ queryKey: ["/api/customers/search", { storeId: currentStoreId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers/search"] }); // Also invalidate base search query
     },
     onError: (error: Error) => {
       toast({
@@ -565,6 +573,29 @@ export default function CashflowContent() {
       isError: submitCashflowMutation.isError,
       error: submitCashflowMutation.error
     });
+    
+    // Validate that currentStoreId is set
+    if (!currentStoreId) {
+      toast({
+        title: "Error",
+        description: "Please wait for store data to load before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate that the selected customer belongs to the current store (if customer is selected)
+    if (data.customerId) {
+      const selectedCustomer = filteredCustomers.find(c => c.id === data.customerId);
+      if (selectedCustomer && selectedCustomer.storeId !== currentStoreId) {
+        toast({
+          title: "Error",
+          description: "Selected customer does not belong to the current store.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     
     // Aggressive validation checks
     if (!data.storeId) {
@@ -604,7 +635,20 @@ export default function CashflowContent() {
   };
 
   const onSubmitCustomer = (data: z.infer<typeof insertCustomerSchema>) => {
-    createCustomerMutation.mutate(data);
+    // Validate that currentStoreId is set
+    if (!currentStoreId) {
+      toast({
+        title: "Error",
+        description: "Please wait for store data to load before creating customer.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createCustomerMutation.mutate({
+      ...data,
+      storeId: currentStoreId,
+    });
   };
 
   return (
