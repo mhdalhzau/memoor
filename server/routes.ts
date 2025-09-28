@@ -33,29 +33,62 @@ import { z } from "zod";
 
 // Helper functions for multi-store authorization
 async function hasStoreAccess(user: any, storeId: number): Promise<boolean> {
+  console.log("🔒 STORE ACCESS CHECK STARTED");
+  console.log("👤 User:", JSON.stringify(user, null, 2));
+  console.log("🏪 Store ID:", storeId);
+  
   // First verify the store exists
   const store = await storage.getStore(storeId);
-  if (!store) return false;
+  console.log("🏬 Store Found:", store ? "✅ Yes" : "❌ No");
+  if (!store) {
+    console.log("❌ STORE ACCESS DENIED: Store does not exist");
+    return false;
+  }
   
-  if (user.role === 'administrasi') return true; // Admins have access to all existing stores
-  
-  const userStores = await storage.getUserStores(user.id);
-  return userStores.some(store => store.id === storeId);
-}
-
-async function getUserFirstStoreId(user: any): Promise<number | undefined> {
-  const userStores = await storage.getUserStores(user.id);
-  return userStores.length > 0 ? userStores[0].id : undefined;
-}
-
-async function getAccessibleStoreIds(user: any): Promise<number[]> {
   if (user.role === 'administrasi') {
-    const allStores = await storage.getAllStores();
-    return allStores.map(store => store.id);
+    console.log("✅ STORE ACCESS GRANTED: Admin user has access to all stores");
+    return true; // Admins have access to all existing stores
   }
   
   const userStores = await storage.getUserStores(user.id);
-  return userStores.map(store => store.id);
+  console.log("🏪 User Stores:", userStores);
+  const hasAccess = userStores.some(store => store.id === storeId);
+  console.log(hasAccess ? "✅ STORE ACCESS GRANTED" : "❌ STORE ACCESS DENIED");
+  return hasAccess;
+}
+
+async function getUserFirstStoreId(user: any): Promise<number | undefined> {
+  console.log("🎯 GET USER FIRST STORE STARTED");
+  console.log("👤 User ID:", user.id);
+  
+  const userStores = await storage.getUserStores(user.id);
+  console.log("🏪 User Stores Found:", userStores.length);
+  console.log("📊 Stores Data:", userStores);
+  
+  const firstStoreId = userStores.length > 0 ? userStores[0].id : undefined;
+  console.log("🎯 First Store ID:", firstStoreId);
+  return firstStoreId;
+}
+
+async function getAccessibleStoreIds(user: any): Promise<number[]> {
+  console.log("🔍 GET ACCESSIBLE STORE IDS STARTED");
+  console.log("👤 User:", JSON.stringify(user, null, 2));
+  
+  if (user.role === 'administrasi') {
+    console.log("👑 Admin user detected - getting all stores");
+    const allStores = await storage.getAllStores();
+    console.log("🏪 All Stores Found:", allStores.length);
+    const storeIds = allStores.map(store => store.id);
+    console.log("📋 Accessible Store IDs (Admin):", storeIds);
+    return storeIds;
+  }
+  
+  console.log("👤 Regular user - getting user-specific stores");
+  const userStores = await storage.getUserStores(user.id);
+  console.log("🏪 User Stores Found:", userStores.length);
+  const storeIds = userStores.map(store => store.id);
+  console.log("📋 Accessible Store IDs (User):", storeIds);
+  return storeIds;
 }
 
 export function registerRoutes(app: Express): Server {
@@ -110,159 +143,260 @@ export function registerRoutes(app: Express): Server {
 
   // Database backup routes
   app.post('/api/backup/create', async (req: any, res: any) => {
+    console.log("🚀 DATABASE BACKUP CREATE STARTED");
+    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    
     if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
+      console.log("❌ BACKUP ACCESS DENIED: Insufficient permissions");
       return res.status(403).json({ error: 'Hanya administrator yang dapat membuat backup database' });
     }
     
     try {
+      console.log("💾 Starting database backup creation...");
       const backupFile = await createDatabaseBackup();
-      res.json({ 
+      console.log("✅ DATABASE BACKUP CREATED SUCCESSFULLY");
+      console.log("💾 Backup File:", backupFile);
+      
+      const response = { 
         success: true, 
         message: 'Database backup berhasil dibuat',
         backupFile: backupFile.split('/').pop() // Only return filename for security
-      });
+      };
+      
+      console.log("📤 Backup Response:", response);
+      res.json(response);
     } catch (error: any) {
+      console.error("🔥 DATABASE BACKUP FAILED:", error);
+      console.error("📋 Error Stack:", error.stack);
       res.status(500).json({ error: 'Gagal membuat backup database', details: error.message });
     }
   });
 
   app.post('/api/backup/restore', async (req: any, res: any) => {
+    console.log("🚀 DATABASE RESTORE STARTED");
+    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    console.log("📝 Request Body:", req.body);
+    
     if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
+      console.log("❌ RESTORE ACCESS DENIED: Insufficient permissions");
       return res.status(403).json({ error: 'Hanya administrator yang dapat restore database' });
     }
     
     const { backupFile } = req.body;
+    console.log("💾 Backup File Requested:", backupFile);
+    
     if (!backupFile) {
+      console.log("❌ RESTORE FAILED: No backup file specified");
       return res.status(400).json({ error: 'Nama file backup diperlukan' });
     }
     
     // Validate filename for security (no path traversal)
     const filename = String(backupFile);
+    console.log("🔍 Validating filename:", filename);
+    
     if (filename.includes('..') || filename.includes('/') || filename.includes('\\') || !filename.endsWith('.sql')) {
+      console.log("❌ RESTORE FAILED: Invalid filename");
       return res.status(400).json({ error: 'Nama file tidak valid' });
     }
     
     try {
       const fullPath = path.join('database_backup', filename);
+      console.log("📁 Full Backup Path:", fullPath);
       
       // Verify file exists and is within the backup directory
+      console.log("🔍 Checking if backup file exists...");
       const stat = await fs.stat(fullPath);
+      console.log("📊 File Stats:", stat);
+      
       if (!stat.isFile()) {
+        console.log("❌ RESTORE FAILED: Backup file not found or not a file");
         return res.status(404).json({ error: 'File backup tidak ditemukan' });
       }
       
+      console.log("🔄 Starting database restore from backup...");
       await restoreDatabaseFromBackup(fullPath);
-      res.json({ 
+      console.log("✅ DATABASE RESTORE COMPLETED SUCCESSFULLY");
+      
+      const response = { 
         success: true, 
         message: 'Database berhasil di-restore dari backup'
-      });
+      };
+      
+      console.log("📤 Restore Response:", response);
+      res.json(response);
     } catch (error: any) {
+      console.error("🔥 DATABASE RESTORE FAILED:", error);
+      console.error("📋 Error Stack:", error.stack);
       res.status(500).json({ error: 'Gagal restore database', details: error.message });
     }
   });
 
   // Manual export endpoint (alias for create)
   app.post('/api/backup/export', async (req: any, res: any) => {
+    console.log("🚀 DATABASE EXPORT STARTED");
+    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    
     if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
+      console.log("❌ EXPORT ACCESS DENIED: Insufficient permissions");
       return res.status(403).json({ error: 'Hanya administrator yang dapat export database' });
     }
     
     try {
+      console.log("📦 Starting database export...");
       const backupFile = await createDatabaseBackup();
+      console.log("💾 Export File Created:", backupFile);
+      
       const filename = backupFile.split('/').pop();
-      res.json({ 
+      console.log("📁 Export Filename:", filename);
+      
+      const response = { 
         success: true, 
         message: 'Database export berhasil dibuat',
         backupFile: filename,
         downloadUrl: `/api/backup/download?file=${encodeURIComponent(filename || '')}`
-      });
+      };
+      
+      console.log("✅ DATABASE EXPORT COMPLETED SUCCESSFULLY");
+      console.log("📤 Export Response:", response);
+      res.json(response);
     } catch (error: any) {
+      console.error("🔥 DATABASE EXPORT FAILED:", error);
+      console.error("📋 Error Stack:", error.stack);
       res.status(500).json({ error: 'Gagal export database', details: error.message });
     }
   });
 
   // Download backup file endpoint
   app.get('/api/backup/download', async (req: any, res: any) => {
+    console.log("🚀 BACKUP DOWNLOAD STARTED");
+    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    console.log("🔍 Query Params:", req.query);
+    
     if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
+      console.log("❌ DOWNLOAD ACCESS DENIED: Insufficient permissions");
       return res.status(403).json({ error: 'Hanya administrator yang dapat download backup' });
     }
     
     const { file } = req.query;
+    console.log("💾 Requested File:", file);
+    
     if (!file) {
+      console.log("❌ DOWNLOAD FAILED: No file parameter provided");
       return res.status(400).json({ error: 'Parameter file diperlukan' });
     }
     
     // Validate filename for security (no path traversal)
     const filename = String(file);
+    console.log("🔍 Validating filename:", filename);
+    
     if (filename.includes('..') || filename.includes('/') || filename.includes('\\') || !filename.endsWith('.sql')) {
+      console.log("❌ DOWNLOAD FAILED: Invalid filename - security check failed");
       return res.status(400).json({ error: 'Nama file tidak valid' });
     }
     
     try {
       const filePath = path.join('database_backup', filename);
+      console.log("📁 Full File Path:", filePath);
+      
+      console.log("🔍 Checking if file exists...");
       const stat = await fs.stat(filePath);
+      console.log("📊 File Stats:", { size: stat.size, isFile: stat.isFile() });
       
       if (!stat.isFile()) {
+        console.log("❌ DOWNLOAD FAILED: File not found or not a file");
         return res.status(404).json({ error: 'File tidak ditemukan' });
       }
       
+      console.log("📦 Setting download headers...");
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       res.setHeader('Content-Type', 'application/sql');
       res.setHeader('Content-Length', stat.size);
       
+      console.log("📜 Reading file content...");
       const fileStream = await fs.readFile(filePath);
+      console.log("✅ BACKUP DOWNLOAD COMPLETED SUCCESSFULLY");
+      console.log("📦 File Size Sent:", fileStream.length, "bytes");
       res.send(fileStream);
     } catch (error: any) {
-      console.error('Error downloading backup:', error);
+      console.error("🔥 BACKUP DOWNLOAD FAILED:", error);
+      console.error('📋 Error Stack:', error.stack);
       res.status(500).json({ error: 'Gagal download backup', details: error.message });
     }
   });
 
   // List available backups endpoint
   app.get('/api/backup/list', async (req: any, res: any) => {
+    console.log("🚀 BACKUP LIST REQUEST STARTED");
+    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    
     if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
+      console.log("❌ BACKUP LIST ACCESS DENIED: Insufficient permissions");
       return res.status(403).json({ error: 'Hanya administrator yang dapat melihat daftar backup' });
     }
     
     try {
       const backupDir = 'database_backup';
-      const files = await fs.readdir(backupDir);
-      const sqlFiles = files.filter(file => file.endsWith('.sql'));
+      console.log("📁 Reading backup directory:", backupDir);
       
+      const files = await fs.readdir(backupDir);
+      console.log("📜 All Files Found:", files);
+      
+      const sqlFiles = files.filter(file => file.endsWith('.sql'));
+      console.log("💾 SQL Files Found:", sqlFiles);
+      
+      console.log("🔍 Processing file information...");
       const backups = await Promise.all(sqlFiles.map(async (filename) => {
         const filePath = path.join(backupDir, filename);
         const stat = await fs.stat(filePath);
         
-        return {
+        const fileInfo = {
           filename,
           size: stat.size,
           createdAt: stat.birthtime,
           modifiedAt: stat.mtime
         };
+        
+        console.log("📄 File Info:", fileInfo);
+        return fileInfo;
       }));
       
+      console.log("🔄 Sorting backups by creation date...");
       // Sort by creation date, newest first
       backups.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       
-      res.json({ success: true, backups });
+      const response = { success: true, backups };
+      console.log("✅ BACKUP LIST COMPLETED SUCCESSFULLY");
+      console.log("📊 Total Backups Found:", backups.length);
+      console.log("📤 List Response:", response);
+      res.json(response);
     } catch (error: any) {
-      console.error('Error listing backups:', error);
+      console.error("🔥 BACKUP LIST FAILED:", error);
+      console.error('📋 Error Stack:', error.stack);
       res.status(500).json({ error: 'Gagal mendapatkan daftar backup', details: error.message });
     }
   });
 
   // Manual import endpoint
   app.post('/api/backup/import', async (req: any, res: any) => {
+    console.log("🚀 DATABASE IMPORT STARTED");
+    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    
     if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
+      console.log("❌ IMPORT ACCESS DENIED: Insufficient permissions");
       return res.status(403).json({ error: 'Hanya administrator yang dapat import database' });
     }
     
     const sqlContent = req.body;
+    console.log("📝 SQL Content Type:", typeof sqlContent);
+    console.log("📊 SQL Content Length:", sqlContent ? sqlContent.length : 0, "characters");
+    
     if (!sqlContent || typeof sqlContent !== 'string') {
+      console.log("❌ IMPORT FAILED: Invalid SQL content");
       return res.status(400).json({ error: 'Konten SQL diperlukan' });
     }
     
     if (sqlContent.length > 50 * 1024 * 1024) { // 50MB limit
+      console.log("❌ IMPORT FAILED: File too large (", sqlContent.length, "bytes)");
       return res.status(400).json({ error: 'File terlalu besar (maksimal 50MB)' });
     }
     
@@ -272,20 +406,31 @@ export function registerRoutes(app: Express): Server {
       const tempFilename = `temp_import_${Date.now()}.sql`;
       const tempFilePath = path.join(tempDir, tempFilename);
       
+      console.log("📁 Creating temporary file:", tempFilePath);
       await fs.writeFile(tempFilePath, sqlContent);
+      console.log("✅ Temporary file created successfully");
       
       // Restore from temporary file
+      console.log("🔄 Starting database restore from imported content...");
       await restoreDatabaseFromBackup(tempFilePath);
+      console.log("✅ Database restore completed successfully");
       
       // Clean up temporary file
+      console.log("🧹 Cleaning up temporary file...");
       await fs.unlink(tempFilePath);
+      console.log("✅ Temporary file cleaned up");
       
-      res.json({ 
+      const response = { 
         success: true, 
         message: 'Database berhasil di-import'
-      });
+      };
+      
+      console.log("✅ DATABASE IMPORT COMPLETED SUCCESSFULLY");
+      console.log("📤 Import Response:", response);
+      res.json(response);
     } catch (error: any) {
-      console.error('Error importing database:', error);
+      console.error("🔥 DATABASE IMPORT FAILED:", error);
+      console.error('📋 Error Stack:', error.stack);
       res.status(500).json({ error: 'Gagal import database', details: error.message });
     }
   });
