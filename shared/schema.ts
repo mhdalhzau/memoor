@@ -341,6 +341,9 @@ export const insertCashflowSchema = createInsertSchema(cashflow).omit({
   createdAt: true,
 }).extend({
   paymentStatus: z.enum(["lunas", "belum_lunas"]).default("lunas"),
+  date: z.string().refine((val) => !isNaN(Date.parse(val)), {
+    message: "Please provide a valid date string",
+  }).transform((val) => new Date(val)),
 }).superRefine((data, ctx) => {
   // If creating a debt (Pemberian Utang), payment status is required
   if (data.type === "Pemberian Utang") {

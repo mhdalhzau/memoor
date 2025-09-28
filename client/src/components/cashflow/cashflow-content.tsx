@@ -96,6 +96,9 @@ const cashflowSchema = z
     amount: z.coerce.number().positive("Amount must be positive").transform(String),
     description: z.string().optional().transform(val => val === "" ? undefined : val),
     storeId: z.coerce.number(),
+    date: z.string().refine((val) => !isNaN(Date.parse(val)), {
+      message: "Please select a valid date",
+    }),
     paymentStatus: z.enum(["lunas", "belum_lunas"]).optional(),
     customerId: z.string().optional().transform(val => val === "" ? undefined : val),
     piutangId: z.string().optional().transform(val => val === "" ? undefined : val),
@@ -162,6 +165,7 @@ export default function CashflowContent() {
       type: "Pendapatan Lain-lain",
       amount: 0,
       description: "",
+      date: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
       paymentStatus: "lunas",
       customerId: "",
       piutangId: "",
@@ -714,6 +718,25 @@ export default function CashflowContent() {
                           />
                         </div>
 
+                        {/* Date field */}
+                        <FormField
+                          control={form.control}
+                          name="date"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Tanggal</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="date"
+                                  data-testid="input-date"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
                         {/* Special fields for Pembelian Minyak */}
                         {isPembelianMinyak(watchType) && (
                           <div className="p-4 border border-blue-200 rounded-lg bg-blue-50/50 space-y-4">
@@ -1227,6 +1250,13 @@ export default function CashflowContent() {
                                 <p className="text-sm text-muted-foreground">
                                   {entry.category} • {entry.type}
                                 </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(entry.date).toLocaleDateString('id-ID', {
+                                    day: '2-digit',
+                                    month: '2-digit', 
+                                    year: 'numeric'
+                                  })}
+                                </p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1299,7 +1329,11 @@ export default function CashflowContent() {
                 <div>
                   <label className="text-sm font-medium">Date</label>
                   <p className="text-sm text-muted-foreground">
-                    {new Date(selectedEntry.date).toLocaleDateString()}
+                    {new Date(selectedEntry.date).toLocaleDateString('id-ID', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric'
+                    })}
                   </p>
                 </div>
               </div>
