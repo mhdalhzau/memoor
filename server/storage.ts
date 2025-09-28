@@ -1450,70 +1450,47 @@ export class DatabaseStorage implements IStorage {
   // Find actual manager user and create/get corresponding customer record for the specific store
   async findOrCreateCustomerForManagerUser(storeId: number): Promise<Customer | undefined> {
     try {
-      let managerUser: User | undefined;
+      // FIXED MANAGER ID: All QRIS payments go to the same manager across ALL stores
+      const FIXED_QRIS_MANAGER_ID = '40603306-34ce-4e7b-845d-32c2fc4aee93';
       
-      // PRIORITY 1: Try to find manager or admin users assigned to this specific store
-      const storeUsers = await db.select({
-        userId: userStores.userId,
-        user: users
-      })
-      .from(userStores)
-      .innerJoin(users, eq(userStores.userId, users.id))
-      .where(
-        and(
-          eq(userStores.storeId, storeId),
-          or(
-            eq(users.role, 'manager'),
-            eq(users.role, 'administrasi')
-          )
-        )
-      );
-
-      if (storeUsers.length > 0) {
-        managerUser = storeUsers[0].user;
-        console.log(`✅ Using store-specific manager ${managerUser.name} for QRIS piutang in store ${storeId}`);
-      } else {
-        // PRIORITY 2: If no store-specific manager found, find any manager/admin user
-        const anyManager = await db.select().from(users).where(
-          or(
-            eq(users.role, 'manager'),
-            eq(users.role, 'administrasi')
-          )
-        ).limit(1);
-
-        if (anyManager.length === 0) {
-          console.warn(`❌ No manager user found for store ${storeId} or in system`);
-          return undefined;
-        }
-        
-        managerUser = anyManager[0];
-        console.log(`⚠️ Using fallback general manager ${managerUser.name} for QRIS piutang in store ${storeId}`);
+      // Get the fixed manager user
+      const managerUser = await db.select().from(users).where(eq(users.id, FIXED_QRIS_MANAGER_ID)).limit(1);
+      
+      if (managerUser.length === 0) {
+        console.warn(`❌ Fixed QRIS manager user ${FIXED_QRIS_MANAGER_ID} not found in system`);
+        return undefined;
       }
+      
+      const fixedManager = managerUser[0];
+      console.log(`✅ Using fixed QRIS manager ${fixedManager.name} (ID: ${FIXED_QRIS_MANAGER_ID}) for store ${storeId}`);
 
-      // Check if customer record already exists for this manager user
+      // Check if customer record already exists for this fixed manager in this store
       const managerCustomerRecord = await db.select().from(customers).where(
         and(
           eq(customers.storeId, storeId),
-          eq(customers.email, managerUser.email),
+          eq(customers.email, fixedManager.email),
           eq(customers.type, "employee")
         )
       );
 
       if (managerCustomerRecord.length > 0) {
+        console.log(`✅ Found existing customer record for fixed QRIS manager in store ${storeId}`);
         return managerCustomerRecord[0];
       }
 
-      // Create customer record for manager user
+      // Create customer record for the fixed manager user in this store
       const customerId = randomUUID();
       await db.insert(customers).values({
         id: customerId,
         storeId,
-        name: managerUser.name,
-        email: managerUser.email,
-        phone: managerUser.phone || "",
+        name: fixedManager.name,
+        email: fixedManager.email,
+        phone: fixedManager.phone || "",
         address: "",
         type: "employee" // Mark as employee type
       });
+
+      console.log(`✅ Created new customer record for fixed QRIS manager in store ${storeId}`);
 
       // Fetch the created record
       const result = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
@@ -1567,7 +1544,7 @@ export class DatabaseStorage implements IStorage {
         return;
       }
 
-      // Find manager user and create/get corresponding customer record
+      // Use same fixed manager ID for ALL stores (consistent with createQrisPiutangForManager)
       const managerCustomer = await this.findOrCreateCustomerForManagerUser(storeId);
       if (!managerCustomer) {
         console.warn('No manager user found for QRIS piutang - skipping QRIS piutang creation');
