@@ -2195,10 +2195,11 @@ export function registerRoutes(app: Express): Server {
           const existingPayroll = await storage.getPayrollByUserStoreMonth(user.id, storeId, currentMonth);
           
           if (existingPayroll) {
-            // Update existing payroll record with new calculations
+            // Update existing payroll record with new calculations including totalAmount
             payrollPromises.push(storage.updatePayrollCalculation(existingPayroll.id, {
               baseSalary: basePay.toFixed(2),
               overtimePay: overtimePay.toFixed(2),
+              totalAmount: totalAmount.toFixed(2),
             }));
           } else {
             // Create new payroll record
@@ -3455,8 +3456,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Commented out - replaced by middleware integration
-  /*
+  // Customer creation route
   app.post("/api/customers", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ message: "Unauthorized" });
@@ -3483,7 +3483,6 @@ export function registerRoutes(app: Express): Server {
       res.status(400).json({ message: error.message });
     }
   });
-  */
 
   app.patch("/api/customers/:id", async (req, res) => {
     try {

@@ -97,7 +97,7 @@ export interface IStorage {
   getAllPayroll(): Promise<Payroll[]>;
   createPayroll(payroll: InsertPayroll): Promise<Payroll>;
   updatePayrollStatus(id: string, status: string): Promise<Payroll | undefined>;
-  updatePayrollCalculation(id: string, data: { baseSalary?: string, overtimePay?: string }): Promise<Payroll | undefined>;
+  updatePayrollCalculation(id: string, data: { baseSalary?: string, overtimePay?: string, totalAmount?: string }): Promise<Payroll | undefined>;
   
   // Proposal methods
   getProposal(id: string): Promise<Proposal | undefined>;
@@ -941,7 +941,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async updatePayrollCalculation(id: string, data: { baseSalary?: string, overtimePay?: string }): Promise<Payroll | undefined> {
+  async updatePayrollCalculation(id: string, data: { baseSalary?: string, overtimePay?: string, totalAmount?: string }): Promise<Payroll | undefined> {
     try {
       await db.update(payroll).set(data).where(eq(payroll.id, id));
       // MySQL doesn't support .returning(), so fetch the updated payroll
