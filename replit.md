@@ -29,6 +29,13 @@ This is a multi-role employee management system built with React, TypeScript, Ex
 ✅ **Database Connectivity**: MySQL connection stable and all endpoints responding correctly
 ✅ **QRIS Default Handler**: Set user ID `40603306-34ce-4e7b-845d-32c2fc4aee93` as default QRIS receivable handler
 
+## QRIS Store Assignment Fix (September 28, 2025)
+✅ **QRIS Piutang Store Issue Resolved**: Fixed critical bug where QRIS receivables from Patam Lestari store were incorrectly assigned to Tiban Hills customer
+✅ **Store-Specific Customer Logic**: Updated `findOrCreateCustomerForManagerUser` function to create store-specific manager customers instead of using hardcoded customer across all stores
+✅ **Proper Store Attribution**: QRIS payments now correctly create piutang records for customers belonging to the originating store
+✅ **Improved Fallback System**: Enhanced manager user selection logic with proper store-specific priority and robust fallback mechanisms
+✅ **System Integrity**: Each store now maintains its own manager customer records for QRIS transactions, eliminating cross-store data confusion
+
 ✅ MySQL Database Setup Successfully Completed
 Your GitHub-imported business management system now has a fully functional MySQL database setup with comprehensive backup capabilities and data access restrictions. Here's what was accomplished:
 
