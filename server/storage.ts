@@ -1450,6 +1450,20 @@ export class DatabaseStorage implements IStorage {
   // Find actual manager user and create/get corresponding customer record
   async findOrCreateCustomerForManagerUser(storeId: number): Promise<Customer | undefined> {
     try {
+      // HARDCODED: Always use specific customer ID for ALL QRIS payments regardless of store
+      const targetCustomerId = 'ecf7eed0-b31c-4b5a-8cf8-a4a6d50e0cd3';
+      
+      // Check if this customer exists
+      const existingCustomer = await db.select().from(customers).where(
+        eq(customers.id, targetCustomerId)
+      );
+      
+      if (existingCustomer.length > 0) {
+        console.log(`✅ Using hardcoded QRIS customer ${existingCustomer[0].name} for store ${storeId} (consistent across ALL stores)`);
+        return existingCustomer[0];
+      }
+      
+      // Fallback: If customer doesn't exist, try to find manager user and create customer
       let managerUser: User | undefined;
       
       // PRIORITY 1: Always try the default QRIS handler first for consistency
@@ -1458,7 +1472,7 @@ export class DatabaseStorage implements IStorage {
       
       if (defaultQrisUser) {
         managerUser = defaultQrisUser;
-        console.log(`✅ Using default QRIS manager ${managerUser.name} for store ${storeId} (consistent across all stores)`);
+        console.log(`⚠️ Hardcoded customer not found, using default QRIS manager ${managerUser.name} for store ${storeId}`);
       } else {
         // PRIORITY 2: If default user not found, try to find manager or admin users assigned to this specific store
         const storeUsers = await db.select({
@@ -1500,7 +1514,7 @@ export class DatabaseStorage implements IStorage {
       }
 
       // Check if customer record already exists for this manager user
-      const existingCustomer = await db.select().from(customers).where(
+      const managerCustomerRecord = await db.select().from(customers).where(
         and(
           eq(customers.storeId, storeId),
           eq(customers.email, managerUser.email),
@@ -1508,8 +1522,8 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
-      if (existingCustomer.length > 0) {
-        return existingCustomer[0];
+      if (managerCustomerRecord.length > 0) {
+        return managerCustomerRecord[0];
       }
 
       // Create customer record for manager user
