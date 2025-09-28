@@ -707,6 +707,51 @@ export default function PiutangPage() {
       </div>
 
 
+      {/* Debug: Raw Piutang Data Display */}
+      <div className="mb-8">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Receipt className="h-4 w-4" />
+              🚀 All Piutang Records (Raw Data)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xs font-mono bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto">
+              <div className="text-green-600 font-bold mb-2">
+                📊 Total Records: {piutangRecords.length}
+              </div>
+              <div className="text-blue-600 font-bold mb-2">
+                🎯 QRIS Records: {piutangRecords.filter(p => p.description.includes('QRIS')).length}
+              </div>
+              <div className="text-purple-600 font-bold mb-4">
+                👤 Unique Customers: {[...new Set(piutangRecords.map(p => p.customerId))].length}
+              </div>
+              
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {piutangRecords.map((p, idx) => (
+                  <div key={p.id} className="border-l-2 border-blue-300 pl-2 py-1 text-xs">
+                    <div className="text-orange-600 font-bold">#{idx + 1} - {p.id}</div>
+                    <div><span className="text-gray-500">Customer ID:</span> <span className="text-blue-600">{p.customerId}</span></div>
+                    <div><span className="text-gray-500">Store:</span> <span className="text-green-600">{p.storeId}</span></div>
+                    <div><span className="text-gray-500">Amount:</span> <span className="text-red-600">{formatRupiah(parseFloat(p.amount))}</span></div>
+                    <div><span className="text-gray-500">Status:</span> <span className="text-purple-600">{p.status}</span></div>
+                    <div><span className="text-gray-500">Description:</span> <span className="text-gray-700">{p.description}</span></div>
+                    <div className="text-xs text-gray-400">Created: {new Date(p.createdAt).toLocaleString()}</div>
+                  </div>
+                ))}
+              </div>
+              
+              {piutangRecords.length === 0 && (
+                <div className="text-center text-gray-500 py-8">
+                  No piutang records found
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Store Categories and Customer Debt List */}
       <div className="space-y-8">
         {Object.keys(filteredStoreGroupedData).length > 0 ? (
