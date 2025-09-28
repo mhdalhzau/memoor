@@ -556,6 +556,7 @@ export default function PiutangPage() {
         <Tabs value={activeTab || ""} onValueChange={handleTabChange} className="w-full">
           <TabsList className="grid w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mb-6">
             {stores.map((store) => (
+           </>
               <TabsTrigger 
                 key={store.id} 
                 value={`store-${store.id}`}
