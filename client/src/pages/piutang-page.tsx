@@ -567,6 +567,9 @@ export default function PiutangPage() {
           </TabsList>
           
           {stores.map((store) => (
+          console.log("Rendering tab for store:", store); // ✅ debug
+
+          return (
             <TabsContent key={store.id} value={`store-${store.id}`}>
               {/* Search */}
               <div className="mb-6">
@@ -581,7 +584,7 @@ export default function PiutangPage() {
                   />
                 </div>
               </div>
-
+              (
               {/* Customer Debt List */}
               <div className="space-y-4">
         {filteredCustomers.length > 0 ? (
