@@ -83,8 +83,12 @@ interface CustomerWithPiutang {
 }
 
 export default function PiutangPage() {
+  console.log("🏦 PiutangPage: Component rendered");
+  
   const { user } = useAuth();
   const { toast } = useToast();
+  
+  console.log("👤 PiutangPage: Current user:", user);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [paymentModalData, setPaymentModalData] = useState<Piutang | null>(
@@ -100,11 +104,14 @@ export default function PiutangPage() {
     queryKey: ["/api/stores"],
     enabled: !!user,
   });
+  
+  console.log("🏪 PiutangPage: Stores data:", stores);
 
   // Set default active tab when stores load
   useEffect(() => {
     if (stores.length > 0 && !activeTab) {
       const firstStoreTab = `store-${stores[0].id}`;
+      console.log("📋 PiutangPage: Setting default active tab:", firstStoreTab);
       setActiveTab(firstStoreTab);
     }
   }, [stores, activeTab]);
@@ -113,6 +120,8 @@ export default function PiutangPage() {
   const currentStoreId = activeTab
     ? parseInt(activeTab.replace("store-", ""))
     : undefined;
+    
+  console.log("🏪 PiutangPage: Current store ID:", currentStoreId);
 
   // Fetch unified customers (includes user-based customers) and piutang data
   const { data: customers = [] } = useQuery<Customer[]>({
@@ -127,6 +136,8 @@ export default function PiutangPage() {
     },
     enabled: !!user && !!currentStoreId,
   });
+  
+  console.log("👥 PiutangPage: Customers data:", customers);
 
   // Define the pagination response type - now with store filtering
   const { data: piutangResponse, isLoading } = useQuery<{
@@ -154,9 +165,13 @@ export default function PiutangPage() {
   const piutangRecords = Array.isArray(piutangResponse?.data)
     ? piutangResponse.data
     : [];
+    
+  console.log("💰 PiutangPage: Piutang records:", piutangRecords);
+  console.log("📊 PiutangPage: Loading state:", isLoading);
 
   // Handle tab change
   const handleTabChange = (value: string) => {
+    console.log("🔄 PiutangPage: Tab changed to:", value);
     setActiveTab(value);
     const storeId = parseInt(value.replace("store-", ""));
 
