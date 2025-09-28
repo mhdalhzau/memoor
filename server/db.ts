@@ -1,34 +1,35 @@
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/mysql2';
+import mysql from 'mysql2/promise';
 import * as schema from '@shared/schema';
 
-// Get database URL from environment variables (Using PostgreSQL for now)
+// Get database URL from environment variables
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
   throw new Error('DATABASE_URL environment variable is required for database connection');
 }
 
-// Create PostgreSQL connection pool (with MySQL-compatible business logic)
-const pool = new Pool({
-  connectionString: databaseUrl,
-  max: 25,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+// Create MySQL connection pool
+const pool = mysql.createPool({
+  uri: databaseUrl,
+  connectionLimit: 25,
+  acquireTimeout: 30000,
+  timeout: 2000,
 });
 
 // Test database connection
 export async function testDatabaseConnection(): Promise<boolean> {
   try {
     console.log('🔄 Connecting to database...');
-    const client = await pool.connect();
-    console.log('🔄 Using PostgreSQL database with MySQL schema compatibility');
+    const connection = await pool.getConnection();
+    console.log('🔄 Using MySQL database');
     
-    // Test query - Simple select that works with PostgreSQL
-    await client.query('SELECT 1 as test');
-    client.release();
+    // Test query - MySQL syntax
+    await connection.execute('SELECT 1 as test');
+    connection.release();
     
     console.log('✅ Database connection verified successfully');
+    console.log('✅ Database health check passed - MySQL connection verified');
     return true;
   } catch (error) {
     console.error('❌ Database connection failed:', error);
@@ -44,7 +45,7 @@ export async function ensureDatabaseConnection(): Promise<void> {
   }
 }
 
-// Create Drizzle database instance with PostgreSQL (MySQL schema compatible)
+// Create Drizzle database instance with MySQL
 export const db = drizzle(pool, { schema, mode: 'default' });
 
 // Export pool for advanced usage if needed
