@@ -174,9 +174,11 @@ export default function CashflowContent() {
 
   // Keep form storeId in sync with activeTab
   useEffect(() => {
-    const storeId = parseInt(activeTab.replace("store-", ""));
-    if (!isNaN(storeId)) {
-      form.setValue("storeId", storeId);
+    if (activeTab) {
+      const storeId = parseInt(activeTab.replace("store-", ""));
+      if (!isNaN(storeId)) {
+        form.setValue("storeId", storeId);
+      }
     }
   }, [activeTab, form]);
 
