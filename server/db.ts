@@ -1,21 +1,48 @@
 import { drizzle } from 'drizzle-orm/mysql2';
 import mysql from 'mysql2/promise';
 import * as schema from '@shared/schema';
+import fs from 'fs';
+import path from 'path';
 
-// Get database URL from environment variables
-const databaseUrl = process.env.DATABASE_URL;
+// Get database URL from environment variables or fallback to example
+const databaseUrl = process.env.DATABASE_URL || process.env.MYSQL_DATABASE_URL || 'mysql://avnadmin:AVNS_Woo6_cb4krTtGU7mJQi@marlokk-mhdalhzau.j.aivencloud.com:18498/defaultdb?ssl-mode=REQUIRED';
 
 if (!databaseUrl) {
-  throw new Error('DATABASE_URL environment variable is required for database connection');
+  throw new Error('DATABASE_URL or MYSQL_DATABASE_URL environment variable is required for database connection');
 }
 
-// Create MySQL connection pool
+// Configure SSL for Aiven MySQL connection
+let sslConfig: any = false;
+
+if (databaseUrl.includes('aivencloud.com') || databaseUrl.includes('ssl-mode=REQUIRED')) {
+  const caCertPath = path.join(process.cwd(), 'attached_assets', 'ca.pem');
+  
+  if (fs.existsSync(caCertPath)) {
+    const caCert = fs.readFileSync(caCertPath, 'utf8');
+    sslConfig = {
+      ca: caCert,
+      rejectUnauthorized: false // More lenient for Aiven connections in Replit
+    };
+    console.log('🔒 Using SSL certificate for Aiven MySQL connection');
+  } else {
+    // Fallback SSL config for Aiven without explicit CA
+    sslConfig = {
+      rejectUnauthorized: false
+    };
+    console.log('🔒 Using basic SSL for Aiven MySQL connection');
+  }
+}
+
+// Create MySQL connection pool with optimized settings for Aiven
 const pool = mysql.createPool({
   uri: databaseUrl,
-  connectionLimit: 25,
-  acquireTimeout: 30000,
-  connectTimeout: 2000,
-  ssl: databaseUrl.includes('ssl=true') ? { rejectUnauthorized: false } : false,
+  connectionLimit: 10, // Reduced for better stability
+  acquireTimeout: 60000, // Increased for slow connections
+  timeout: 60000, // Increased connection timeout
+  ssl: sslConfig,
+  reconnect: true,
+  keepAliveInitialDelay: 0,
+  enableKeepAlive: true,
 });
 
 // Test database connection
