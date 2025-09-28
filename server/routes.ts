@@ -2320,26 +2320,47 @@ export function registerRoutes(app: Express): Server {
           
           // Calculate working days from pre-fetched attendance records
           const userAttendanceThisMonth = storeAttendanceRecords.filter(attendance => {
-            const attendanceDate = new Date(attendance.date || attendance.createdAt);
-            return attendance.userId === user.id &&
-                   attendanceDate.toISOString().slice(0, 7) === currentMonth && 
-                   attendance.checkIn && attendance.checkOut;
+            if (!attendance.date && !attendance.createdAt) return false;
+            try {
+              const attendanceDate = new Date(attendance.date || attendance.createdAt);
+              if (isNaN(attendanceDate.getTime())) return false;
+              return attendance.userId === user.id &&
+                     attendanceDate.toISOString().slice(0, 7) === currentMonth && 
+                     attendance.checkIn && attendance.checkOut;
+            } catch (error) {
+              console.warn('Error processing attendance date:', error);
+              return false;
+            }
           });
           
           // Count unique dates to ensure we don't double-count multiple shifts on same day
           const uniqueDates = new Set(userAttendanceThisMonth.map(attendance => {
-            const attendanceDate = new Date(attendance.date || attendance.createdAt);
-            return attendanceDate.toISOString().split('T')[0]; // YYYY-MM-DD
-          }));
+            try {
+              const attendanceDate = new Date(attendance.date || attendance.createdAt);
+              if (isNaN(attendanceDate.getTime())) return null;
+              return attendanceDate.toISOString().split('T')[0]; // YYYY-MM-DD
+            } catch (error) {
+              console.warn('Error processing attendance date for unique dates:', error);
+              return null;
+            }
+          }).filter(date => date !== null));
           const workingDays = uniqueDates.size;
           
           // Calculate overtime hours from pre-fetched overtime records
-          const userOvertimeThisMonth = allOvertimeRecords.filter(overtime => 
-            overtime.userId === user.id &&
-            overtime.storeId === storeId &&
-            overtime.status === 'approved' &&
-            new Date(overtime.createdAt).toISOString().slice(0, 7) === currentMonth
-          );
+          const userOvertimeThisMonth = allOvertimeRecords.filter(overtime => {
+            if (!overtime.createdAt) return false;
+            try {
+              const overtimeDate = new Date(overtime.createdAt);
+              if (isNaN(overtimeDate.getTime())) return false;
+              return overtime.userId === user.id &&
+                     overtime.storeId === storeId &&
+                     overtime.status === 'approved' &&
+                     overtimeDate.toISOString().slice(0, 7) === currentMonth;
+            } catch (error) {
+              console.warn('Error processing overtime date:', error);
+              return false;
+            }
+          });
           const totalOvertimeHours = userOvertimeThisMonth.reduce((total, overtime) => 
             total + parseFloat(overtime.hours || "0"), 0
           );

@@ -317,7 +317,7 @@ export default function PayrollContent() {
                           <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center">
                             <span className="text-sm font-medium">
                               {(record.user?.name && record.user.name.slice(0, 2).toUpperCase()) ||
-                                record.userId.slice(0, 2).toUpperCase()}
+                                (record.userId ? record.userId.slice(0, 2).toUpperCase() : "??")}
                             </span>
                           </div>
                           <div>
