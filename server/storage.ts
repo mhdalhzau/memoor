@@ -1440,6 +1440,8 @@ export class DatabaseStorage implements IStorage {
   // Find actual manager user and create/get corresponding customer record for the specific store
   async findOrCreateCustomerForManagerUser(storeId: number): Promise<Customer | undefined> {
     try {
+      console.log(`🎯 CUSTOMER GENERATION: Starting for store ${storeId}`);
+      
       // FIXED MANAGER ID: All QRIS payments go to the same manager across ALL stores
       const FIXED_QRIS_MANAGER_ID = '40603306-34ce-4e7b-845d-32c2fc4aee93';
       
@@ -1447,12 +1449,12 @@ export class DatabaseStorage implements IStorage {
       const managerUser = await db.select().from(users).where(eq(users.id, FIXED_QRIS_MANAGER_ID)).limit(1);
       
       if (managerUser.length === 0) {
-        console.warn(`❌ Fixed QRIS manager user ${FIXED_QRIS_MANAGER_ID} not found in system`);
+        console.warn(`❌ CUSTOMER GENERATION: Fixed QRIS manager user ${FIXED_QRIS_MANAGER_ID} not found in system`);
         return undefined;
       }
       
       const fixedManager = managerUser[0];
-      console.log(`✅ Using fixed QRIS manager ${fixedManager.name} (ID: ${FIXED_QRIS_MANAGER_ID}) for store ${storeId}`);
+      console.log(`🔍 CUSTOMER GENERATION: Using fixed QRIS manager ${fixedManager.name} (ID: ${FIXED_QRIS_MANAGER_ID}) for store ${storeId}`);
 
       // Check if customer record already exists for this fixed manager in this store
       const managerCustomerRecord = await db.select().from(customers).where(
@@ -1464,12 +1466,14 @@ export class DatabaseStorage implements IStorage {
       );
 
       if (managerCustomerRecord.length > 0) {
-        console.log(`✅ Found existing customer record for fixed QRIS manager in store ${storeId}`);
+        console.log(`✅ CUSTOMER GENERATION: Found existing customer record for QRIS manager in store ${storeId}, customer ID: ${managerCustomerRecord[0].id}`);
         return managerCustomerRecord[0];
       }
 
       // Create customer record for the fixed manager user in this store
       const customerId = randomUUID();
+      console.log(`🆕 CUSTOMER GENERATION: Creating new customer record with ID ${customerId} for store ${storeId}`);
+      
       await db.insert(customers).values({
         id: customerId,
         storeId,
@@ -1480,13 +1484,19 @@ export class DatabaseStorage implements IStorage {
         type: "employee" // Mark as employee type
       });
 
-      console.log(`✅ Created new customer record for fixed QRIS manager in store ${storeId}`);
+      console.log(`✅ CUSTOMER GENERATION: Successfully created new customer record for QRIS manager in store ${storeId}`);
 
       // Fetch the created record
       const result = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
-      return result[0];
+      if (result.length > 0) {
+        console.log(`✅ CUSTOMER GENERATION: Verified created customer record: ${result[0].id} - ${result[0].name}`);
+        return result[0];
+      } else {
+        console.error(`❌ CUSTOMER GENERATION: Failed to fetch newly created customer record`);
+        return undefined;
+      }
     } catch (error) {
-      console.error('Error finding/creating customer for manager user:', error);
+      console.error('❌ CUSTOMER GENERATION: Error finding/creating customer for manager user:', error);
       return undefined;
     }
   }
@@ -1796,24 +1806,24 @@ export class DatabaseStorage implements IStorage {
       // Calculate offset for pagination
       const offset = (page - 1) * limit;
       
-      // Get total count for pagination info
-      const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(piutang).where(eq(piutang.storeId, storeId));
-      const total = countResult.count;
-      
-      // Get paginated results
+      // Get paginated results directly without count query to reduce timeout
       const data = await db.select()
         .from(piutang)
         .where(eq(piutang.storeId, storeId))
         .orderBy(desc(piutang.createdAt))
-        .limit(limit)
+        .limit(limit + 1) // Get one extra to check hasMore
         .offset(offset);
       
-      // Calculate if there are more records
-      const hasMore = offset + data.length < total;
+      // Check if there are more records based on extra item
+      const hasMore = data.length > limit;
+      const actualData = hasMore ? data.slice(0, limit) : data;
+      
+      // For total, use approximation to avoid slow count query
+      const approximateTotal = offset + actualData.length + (hasMore ? 1 : 0);
       
       return {
-        data,
-        total,
+        data: actualData,
+        total: approximateTotal,
         hasMore
       };
     } catch (error) {
