@@ -33,7 +33,7 @@ export function setupDatabaseMiddleware(app: Express) {
    */
   
   // CREATE Store
-  app.post('/api/stores/new', 
+  app.post('/api/stores', 
     logDatabaseOperation,
     requireAuth,
     requireRole(['manager', 'administrasi']),
@@ -60,7 +60,7 @@ export function setupDatabaseMiddleware(app: Express) {
    */
   
   // CREATE Sales dengan validasi lengkap
-  app.post('/api/sales/new',
+  app.post('/api/sales',
     logDatabaseOperation,
     requireAuth,
     requireRole(['staff', 'manager', 'administrasi']),
@@ -129,7 +129,7 @@ export function setupDatabaseMiddleware(app: Express) {
    */
   
   // CREATE Attendance dengan validasi waktu
-  app.post('/api/attendance/new',
+  app.post('/api/attendance',
     logDatabaseOperation,
     requireAuth,
     validateStoreAccess(),
@@ -179,7 +179,7 @@ export function setupDatabaseMiddleware(app: Express) {
    */
   
   // CREATE Cashflow dengan validasi tipe transaksi
-  app.post('/api/cashflow/new',
+  app.post('/api/cashflow',
     logDatabaseOperation,
     requireAuth,
     requireRole(['staff', 'manager', 'administrasi']),
@@ -230,7 +230,7 @@ export function setupDatabaseMiddleware(app: Express) {
    */
   
   // CREATE Customer dengan validasi
-  app.post('/api/customers/new',
+  app.post('/api/customers',
     logDatabaseOperation,
     requireAuth,
     validateStoreAccess(),
@@ -278,7 +278,7 @@ export function setupDatabaseMiddleware(app: Express) {
    */
   
   // CREATE Product
-  app.post('/api/products/new',
+  app.post('/api/products',
     logDatabaseOperation,
     requireAuth,
     requireRole(['manager', 'administrasi']),
