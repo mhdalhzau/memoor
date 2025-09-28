@@ -92,47 +92,28 @@ const cashflowSchema = z
     type: z.enum(allTypes, {
       errorMap: () => ({ message: "Please select a type" }),
     }),
-    amount: z.coerce
-      .number()
-      .positive("Amount must be positive")
-      .transform((val) => val.toString()),
+    amount: z.coerce.number().positive("Amount must be positive"),
     description: z.string().optional(),
     storeId: z.coerce.number(),
-    // Payment status and customer fields
     paymentStatus: z.enum(["lunas", "belum_lunas"]).optional(),
     customerId: z.string().optional(),
+
     // Additional fields for Pembelian Minyak
     jumlahGalon: z.coerce
       .number()
       .positive("Jumlah galon must be positive")
-      .optional()
-      .transform((val) => val?.toString()),
-    pajakOngkos: z.coerce
-      .number()
-      .optional()
-      .transform((val) => val?.toString()),
-    pajakTransfer: z.coerce
-      .number()
-      .optional()
-      .transform((val) => val?.toString()),
-    totalPengeluaran: z.coerce
-      .number()
-      .optional()
-      .transform((val) => val?.toString()),
+      .optional(),
+    pajakOngkos: z.coerce.number().optional(),
+    pajakTransfer: z.coerce.number().optional(),
+    totalPengeluaran: z.coerce.number().optional(),
+
     // Additional fields for Transfer Rekening
     konter: z.enum(["Dia store", "manual"]).optional(),
-    pajakTransferRekening: z.coerce
-      .number()
-      .optional()
-      .transform((val) => val?.toString()),
-    hasil: z.coerce
-      .number()
-      .optional()
-      .transform((val) => val?.toString()),
+    pajakTransferRekening: z.coerce.number().optional(),
+    hasil: z.coerce.number().optional(),
   })
   .refine(
     (data) => {
-      // Conditional validation: customer required for "Pemberian Utang" when belum_lunas
       if (
         data.type === "Pemberian Utang" &&
         data.paymentStatus === "belum_lunas"
@@ -155,7 +136,7 @@ export default function CashflowContent() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
   const [customerSearchTerm, setCustomerSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("store-1");
+  const [activeTab, setActiveTab] = useState<string | null>(null);
 
   // Fetch stores to get actual store names and data
   const { data: stores = [] } = useQuery({
@@ -184,17 +165,12 @@ export default function CashflowContent() {
 
   // Set default tab to first available store when stores are loaded
   useEffect(() => {
-    if (stores.length > 0) {
+    if (stores.length > 0 && !activeTab) {
       const firstStoreTab = `store-${stores[0].id}`;
-      if (
-        activeTab === "store-1" ||
-        !stores.find((s) => `store-${s.id}` === activeTab)
-      ) {
-        setActiveTab(firstStoreTab);
-        form.setValue("storeId", stores[0].id); // Update form storeId to match tab
-      }
+      setActiveTab(firstStoreTab);
+      form.setValue("storeId", stores[0].id);
     }
-  }, [stores]);
+  }, [stores, activeTab, form]);
 
   // Keep form storeId in sync with activeTab
   useEffect(() => {
@@ -342,7 +318,9 @@ export default function CashflowContent() {
   }, [watchCategory, form]);
 
   // Get current store ID from active tab
-  const currentStoreId = parseInt(activeTab.replace("store-", ""));
+  const currentStoreId = activeTab
+    ? parseInt(activeTab.replace("store-", ""))
+    : undefined;
 
   const { data: cashflowRecords, isLoading } = useQuery<Cashflow[]>({
     queryKey: ["/api/cashflow", { storeId: currentStoreId }],
@@ -353,6 +331,7 @@ export default function CashflowContent() {
       );
       return await res.json();
     },
+    enabled: !!currentStoreId, // 👈 biar query jalan hanya kalau ada storeId
   });
 
   // Customer queries
@@ -520,6 +499,7 @@ export default function CashflowContent() {
   });
 
   const onSubmit = (data: CashflowData) => {
+    console.log("Payload Cashflow =>", JSON.stringify(data, null, 2));
     submitCashflowMutation.mutate(data);
   };
 
@@ -530,11 +510,13 @@ export default function CashflowContent() {
   return (
     <div className="space-y-6">
       {/* Store tabs for Cashflow filtering */}
-      <Tabs
-        value={activeTab}
-        onValueChange={handleTabChange}
-        className="w-full"
-      >
+        {!currentStoreId ? (
+          <div>Loading store...</div>
+        ) : (
+          <Tabs value={activeTab ?? ""} onValueChange={handleTabChange}>
+            {/* konten tab */}
+          </Tabs>
+        )}
         <TabsList
           className={`grid w-full ${
             stores.length > 0

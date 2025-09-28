@@ -1,80 +1,70 @@
-import { drizzle } from 'drizzle-orm/mysql2';
-import mysql from 'mysql2/promise';
-import * as schema from '@shared/schema';
-import fs from 'fs';
-import path from 'path';
+import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
+import fs from "fs";
+import * as schema from "@shared/schema";
 
-// Use MySQL database URL from environment variables only (security requirement)
-const databaseUrl = process.env.MYSQL_DATABASE_URL || process.env.DATABASE_URL;
+// Get MySQL database URL - prioritize the new MySQL URL
+const databaseUrl =
+  "mysql://avnadmin:AVNS_Woo6_cb4krTtGU7mJQi@marlokk-mhdalhzau.j.aivencloud.com:18498/defaultdb?ssl-mode=REQUIRED" ||
+  process.env.MYSQL_DATABASE_URL ||
+  process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error('MYSQL_DATABASE_URL or DATABASE_URL environment variable is required for MySQL database connection');
+  throw new Error(
+    "MYSQL_DATABASE_URL environment variable is required for MySQL connection",
+  );
 }
 
-// Configure SSL for Aiven MySQL connection
-let sslConfig: any = false;
+// Parse the database URL to extract connection parameters
+const url = new URL(databaseUrl);
 
-if (databaseUrl.includes('aivencloud.com') || databaseUrl.includes('ssl-mode=REQUIRED')) {
-  const caCertPath = path.join(process.cwd(), 'attached_assets', 'ca.pem');
-  
-  if (fs.existsSync(caCertPath)) {
-    const caCert = fs.readFileSync(caCertPath, 'utf8');
-    sslConfig = {
-      ca: caCert,
-      rejectUnauthorized: false // More lenient for Aiven connections in Replit
-    };
-    console.log('🔒 Using SSL certificate for Aiven MySQL connection');
-  } else {
-    // Fallback SSL config for Aiven without explicit CA
-    sslConfig = {
-      rejectUnauthorized: false
-    };
-    console.log('🔒 Using basic SSL for Aiven MySQL connection');
-  }
-}
-
-// Create MySQL connection pool with optimized settings for Aiven
+// Create MySQL connection pool with SSL configuration
 const pool = mysql.createPool({
-  uri: databaseUrl,
-  connectionLimit: 10, // Reduced for better stability
-  acquireTimeout: 60000, // Increased for slow connections
-  timeout: 60000, // Increased connection timeout
-  ssl: sslConfig,
-  reconnect: true,
-  keepAliveInitialDelay: 0,
-  enableKeepAlive: true,
+  host: url.hostname,
+  port: parseInt(url.port) || 3306,
+  user: url.username,
+  password: url.password,
+  database: url.pathname.slice(1), // Remove leading slash
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  ssl: {
+    ca: fs.readFileSync("attached_assets/ca.pem", "utf8"),
+    rejectUnauthorized: true,
+  },
 });
 
-// Test database connection
+// Test MySQL database connection
 export async function testDatabaseConnection(): Promise<boolean> {
   try {
-    console.log('🔄 Connecting to database...');
+    console.log("🔄 Connecting to MySQL database...");
     const connection = await pool.getConnection();
-    console.log('🔄 Using MySQL database');
-    
-    // Test query - MySQL syntax
-    await connection.execute('SELECT 1 as test');
+    console.log("🔄 Using MySQL database");
+
+    // Test query - Simple select that works with all MySQL versions
+    await connection.execute("SELECT 1 as test");
     connection.release();
-    
-    console.log('✅ Database connection verified successfully');
-    console.log('✅ Database health check passed - MySQL connection verified');
+
+    console.log("✅ MySQL database connection verified successfully");
     return true;
   } catch (error) {
-    console.error('❌ Database connection failed:', error);
+    console.error("❌ MySQL database connection failed:", error);
     return false;
   }
 }
 
-// Check if database is connected before allowing any database operations
+// Check if MySQL is connected before allowing any database operations
 export async function ensureDatabaseConnection(): Promise<void> {
   const isConnected = await testDatabaseConnection();
   if (!isConnected) {
-    throw new Error('❌ Database tidak terhubung! Tidak dapat mengakses data.');
+    throw new Error(
+      "❌ Database tidak terhubung! Tidak dapat mengakses data tanpa koneksi MySQL.",
+    );
   }
 }
 
-// Create Drizzle database instance with MySQL
-export const db = drizzle(pool, { schema, mode: 'default' });
+// Create Drizzle database instance with MySQL schema
+export const db = drizzle(pool, { schema, mode: "default" });
 
 // Export pool for advanced usage if needed
 export { pool };
