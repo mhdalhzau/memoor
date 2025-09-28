@@ -3428,6 +3428,10 @@ export function registerRoutes(app: Express): Server {
       }
       
       const users = await storage.getAllUsers();
+      // Include store assignments for each user
+      for (const user of users) {
+        user.stores = await storage.getUserStores(user.id);
+      }
       res.json(users);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -3545,6 +3549,11 @@ export function registerRoutes(app: Express): Server {
       }
       
       const stores = await storage.getAllStores();
+      // Add employee count for each store
+      for (const store of stores) {
+        const employees = await storage.getUsersByStore(store.id);
+        store.employeeCount = employees.length;
+      }
       res.json(stores);
     } catch (error: any) {
       res.status(400).json({ message: error.message });

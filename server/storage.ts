@@ -396,7 +396,17 @@ export class DatabaseStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     try {
-      return await db.select().from(users);
+      const result = await db.select().from(users).orderBy(desc(users.createdAt));
+      
+      // Populate stores for each user
+      const usersWithStores = await Promise.all(
+        result.map(async (user) => {
+          const stores = await this.getUserStores(user.id);
+          return { ...user, stores };
+        })
+      );
+      
+      return usersWithStores;
     } catch (error) {
       console.error('Error getting all users:', error);
       return [];
@@ -433,17 +443,17 @@ export class DatabaseStorage implements IStorage {
         .select({
           id: users.id,
           email: users.email,
-          password: users.password,
           name: users.name,
           role: users.role,
           phone: users.phone,
           salary: users.salary,
+          joinDate: users.createdAt, // Map createdAt to joinDate for frontend compatibility
           createdAt: users.createdAt,
         })
         .from(users)
         .innerJoin(userStores, eq(users.id, userStores.userId))
         .where(eq(userStores.storeId, storeId));
-      return result;
+      return result as User[];
     } catch (error) {
       console.error('Error getting users by store:', error);
       return [];

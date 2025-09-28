@@ -51,14 +51,7 @@ interface StoreInfo {
   createdAt: string;
 }
 
-interface StoreEmployee {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  salary?: number;
-  joinDate: string;
-}
+// Using the User type from the backend instead of separate StoreEmployee interface
 
 export default function StoreManagementContent() {
   const { user } = useAuth();
@@ -82,7 +75,7 @@ export default function StoreManagementContent() {
   });
 
   // Fetch employees for selected store
-  const { data: storeEmployees = [], isLoading: employeesLoading, error: employeesError } = useQuery<StoreEmployee[]>({
+  const { data: storeEmployees = [], isLoading: employeesLoading, error: employeesError } = useQuery<any[]>({
     queryKey: ["/api/stores", selectedStore?.id, "employees"],
     enabled: user?.role === "manager" && !!selectedStore,
   });
@@ -268,7 +261,8 @@ export default function StoreManagementContent() {
                   <p className="text-sm text-gray-400 mt-1">Create your first store to get started</p>
                 </div>
               )}
-              <Table>
+              {!storesLoading && stores.length > 0 && (
+              <Table data-testid="table-stores">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Store Name</TableHead>
@@ -288,7 +282,7 @@ export default function StoreManagementContent() {
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Users className="h-4 w-4" />
-                          {store.employeeCount}
+                          {store.employeeCount || 0}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -325,6 +319,7 @@ export default function StoreManagementContent() {
                   ))}
                 </TableBody>
               </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -596,7 +591,7 @@ export default function StoreManagementContent() {
                       <Label className="text-sm font-medium">Total Employees</Label>
                       <p className="text-sm text-gray-600 flex items-center gap-1">
                         <Users className="h-3 w-3" />
-                        {selectedStore.employeeCount} employees
+                        {selectedStore.employeeCount || 0} employees
                       </p>
                     </div>
                   </div>
@@ -649,7 +644,7 @@ export default function StoreManagementContent() {
                             {employee.salary ? formatCurrency(employee.salary) : "-"}
                           </TableCell>
                           <TableCell data-testid={`text-employee-joindate-${employee.id}`}>
-                            {new Date(employee.joinDate).toLocaleDateString('id-ID')}
+                            {employee.createdAt ? new Date(employee.createdAt).toLocaleDateString('id-ID') : '-'}
                           </TableCell>
                         </TableRow>
                       ))}
