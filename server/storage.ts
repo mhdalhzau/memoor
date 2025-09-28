@@ -1437,59 +1437,55 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Helper methods for QRIS management
-  // Find actual manager user and create/get corresponding customer record for the specific store
+  // Find manager user and create/get ONE customer record for ALL stores  
   async findOrCreateCustomerForManagerUser(storeId: number): Promise<Customer | undefined> {
     try {
       console.log(`🎯 CUSTOMER GENERATION: Starting for store ${storeId}`);
       
-      // FIXED MANAGER ID: All QRIS payments go to the same manager across ALL stores
-      const FIXED_QRIS_MANAGER_ID = '40603306-34ce-4e7b-845d-32c2fc4aee93';
+      // Find any user with role=manager in the system
+      const managerUsers = await db.select().from(users).where(eq(users.role, "manager")).limit(1);
       
-      // Get the fixed manager user
-      const managerUser = await db.select().from(users).where(eq(users.id, FIXED_QRIS_MANAGER_ID)).limit(1);
-      
-      if (managerUser.length === 0) {
-        console.warn(`❌ CUSTOMER GENERATION: Fixed QRIS manager user ${FIXED_QRIS_MANAGER_ID} not found in system`);
+      if (managerUsers.length === 0) {
+        console.warn(`❌ CUSTOMER GENERATION: No manager user found in system`);
         return undefined;
       }
       
-      const fixedManager = managerUser[0];
-      console.log(`🔍 CUSTOMER GENERATION: Using fixed QRIS manager ${fixedManager.name} (ID: ${FIXED_QRIS_MANAGER_ID}) for store ${storeId}`);
+      const manager = managerUsers[0];
+      console.log(`🔍 CUSTOMER GENERATION: Using manager ${manager.name} (ID: ${manager.id}) for QRIS payments`);
 
-      // Check if customer record already exists for this fixed manager in this store
+      // Check if customer record already exists for this manager (ANY store - we use one customer for all stores)
       const managerCustomerRecord = await db.select().from(customers).where(
         and(
-          eq(customers.storeId, storeId),
-          eq(customers.email, fixedManager.email),
-          eq(customers.type, "employee")
+          eq(customers.email, manager.email),
+          eq(customers.type, "manager")
         )
-      );
+      ).limit(1);
 
       if (managerCustomerRecord.length > 0) {
-        console.log(`✅ CUSTOMER GENERATION: Found existing customer record for QRIS manager in store ${storeId}, customer ID: ${managerCustomerRecord[0].id}`);
+        console.log(`✅ CUSTOMER GENERATION: Found existing manager customer record, customer ID: ${managerCustomerRecord[0].id}`);
         return managerCustomerRecord[0];
       }
 
-      // Create customer record for the fixed manager user in this store
+      // Create ONE customer record for the manager user that works for ALL stores
       const customerId = randomUUID();
-      console.log(`🆕 CUSTOMER GENERATION: Creating new customer record with ID ${customerId} for store ${storeId}`);
+      console.log(`🆕 CUSTOMER GENERATION: Creating new manager customer record with ID ${customerId} for ALL stores`);
       
       await db.insert(customers).values({
         id: customerId,
-        storeId,
-        name: fixedManager.name,
-        email: fixedManager.email,
-        phone: fixedManager.phone || "",
+        storeId: storeId, // Use the current store ID but this customer works for all stores
+        name: manager.name,
+        email: manager.email,
+        phone: manager.phone || "",
         address: "",
-        type: "employee" // Mark as employee type
+        type: "manager" // Mark as manager type
       });
 
-      console.log(`✅ CUSTOMER GENERATION: Successfully created new customer record for QRIS manager in store ${storeId}`);
+      console.log(`✅ CUSTOMER GENERATION: Successfully created new manager customer record for ALL stores`);
 
       // Fetch the created record
       const result = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
       if (result.length > 0) {
-        console.log(`✅ CUSTOMER GENERATION: Verified created customer record: ${result[0].id} - ${result[0].name}`);
+        console.log(`✅ CUSTOMER GENERATION: Verified created manager customer: ${result[0].id} - ${result[0].name}`);
         return result[0];
       } else {
         console.error(`❌ CUSTOMER GENERATION: Failed to fetch newly created customer record`);
@@ -1704,26 +1700,8 @@ export class DatabaseStorage implements IStorage {
             cf.type === 'Sales' && cf.category === 'Income'
           );
           
-          // Create cashflow record for cash sales if missing and totalCash > 0
-          if (!hasCashflow && salesRecord.totalCash && parseFloat(salesRecord.totalCash.toString()) > 0) {
-            try {
-              await this.createCashflow({
-                storeId: salesRecord.storeId,
-                category: 'Income',
-                type: 'Sales',
-                amount: salesRecord.totalCash,
-                description: `Cash Sales ${new Date(salesRecord.date).toISOString().split('T')[0]} [MIGRATED]`,
-                salesId: salesRecord.id,
-                date: salesRecord.date
-              });
-              cashflowRecordsCreated++;
-              console.log(`✅ Created cash sales cashflow record: ${salesRecord.totalCash}`);
-            } catch (error) {
-              const errorMsg = `Failed to create cashflow for sales ${salesRecord.id}: ${error}`;
-              errors.push(errorMsg);
-              console.error(`❌ ${errorMsg}`);
-            }
-          }
+          // NO LONGER CREATE AUTOMATIC CASHFLOW FOR CASH SALES - as requested by user
+          // Removed: automatic cashflow creation for cash sales
 
           // Check if QRIS piutang records exist - IMPROVED DETECTION
           // Look for piutang records for same store, amount, and QRIS description  
