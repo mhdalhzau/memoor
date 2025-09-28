@@ -3708,43 +3708,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Piutang routes
-  app.get("/api/piutang", async (req, res) => {
-    try {
-      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
-      
-      const { storeId } = req.query;
-      
-      let piutang;
-      if (req.user.role === 'administrasi') {
-        if (storeId) {
-          // Admin can filter by specific store
-          piutang = await storage.getPiutangByStore(parseInt(storeId as string));
-        } else {
-          // Admin gets all piutang from all stores
-          piutang = await storage.getAllPiutang();
-        }
-      } else {
-        // For non-admin users, get piutang from their accessible store
-        const targetStoreId = storeId ? parseInt(storeId as string) : await getUserFirstStoreId(req.user);
-        
-        if (!targetStoreId) {
-          return res.status(400).json({ message: "Store ID is required" });
-        }
-        
-        // Verify store access
-        if (!(await hasStoreAccess(req.user, targetStoreId))) {
-          return res.status(403).json({ message: "You don't have access to this store" });
-        }
-        
-        piutang = await storage.getPiutangByStore(targetStoreId);
-      }
-      
-      res.json(piutang);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message });
-    }
-  });
+  // Piutang routes - REMOVED DUPLICATE ENDPOINT (kept better one at line ~5495)
 
   app.post("/api/piutang", async (req, res) => {
     try {
@@ -5529,6 +5493,51 @@ export function registerRoutes(app: Express): Server {
       res.json(piutangRecords);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  // QRIS piutang migration endpoint
+  app.post("/api/piutang/migrate-qris", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      // Only administrators can trigger QRIS migration
+      if (req.user.role !== 'administrasi' && req.user.role !== 'manager') {
+        return res.status(403).json({ message: "Only administrators can perform QRIS piutang migration" });
+      }
+
+      const { oldCustomerId, newUserId, storeId } = req.body;
+
+      if (!oldCustomerId || !newUserId) {
+        return res.status(400).json({ message: "oldCustomerId and newUserId are required" });
+      }
+
+      const targetStoreId = storeId || await getUserFirstStoreId(req.user);
+
+      if (!targetStoreId) {
+        return res.status(400).json({ message: "Store ID is required" });
+      }
+
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, targetStoreId))) {
+        return res.status(403).json({ message: "You don't have access to this store" });
+      }
+
+      console.log(`🔄 Starting QRIS piutang migration: ${oldCustomerId} -> ${newUserId} in store ${targetStoreId}`);
+      
+      // Perform the migration
+      const result = await storage.migratePiutangToNewUser(oldCustomerId, newUserId, targetStoreId);
+      
+      res.json({
+        success: true,
+        message: "QRIS piutang migration completed successfully",
+        migrated: result.migrated,
+        errors: result.errors,
+        details: `Successfully migrated ${result.migrated} piutang records from customer ${oldCustomerId} to user ${newUserId}`
+      });
+    } catch (error: any) {
+      console.error('QRIS migration failed:', error);
+      res.status(400).json({ message: error.message || "Failed to migrate QRIS piutang records" });
     }
   });
 
