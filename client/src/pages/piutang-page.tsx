@@ -89,7 +89,6 @@ export default function PiutangPage() {
   const { toast } = useToast();
 
   console.log("👤 PiutangPage: Current user:", user);
-  const [searchTerm, setSearchTerm] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [paymentModalData, setPaymentModalData] = useState<Piutang | null>(
     null,
@@ -306,32 +305,8 @@ export default function PiutangPage() {
     return grouped;
   }, [unifiedCustomers, piutangRecords, stores, isLoading]);
 
-  // Filter all customers based on search term
-  const filteredStoreGroupedData = React.useMemo(() => {
-    if (!searchTerm.trim()) {
-      return storeGroupedData;
-    }
-
-    const filtered: Record<number, CustomerWithPiutang[]> = {};
-    const searchLower = searchTerm.toLowerCase();
-
-    Object.entries(storeGroupedData).forEach(([storeId, customers]) => {
-      const filteredCustomers = customers.filter((item) => {
-        if (!item || !item.customer) return false;
-        return (
-          (item.customer.name || "").toLowerCase().includes(searchLower) ||
-          (item.customer.email || "").toLowerCase().includes(searchLower) ||
-          (item.customer.phone || "").toLowerCase().includes(searchLower)
-        );
-      });
-
-      if (filteredCustomers.length > 0) {
-        filtered[parseInt(storeId)] = filteredCustomers;
-      }
-    });
-
-    return filtered;
-  }, [storeGroupedData, searchTerm]);
+  // Show all customers from all stores without any filtering
+  const filteredStoreGroupedData = storeGroupedData;
 
   const toggleCustomerExpansion = (customerId: string) => {
     const newExpanded = new Set(expandedCustomers);
@@ -731,60 +706,24 @@ export default function PiutangPage() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <Input
-            placeholder="Search customers by name, email, or phone..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-            data-testid="input-search-customers"
-          />
-        </div>
-      </div>
 
       {/* Store Categories and Customer Debt List */}
       <div className="space-y-8">
         {Object.keys(filteredStoreGroupedData).length > 0 ? (
-          Object.entries(filteredStoreGroupedData).map(
-            ([storeId, customers]) => {
-              const store = stores.find((s) => s.id === parseInt(storeId));
-              if (!store) return null;
-
-              return (
-                <div key={storeId} className="space-y-4">
-                  {/* Store Category Button */}
-                  <div className="flex items-center gap-4 mb-4">
-                    <Button
-                      variant="outline"
-                      disabled
-                      className="cursor-not-allowed opacity-60"
-                      data-testid={`button-store-${store.id}`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="h-2 w-2 bg-blue-600 rounded-full"></div>
-                        <span className="font-medium">{store.name}</span>
-                        <Badge
-                          variant="secondary"
-                          className="bg-blue-50 text-blue-700 border-blue-300"
-                        >
-                          {customers.length} Customer
-                          {customers.length !== 1 ? "s" : ""}
-                        </Badge>
-                      </div>
-                    </Button>
-                  </div>
-
-                  {/* Customer List for this Store */}
-                  <div className="space-y-4 pl-6 border-l-2 border-blue-100">
-                    {customers.map((item) => (
-                      <Card
-                        key={item.customer.id}
-                        className="overflow-hidden"
-                        data-testid={`card-customer-${item.customer.id}`}
-                      >
+          <div className="space-y-4">
+            {/* Show all customers from all stores in one unified list */}
+            {Object.entries(filteredStoreGroupedData)
+              .flatMap(([storeId, customers]) => {
+                const store = stores.find((s) => s.id === parseInt(storeId));
+                if (!store) return [];
+                return customers.map(item => ({ ...item, store }));
+              })
+              .map((item) => (
+                <Card
+                  key={item.customer.id}
+                  className="overflow-hidden"
+                  data-testid={`card-customer-${item.customer.id}`}
+                >
                         <Collapsible
                           open={expandedCustomers.has(item.customer.id)}
                           onOpenChange={() =>
@@ -811,6 +750,15 @@ export default function PiutangPage() {
                                         item.customer,
                                         item.remainingDebt,
                                       )}
+                                    </div>
+                                    <div className="mb-2">
+                                      <Badge
+                                        variant="outline"
+                                        className="bg-purple-50 text-purple-700 border-purple-300"
+                                        data-testid={`badge-store-${item.customer.id}`}
+                                      >
+                                        {item.store.name} ({item.store.id})
+                                      </Badge>
                                     </div>
                                     <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
                                       <span
@@ -962,12 +910,8 @@ export default function PiutangPage() {
                           </CollapsibleContent>
                         </Collapsible>
                       </Card>
-                    ))}
-                  </div>
-                </div>
-              );
-            },
-          )
+                ))}
+          </div>
         ) : (
           <Card>
             <CardContent className="p-8 text-center">
@@ -976,9 +920,7 @@ export default function PiutangPage() {
                 className="text-gray-600 dark:text-gray-400"
                 data-testid="text-no-piutang"
               >
-                {searchTerm
-                  ? "No customers found matching your search."
-                  : "No outstanding debts. All customers have paid their debts."}
+                No outstanding debts. All customers have paid their debts.
               </p>
             </CardContent>
           </Card>
