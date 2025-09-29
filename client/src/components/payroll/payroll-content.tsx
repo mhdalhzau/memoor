@@ -150,9 +150,96 @@ function AttendanceTable({ employeeId, month }: AttendanceTableProps) {
   }
 
   // Parse month (e.g. "2025-09") into year and month
-  const [yearStr, monthStr] = month.split('-');
-  const year = parseInt(yearStr);
-  const monthNum = parseInt(monthStr);
+  // Add comprehensive null/undefined/invalid checks
+  if (!month || 
+      typeof month !== 'string' || 
+      month.trim() === '' ||
+      !month.includes('-') ||
+      month === 'null' ||
+      month === 'undefined') {
+    console.warn('Invalid month format in AttendanceTable:', month);
+    return (
+      <div className="pt-6 border-t">
+        <div className="flex items-center gap-2 mb-4">
+          <Clock className="h-5 w-5" />
+          <Label className="text-lg">Rekap Absensi</Label>
+        </div>
+        <div className="text-center py-8 text-muted-foreground">
+          <p className="text-sm">Format bulan tidak valid</p>
+        </div>
+      </div>
+    );
+  }
+
+  let year: number;
+  let monthNum: number;
+
+  try {
+    const parts = month.split('-');
+    if (parts.length !== 2) {
+      console.warn('AttendanceTable: Month split resulted in unexpected parts:', parts, 'Original:', month);
+      return (
+        <div className="pt-6 border-t">
+          <div className="flex items-center gap-2 mb-4">
+            <Clock className="h-5 w-5" />
+            <Label className="text-lg">Rekap Absensi</Label>
+          </div>
+          <div className="text-center py-8 text-muted-foreground">
+            <p className="text-sm">Format bulan tidak valid</p>
+          </div>
+        </div>
+      );
+    }
+    
+    const [yearStr, monthStr] = parts;
+    
+    if (!yearStr || !monthStr) {
+      console.warn('AttendanceTable: Empty year or month string after split:', { yearStr, monthStr, originalMonth: month });
+      return (
+        <div className="pt-6 border-t">
+          <div className="flex items-center gap-2 mb-4">
+            <Clock className="h-5 w-5" />
+            <Label className="text-lg">Rekap Absensi</Label>
+          </div>
+          <div className="text-center py-8 text-muted-foreground">
+            <p className="text-sm">Data tanggal tidak valid</p>
+          </div>
+        </div>
+      );
+    }
+    
+    year = parseInt(yearStr);
+    monthNum = parseInt(monthStr);
+    
+    // Validate parsed values
+    if (isNaN(year) || isNaN(monthNum) || monthNum < 1 || monthNum > 12 || year < 2020 || year > 2030) {
+      console.warn('AttendanceTable: Invalid year or month values:', { year, monthNum, originalMonth: month });
+      return (
+        <div className="pt-6 border-t">
+          <div className="flex items-center gap-2 mb-4">
+            <Clock className="h-5 w-5" />
+            <Label className="text-lg">Rekap Absensi</Label>
+          </div>
+          <div className="text-center py-8 text-muted-foreground">
+            <p className="text-sm">Data tanggal tidak valid</p>
+          </div>
+        </div>
+      );
+    }
+  } catch (error) {
+    console.error('AttendanceTable: Error processing month:', error, 'Month:', month);
+    return (
+      <div className="pt-6 border-t">
+        <div className="flex items-center gap-2 mb-4">
+          <Clock className="h-5 w-5" />
+          <Label className="text-lg">Rekap Absensi</Label>
+        </div>
+        <div className="text-center py-8 text-muted-foreground">
+          <p className="text-sm">Terjadi kesalahan saat memproses data bulan</p>
+        </div>
+      </div>
+    );
+  }
 
   const { data: attendanceData, isLoading } = useQuery<{
     employee: any;
@@ -462,16 +549,50 @@ export default function PayrollContent() {
     } else if (dateFilterMode === 'range' && dateRange.from && dateRange.to) {
       filtered = filtered.filter(record => {
         // Parse the record month (e.g., "2025-09" -> September 2025)
-        const [yearStr, monthStr] = record.month.split('-');
-        const year = parseInt(yearStr);
-        const month = parseInt(monthStr) - 1; // JavaScript months are 0-indexed
+        // Add comprehensive null/undefined/invalid checks
+        if (!record?.month || 
+            typeof record.month !== 'string' || 
+            record.month.trim() === '' ||
+            !record.month.includes('-') ||
+            record.month === 'null' ||
+            record.month === 'undefined') {
+          console.warn('Invalid month format in payroll record:', record.month, 'Record ID:', record.id);
+          return false; // Exclude records with invalid month data
+        }
         
-        // Get the start and end of the record's month
-        const recordMonthStart = startOfMonth(new Date(year, month));
-        const recordMonthEnd = endOfMonth(new Date(year, month));
-        
-        // Check for overlap: startOfMonth(recordMonth) <= to && endOfMonth(recordMonth) >= from
-        return recordMonthStart <= dateRange.to! && recordMonthEnd >= dateRange.from!;
+        try {
+          const parts = record.month.split('-');
+          if (parts.length !== 2) {
+            console.warn('Month split resulted in unexpected parts:', parts, 'Original:', record.month);
+            return false;
+          }
+          
+          const [yearStr, monthStr] = parts;
+          
+          if (!yearStr || !monthStr) {
+            console.warn('Empty year or month string after split:', { yearStr, monthStr, originalMonth: record.month });
+            return false;
+          }
+          
+          const year = parseInt(yearStr);
+          const month = parseInt(monthStr) - 1; // JavaScript months are 0-indexed
+          
+          // Validate parsed values
+          if (isNaN(year) || isNaN(month) || month < 0 || month > 11 || year < 2020 || year > 2030) {
+            console.warn('Invalid year or month values in payroll record:', { year, month: month + 1, originalMonth: record.month, recordId: record.id });
+            return false; // Exclude records with invalid date values
+          }
+          
+          // Get the start and end of the record's month
+          const recordMonthStart = startOfMonth(new Date(year, month));
+          const recordMonthEnd = endOfMonth(new Date(year, month));
+          
+          // Check for overlap: startOfMonth(recordMonth) <= to && endOfMonth(recordMonth) >= from
+          return recordMonthStart <= dateRange.to! && recordMonthEnd >= dateRange.from!;
+        } catch (error) {
+          console.error('Error processing record month:', error, 'Record:', record);
+          return false; // Exclude records that cause errors
+        }
       });
     }
     
