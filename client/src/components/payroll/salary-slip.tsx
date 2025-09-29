@@ -55,25 +55,44 @@ export const SalarySlip = forwardRef<HTMLDivElement, SalarySlipProps>(
       totalCuti: 0,
     };
 
+    console.log('=== SALARY SLIP RENDER ===');
+    console.log('Payroll:', payroll);
+    console.log('Attendance Data:', attendanceData);
+    console.log('Attendance Records:', attendanceData?.attendanceData);
+    console.log('Attendance Records Length:', attendanceData?.attendanceData?.length);
+
     if (attendanceData?.attendanceData) {
       attendanceData.attendanceData.forEach(record => {
         const status = record.attendanceStatus || record.status || '';
+        console.log(`Processing record - Date: ${record.date}, Status: ${status}, Lateness: ${record.latenessMinutes}`);
+        
         switch (status) {
           case 'hadir':
             attendanceSummary.totalHadir++;
             if (record.latenessMinutes && record.latenessMinutes > 0) {
               attendanceSummary.totalTerlambat++;
+              console.log(`  -> Marked as late (${record.latenessMinutes} minutes)`);
             }
             break;
           case 'alpha':
             attendanceSummary.totalAlpha++;
+            console.log(`  -> Marked as alpha`);
             break;
           case 'cuti':
             attendanceSummary.totalCuti++;
+            console.log(`  -> Marked as cuti`);
             break;
         }
       });
+    } else {
+      console.log('⚠️ NO ATTENDANCE DATA AVAILABLE');
     }
+
+    console.log('=== ATTENDANCE SUMMARY ===');
+    console.log('Total Hadir:', attendanceSummary.totalHadir);
+    console.log('Total Terlambat:', attendanceSummary.totalTerlambat);
+    console.log('Total Alpha:', attendanceSummary.totalAlpha);
+    console.log('Total Cuti:', attendanceSummary.totalCuti);
 
     const formatAttendanceStatus = (status: string) => {
       switch (status) {
@@ -96,69 +115,69 @@ export const SalarySlip = forwardRef<HTMLDivElement, SalarySlipProps>(
 
     return (
       <div ref={ref} className={cn("print-content hidden", className)}>
-        {/* Single Page: Complete Salary Slip with Attendance */}
-        <div className="salary-page bg-white text-black p-6 max-w-[210mm] mx-auto">
-          {/* Header */}
-          <div className="text-center mb-3 border-b-2 border-black pb-2">
-            <h1 className="text-lg font-bold mb-1">SETORAN HARIAN - SLIP GAJI KARYAWAN</h1>
+        {/* Single Page: Complete Salary Slip - Extra Compact for A4 */}
+        <div className="salary-page bg-white text-black p-4 max-w-[210mm] mx-auto text-xs">
+          {/* Header - Compact */}
+          <div className="text-center mb-2 border-b-2 border-black pb-1">
+            <h1 className="text-base font-bold mb-0.5">SETORAN HARIAN - SLIP GAJI KARYAWAN</h1>
             {payroll.store && (
-              <div className="text-xs space-y-0.5">
+              <div className="text-xs space-y-0">
                 <p className="font-semibold">{payroll.store.name}</p>
-                {payroll.store.address && <p>{payroll.store.address}</p>}
-                {payroll.store.phone && <p>Telp: {payroll.store.phone}</p>}
+                {payroll.store.address && <p className="text-xs">{payroll.store.address}</p>}
+                {payroll.store.phone && <p className="text-xs">Telp: {payroll.store.phone}</p>}
               </div>
             )}
           </div>
 
-          {/* Employee Information - 3 Column Grid */}
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            <div className="border-2 border-black rounded p-2">
-              <h3 className="font-bold mb-1 text-xs border-b border-black pb-0.5">KARYAWAN</h3>
-              <div className="space-y-0.5 text-xs">
+          {/* Employee Information - 3 Column Grid - Compact */}
+          <div className="grid grid-cols-3 gap-1.5 mb-2">
+            <div className="border-2 border-black rounded p-1.5">
+              <h3 className="font-bold mb-0.5 text-xs border-b border-black">KARYAWAN</h3>
+              <div className="space-y-0 text-xs">
                 <div><span className="font-medium">Nama:</span> {payroll.user?.name || '-'}</div>
                 <div><span className="font-medium">Jabatan:</span> {payroll.user?.role || 'staff'}</div>
               </div>
             </div>
             
-            <div className="border-2 border-black rounded p-2">
-              <h3 className="font-bold mb-1 text-xs border-b border-black pb-0.5">PERIODE</h3>
-              <div className="space-y-0.5 text-xs">
+            <div className="border-2 border-black rounded p-1.5">
+              <h3 className="font-bold mb-0.5 text-xs border-b border-black">PERIODE</h3>
+              <div className="space-y-0 text-xs">
                 <div><span className="font-medium">Bulan:</span> {formatIndonesianMonth(payroll.month)}</div>
-                <div><span className="font-medium">Status:</span> <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
+                <div><span className="font-medium">Status:</span> <span className={`px-1 py-0.5 rounded text-xs font-semibold ${
                   payroll.status === 'paid' ? 'bg-green-200 text-green-900' : 'bg-yellow-200 text-yellow-900'
                 }`}>{payroll.status === 'paid' ? 'Lunas' : 'Pending'}</span></div>
               </div>
             </div>
 
-            <div className="border-2 border-black rounded p-2">
-              <h3 className="font-bold mb-1 text-xs border-b border-black pb-0.5">RINGKASAN</h3>
-              <div className="flex gap-2 justify-around text-xs">
-                <div className="text-center">
-                  <div className="text-sm font-bold text-green-700">{attendanceSummary.totalHadir}</div>
-                  <div className="text-xs">Hadir</div>
+            <div className="border-2 border-black rounded p-1.5 bg-gray-50">
+              <h3 className="font-bold mb-1 text-xs border-b border-black pb-0.5">RINGKASAN ABSENSI</h3>
+              <div className="grid grid-cols-3 gap-1 text-xs">
+                <div className="text-center bg-green-100 border border-green-300 rounded py-1">
+                  <div className="text-sm font-bold text-green-800">{attendanceSummary.totalHadir}</div>
+                  <div className="text-xs font-medium text-green-700">Hadir</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-sm font-bold text-yellow-700">{attendanceSummary.totalTerlambat}</div>
-                  <div className="text-xs">Telat</div>
+                <div className="text-center bg-yellow-100 border border-yellow-300 rounded py-1">
+                  <div className="text-sm font-bold text-yellow-800">{attendanceSummary.totalTerlambat}</div>
+                  <div className="text-xs font-medium text-yellow-700">Telat</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-sm font-bold text-red-700">{attendanceSummary.totalAlpha}</div>
-                  <div className="text-xs">Alpha</div>
+                <div className="text-center bg-red-100 border border-red-300 rounded py-1">
+                  <div className="text-sm font-bold text-red-800">{attendanceSummary.totalAlpha}</div>
+                  <div className="text-xs font-medium text-red-700">Alpha</div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* DETAIL ABSENSI - No Card */}
-          <div className="mb-3">
-            <h3 className="font-bold text-sm mb-1 pb-1 border-b-2 border-black">DETAIL ABSENSI</h3>
+          {/* DETAIL ABSENSI - Super Compact */}
+          <div className="mb-2">
+            <h3 className="font-bold text-xs mb-0.5 pb-0.5 border-b-2 border-black">DETAIL ABSENSI</h3>
             <table className="w-full text-xs border-collapse">
               <thead className="bg-gray-200">
                 <tr>
-                  <th className="border border-gray-400 py-1 px-2 text-center font-bold">Tgl</th>
-                  <th className="border border-gray-400 py-1 px-2 text-center font-bold">Masuk</th>
-                  <th className="border border-gray-400 py-1 px-2 text-center font-bold">Keluar</th>
-                  <th className="border border-gray-400 py-1 px-2 text-center font-bold">Status</th>
+                  <th className="border border-gray-400 py-0.5 px-1 text-center font-bold text-xs">Tgl</th>
+                  <th className="border border-gray-400 py-0.5 px-1 text-center font-bold text-xs">Masuk</th>
+                  <th className="border border-gray-400 py-0.5 px-1 text-center font-bold text-xs">Keluar</th>
+                  <th className="border border-gray-400 py-0.5 px-1 text-center font-bold text-xs">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -168,16 +187,16 @@ export const SalarySlip = forwardRef<HTMLDivElement, SalarySlipProps>(
                     const day = date.getDate();
                     return (
                       <tr key={index}>
-                        <td className="border border-gray-300 py-0.5 px-2 text-center font-medium">{day}</td>
-                        <td className="border border-gray-300 py-0.5 px-2 text-center">
+                        <td className="border border-gray-300 py-0 px-1 text-center font-medium text-xs">{day}</td>
+                        <td className="border border-gray-300 py-0 px-1 text-center text-xs">
                           {record.checkIn ? formatTime(record.checkIn) : '-'}
                         </td>
-                        <td className="border border-gray-300 py-0.5 px-2 text-center">
+                        <td className="border border-gray-300 py-0 px-1 text-center text-xs">
                           {record.checkOut ? formatTime(record.checkOut) : '-'}
                         </td>
-                        <td className="border border-gray-300 py-0.5 px-2 text-center">
+                        <td className="border border-gray-300 py-0 px-1 text-center text-xs">
                           <span className={cn(
-                            "px-1.5 py-0.5 rounded text-xs font-semibold inline-block",
+                            "px-1 py-0 rounded text-xs font-semibold inline-block",
                             getStatusBadgeColor(record.attendanceStatus || record.status || '')
                           )}>
                             {formatAttendanceStatus(record.attendanceStatus || record.status || '')}
@@ -188,33 +207,33 @@ export const SalarySlip = forwardRef<HTMLDivElement, SalarySlipProps>(
                   })
                 ) : (
                   <tr>
-                    <td colSpan={4} className="border border-gray-300 py-3 text-center text-gray-500">
-                      <div className="text-xs font-medium">Belum ada data</div>
+                    <td colSpan={4} className="border border-gray-300 py-2 text-center text-gray-500 text-xs">
+                      Belum ada data
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
-            <div className="mt-1.5 text-xs flex gap-3">
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 bg-green-200 border border-green-400 rounded"></span>
-                <span className="font-medium">Hadir</span>
+            <div className="mt-1 text-xs flex gap-2">
+              <span className="flex items-center gap-0.5">
+                <span className="w-2 h-2 bg-green-200 border border-green-400 rounded"></span>
+                <span>Hadir</span>
               </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 bg-red-200 border border-red-400 rounded"></span>
-                <span className="font-medium">Alpha</span>
+              <span className="flex items-center gap-0.5">
+                <span className="w-2 h-2 bg-red-200 border border-red-400 rounded"></span>
+                <span>Alpha</span>
               </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 bg-blue-200 border border-blue-400 rounded"></span>
-                <span className="font-medium">Cuti</span>
+              <span className="flex items-center gap-0.5">
+                <span className="w-2 h-2 bg-blue-200 border border-blue-400 rounded"></span>
+                <span>Cuti</span>
               </span>
             </div>
           </div>
 
-          {/* RINCIAN GAJI */}
-          <div className="border-2 border-black rounded p-2 mb-3">
-            <h3 className="font-bold text-sm mb-1.5 pb-1 border-b border-black">RINCIAN GAJI</h3>
-            <div className="space-y-1 text-xs">
+          {/* RINCIAN GAJI - Compact */}
+          <div className="border-2 border-black rounded p-1.5 mb-2">
+            <h3 className="font-bold text-xs mb-1 pb-0.5 border-b border-black">RINCIAN GAJI</h3>
+            <div className="space-y-0.5 text-xs">
               <div className="flex justify-between">
                 <span className="font-medium">Gaji Pokok</span>
                 <span className="font-bold">{formatRupiah(baseSalary)}</span>
@@ -227,10 +246,10 @@ export const SalarySlip = forwardRef<HTMLDivElement, SalarySlipProps>(
               {/* Bonus Items */}
               {payroll.bonusList && payroll.bonusList.length > 0 && (
                 <>
-                  <div className="border-t pt-1 mt-1">
-                    <div className="font-bold text-green-700 mb-0.5">BONUS:</div>
+                  <div className="border-t pt-0.5 mt-0.5">
+                    <div className="font-bold text-green-700 mb-0.5 text-xs">BONUS:</div>
                     {payroll.bonusList.map((bonus, index) => (
-                      <div key={index} className="flex justify-between text-green-700 pl-2">
+                      <div key={index} className="flex justify-between text-green-700 pl-2 text-xs">
                         <span>{index + 1}. {bonus.name}</span>
                         <span className="font-bold">{formatRupiah(bonus.amount)}</span>
                       </div>
@@ -242,10 +261,10 @@ export const SalarySlip = forwardRef<HTMLDivElement, SalarySlipProps>(
               {/* Deduction Items */}
               {payroll.deductionList && payroll.deductionList.length > 0 && (
                 <>
-                  <div className="border-t pt-1 mt-1">
-                    <div className="font-bold text-red-700 mb-0.5">POTONGAN:</div>
+                  <div className="border-t pt-0.5 mt-0.5">
+                    <div className="font-bold text-red-700 mb-0.5 text-xs">POTONGAN:</div>
                     {payroll.deductionList.map((deduction, index) => (
-                      <div key={index} className="flex justify-between text-red-700 pl-2">
+                      <div key={index} className="flex justify-between text-red-700 pl-2 text-xs">
                         <span>{index + 1}. {deduction.name}</span>
                         <span className="font-bold">{formatRupiah(deduction.amount)}</span>
                       </div>
@@ -255,35 +274,35 @@ export const SalarySlip = forwardRef<HTMLDivElement, SalarySlipProps>(
               )}
 
               {/* Total */}
-              <div className="border-t-2 border-black pt-1.5 mt-1.5">
+              <div className="border-t-2 border-black pt-1 mt-1">
                 <div className="flex justify-between items-center">
-                  <span className="font-bold text-sm">TOTAL BERSIH</span>
-                  <span className="text-base font-bold">{formatRupiah(netSalary)}</span>
+                  <span className="font-bold text-xs">TOTAL BERSIH</span>
+                  <span className="text-sm font-bold">{formatRupiah(netSalary)}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Signatures */}
-          <div className="mt-4 pt-2 border-t-2 border-gray-300">
-            <div className="grid grid-cols-2 gap-10 text-center text-xs">
+          {/* Signatures - Compact */}
+          <div className="mt-2 pt-1.5 border-t-2 border-gray-300">
+            <div className="grid grid-cols-2 gap-8 text-center text-xs">
               <div>
-                <p className="mb-10 font-medium">Karyawan</p>
-                <div className="border-t-2 border-black pt-1">
-                  <p className="font-bold">{payroll.user?.name}</p>
+                <p className="mb-8">Karyawan</p>
+                <div className="border-t-2 border-black pt-0.5">
+                  <p className="font-bold text-xs">{payroll.user?.name}</p>
                 </div>
               </div>
               <div>
-                <p className="mb-10 font-medium">HRD / Manager</p>
-                <div className="border-t-2 border-black pt-1">
-                  <p className="font-bold">{payroll.store?.manager || '________________'}</p>
+                <p className="mb-8">HRD / Manager</p>
+                <div className="border-t-2 border-black pt-0.5">
+                  <p className="font-bold text-xs">{payroll.store?.manager || '________________'}</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="mt-2 text-center text-xs text-gray-600">
+          {/* Footer - Compact */}
+          <div className="mt-1.5 text-center text-xs text-gray-600">
             <p>Dicetak: {formatIndonesianDate(new Date())} - Setoran Harian</p>
           </div>
         </div>

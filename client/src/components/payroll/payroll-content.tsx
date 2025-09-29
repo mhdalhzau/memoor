@@ -345,7 +345,27 @@ export default function PayrollContent() {
   const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [suggestionsDialogOpen, setSuggestionsDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'bonus' | 'deduction', recordId: string, index: number } | null>(null);
+  
+  // Suggestions state
+  // Suggestion types
+  type SuggestionKind = 'bonus' | 'deduction';
+  type SuggestionSource = 'early_arrival' | 'late_departure' | 'lateness' | 'early_leave' | 'alpha' | 'manual';
+  
+  interface SuggestionItem {
+    id: string;
+    kind: SuggestionKind;
+    source: SuggestionSource;
+    date?: string;
+    minutes?: number;
+    amount: number;
+    name: string;
+    reason: string;
+  }
+
+  const [suggestionItems, setSuggestionItems] = useState<SuggestionItem[]>([]);
+  const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<Set<string>>(new Set());
   
   // Date range filter state
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('month');
@@ -775,6 +795,200 @@ export default function PayrollContent() {
     documentTitle: selectedPayroll
       ? `Detail-Payroll-${selectedPayroll.month}-${selectedPayroll.user?.name}`
       : "Detail-Payroll",
+  });
+
+  // Calculate suggestions from attendance data - Per Date Breakdown
+  const calculateSuggestions = () => {
+    console.log('=== CALCULATE SUGGESTIONS DEBUG ===');
+    console.log('selectedPayroll:', selectedPayroll);
+    console.log('attendanceData:', attendanceData);
+    
+    if (!selectedPayroll) {
+      toast({
+        title: "Tidak Ada Data",
+        description: "Pilih payroll terlebih dahulu",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!attendanceData?.attendanceData) {
+      toast({
+        title: "Tidak Ada Data",
+        description: "Data absensi tidak ditemukan. Pastikan data absensi sudah terinput di menu Attendance Detail Staff",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (attendanceData.attendanceData.length === 0) {
+      toast({
+        title: "Tidak Ada Data",
+        description: "Data absensi kosong untuk bulan ini",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const items: SuggestionItem[] = [];
+
+    console.log('Processing attendance records...');
+    attendanceData.attendanceData.forEach((record, index) => {
+      const date = new Date(record.date);
+      const dateStr = record.date;
+      const dayMonth = `${date.getDate()} ${date.toLocaleDateString('id-ID', { month: 'short' })}`;
+      
+      // Early Arrival Bonus (per date)
+      if (record.earlyArrivalMinutes && record.earlyArrivalMinutes > 0) {
+        const amount = record.earlyArrivalMinutes * 1500; // Rp 1500 per menit
+        items.push({
+          id: `${dateStr}|early_arrival`,
+          kind: 'bonus',
+          source: 'early_arrival',
+          date: dateStr,
+          minutes: record.earlyArrivalMinutes,
+          amount: amount,
+          name: 'Bonus Datang Awal',
+          reason: `${dayMonth}: Datang awal ${record.earlyArrivalMinutes} menit`
+        });
+        console.log(`  ✅ Early arrival: ${record.earlyArrivalMinutes} min → Rp ${amount}`);
+      }
+
+      // Late Departure Bonus (per date) - from overtimeMinutes
+      if (record.overtimeMinutes && record.overtimeMinutes > 0) {
+        const amount = record.overtimeMinutes * 1500; // Rp 1500 per menit
+        items.push({
+          id: `${dateStr}|late_departure`,
+          kind: 'bonus',
+          source: 'late_departure',
+          date: dateStr,
+          minutes: record.overtimeMinutes,
+          amount: amount,
+          name: 'Bonus Pulang Lama',
+          reason: `${dayMonth}: Pulang lama ${record.overtimeMinutes} menit`
+        });
+        console.log(`  ✅ Late departure: ${record.overtimeMinutes} min → Rp ${amount}`);
+      }
+
+      // Lateness Deduction (per date)
+      if (record.latenessMinutes && record.latenessMinutes > 0) {
+        const amount = record.latenessMinutes * 1000; // Rp 1000 per menit telat
+        items.push({
+          id: `${dateStr}|lateness`,
+          kind: 'deduction',
+          source: 'lateness',
+          date: dateStr,
+          minutes: record.latenessMinutes,
+          amount: amount,
+          name: 'Potongan Keterlambatan',
+          reason: `${dayMonth}: Telat ${record.latenessMinutes} menit`
+        });
+        console.log(`  ⚠️ Lateness: ${record.latenessMinutes} min → -Rp ${amount}`);
+      }
+
+      // Early Leave Deduction (per date)
+      const status = record.attendanceStatus || '';
+      if (record.workingHours && record.workingHours < 8 && status === 'hadir') {
+        const earlyMinutes = Math.round((8 - record.workingHours) * 60);
+        const amount = earlyMinutes * 800; // Rp 800 per menit pulang awal
+        items.push({
+          id: `${dateStr}|early_leave`,
+          kind: 'deduction',
+          source: 'early_leave',
+          date: dateStr,
+          minutes: earlyMinutes,
+          amount: amount,
+          name: 'Potongan Pulang Awal',
+          reason: `${dayMonth}: Pulang awal ${earlyMinutes} menit (kerja ${record.workingHours}j)`
+        });
+        console.log(`  ⚠️ Early leave: ${earlyMinutes} min → -Rp ${amount}`);
+      }
+
+      // Alpha Deduction (per date)
+      if (status === 'alpha') {
+        const baseSalaryPerDay = parseFloat(selectedPayroll.baseSalary || '0') / 30;
+        const amount = Math.round(baseSalaryPerDay);
+        items.push({
+          id: `${dateStr}|alpha`,
+          kind: 'deduction',
+          source: 'alpha',
+          date: dateStr,
+          amount: amount,
+          name: 'Potongan Alpha',
+          reason: `${dayMonth}: Tidak hadir (alpha)`
+        });
+        console.log(`  ❌ Alpha → -Rp ${amount}`);
+      }
+    });
+
+    // Sort by date
+    items.sort((a, b) => {
+      if (!a.date || !b.date) return 0;
+      return new Date(a.date).getTime() - new Date(b.date).getTime();
+    });
+
+    console.log('=== SUGGESTIONS ITEMS ===');
+    console.log('Total items:', items.length);
+    console.log('Bonuses:', items.filter(i => i.kind === 'bonus').length);
+    console.log('Deductions:', items.filter(i => i.kind === 'deduction').length);
+    console.log('Items:', items);
+
+    setSuggestionItems(items);
+    
+    // Select all by default
+    const allIds = new Set(items.map(item => item.id));
+    setSelectedSuggestionIds(allIds);
+    
+    setSuggestionsDialogOpen(true);
+  };
+
+  // Apply suggestions mutation - Only selected items
+  const applySuggestionsMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedPayroll) throw new Error('No payroll selected');
+      
+      // Filter only selected items
+      const selectedItems = suggestionItems.filter(item => selectedSuggestionIds.has(item.id));
+      
+      const currentBonuses = selectedPayroll.bonusList || [];
+      const currentDeductions = selectedPayroll.deductionList || [];
+      
+      // Convert selected items to bonuses/deductions
+      const selectedBonuses = selectedItems
+        .filter(item => item.kind === 'bonus')
+        .map(item => ({ name: item.name, amount: item.amount }));
+      
+      const selectedDeductions = selectedItems
+        .filter(item => item.kind === 'deduction')
+        .map(item => ({ name: item.name, amount: item.amount }));
+      
+      // Add to existing
+      const newBonuses = [...currentBonuses, ...selectedBonuses];
+      const newDeductions = [...currentDeductions, ...selectedDeductions];
+      
+      const res = await apiRequest('PATCH', `/api/payroll/${selectedPayroll.id}`, {
+        bonuses: JSON.stringify(newBonuses),
+        deductions: JSON.stringify(newDeductions),
+      });
+      return await res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Berhasil",
+        description: "Suggestions berhasil diterapkan ke payroll!",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      setSuggestionsDialogOpen(false);
+      setSuggestionItems([]);
+      setSelectedSuggestionIds(new Set());
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Gagal",
+        description: `Terjadi kesalahan: ${error.message}`,
+        variant: "destructive",
+      });
+    },
   });
 
   const handlePrintSalarySlip = useReactToPrint({
@@ -1625,11 +1839,11 @@ export default function PayrollContent() {
                                       <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={handlePrintDetail}
-                                        data-testid={`button-print-detail-${record.id}`}
+                                        onClick={calculateSuggestions}
+                                        data-testid={`button-suggestions-${record.id}`}
                                       >
-                                        <Printer className="h-4 w-4 mr-1" />
-                                        Print Detail
+                                        <TrendingUp className="h-4 w-4 mr-1" />
+                                        Suggestions
                                       </Button>
                                       <Button
                                         variant="outline"
@@ -1804,6 +2018,428 @@ export default function PayrollContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Suggestions Dialog - With Checkboxes */}
+      <Dialog open={suggestionsDialogOpen} onOpenChange={setSuggestionsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Suggestions Bonus & Potongan Per Tanggal</DialogTitle>
+            <DialogDescription>
+              Pilih suggestions yang ingin diterapkan dengan checkbox. Data berdasarkan absensi karyawan.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {/* Select All / Deselect All */}
+          <div className="flex items-center justify-between border-b pb-3">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={selectedSuggestionIds.size === suggestionItems.length && suggestionItems.length > 0}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    setSelectedSuggestionIds(new Set(suggestionItems.map(i => i.id)));
+                  } else {
+                    setSelectedSuggestionIds(new Set());
+                  }
+                }}
+                data-testid="checkbox-select-all"
+              />
+              <Label className="font-semibold cursor-pointer">
+                Pilih Semua ({selectedSuggestionIds.size}/{suggestionItems.length})
+              </Label>
+            </div>
+            <Badge variant="outline" className="text-xs">
+              {suggestionItems.length} item suggestions
+            </Badge>
+          </div>
+
+          <ScrollArea className="h-[500px] pr-4">
+            <div className="space-y-6">
+              {/* Group by Source */}
+              {(() => {
+                const earlyArrivalItems = suggestionItems.filter(i => i.source === 'early_arrival');
+                const lateDepartureItems = suggestionItems.filter(i => i.source === 'late_departure');
+                const latenessItems = suggestionItems.filter(i => i.source === 'lateness');
+                const earlyLeaveItems = suggestionItems.filter(i => i.source === 'early_leave');
+                const alphaItems = suggestionItems.filter(i => i.source === 'alpha');
+
+                return (
+                  <>
+                    {/* Bonus Datang Awal */}
+                    {earlyArrivalItems.length > 0 && (
+                      <div className="border rounded-lg p-4 bg-green-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={earlyArrivalItems.every(i => selectedSuggestionIds.has(i.id))}
+                              onCheckedChange={(checked) => {
+                                const newSelected = new Set(selectedSuggestionIds);
+                                earlyArrivalItems.forEach(i => {
+                                  if (checked) newSelected.add(i.id);
+                                  else newSelected.delete(i.id);
+                                });
+                                setSelectedSuggestionIds(newSelected);
+                              }}
+                              data-testid="checkbox-group-early-arrival"
+                            />
+                            <h3 className="text-lg font-semibold text-green-700 flex items-center gap-2">
+                              <TrendingUp className="h-5 w-5" />
+                              Bonus Datang Awal
+                            </h3>
+                          </div>
+                          <Badge variant="outline" className="bg-green-100">
+                            {earlyArrivalItems.length} hari
+                          </Badge>
+                        </div>
+                        <div className="space-y-2">
+                          {earlyArrivalItems.map(item => (
+                            <div key={item.id} className="flex items-center gap-3 bg-white p-3 rounded border">
+                              <Checkbox
+                                checked={selectedSuggestionIds.has(item.id)}
+                                onCheckedChange={(checked) => {
+                                  const newSelected = new Set(selectedSuggestionIds);
+                                  if (checked) newSelected.add(item.id);
+                                  else newSelected.delete(item.id);
+                                  setSelectedSuggestionIds(newSelected);
+                                }}
+                                data-testid={`checkbox-${item.id}`}
+                              />
+                              <div className="flex-1 text-sm">
+                                <div className="font-medium text-gray-900">{item.reason}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold text-green-700">+{formatRupiah(item.amount)}</div>
+                                <div className="text-xs text-gray-500">{item.minutes} menit</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 pt-3 border-t flex justify-between items-center">
+                          <span className="text-sm font-medium text-gray-700">
+                            Total ({earlyArrivalItems.filter(i => selectedSuggestionIds.has(i.id)).length} dipilih):
+                          </span>
+                          <span className="text-lg font-bold text-green-700">
+                            +{formatRupiah(earlyArrivalItems.filter(i => selectedSuggestionIds.has(i.id)).reduce((sum, i) => sum + i.amount, 0))}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bonus Pulang Lama */}
+                    {lateDepartureItems.length > 0 && (
+                      <div className="border rounded-lg p-4 bg-green-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={lateDepartureItems.every(i => selectedSuggestionIds.has(i.id))}
+                              onCheckedChange={(checked) => {
+                                const newSelected = new Set(selectedSuggestionIds);
+                                lateDepartureItems.forEach(i => {
+                                  if (checked) newSelected.add(i.id);
+                                  else newSelected.delete(i.id);
+                                });
+                                setSelectedSuggestionIds(newSelected);
+                              }}
+                              data-testid="checkbox-group-late-departure"
+                            />
+                            <h3 className="text-lg font-semibold text-green-700 flex items-center gap-2">
+                              <Clock className="h-5 w-5" />
+                              Bonus Pulang Lama
+                            </h3>
+                          </div>
+                          <Badge variant="outline" className="bg-green-100">
+                            {lateDepartureItems.length} hari
+                          </Badge>
+                        </div>
+                        <div className="space-y-2">
+                          {lateDepartureItems.map(item => (
+                            <div key={item.id} className="flex items-center gap-3 bg-white p-3 rounded border">
+                              <Checkbox
+                                checked={selectedSuggestionIds.has(item.id)}
+                                onCheckedChange={(checked) => {
+                                  const newSelected = new Set(selectedSuggestionIds);
+                                  if (checked) newSelected.add(item.id);
+                                  else newSelected.delete(item.id);
+                                  setSelectedSuggestionIds(newSelected);
+                                }}
+                                data-testid={`checkbox-${item.id}`}
+                              />
+                              <div className="flex-1 text-sm">
+                                <div className="font-medium text-gray-900">{item.reason}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold text-green-700">+{formatRupiah(item.amount)}</div>
+                                <div className="text-xs text-gray-500">{item.minutes} menit</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 pt-3 border-t flex justify-between items-center">
+                          <span className="text-sm font-medium text-gray-700">
+                            Total ({lateDepartureItems.filter(i => selectedSuggestionIds.has(i.id)).length} dipilih):
+                          </span>
+                          <span className="text-lg font-bold text-green-700">
+                            +{formatRupiah(lateDepartureItems.filter(i => selectedSuggestionIds.has(i.id)).reduce((sum, i) => sum + i.amount, 0))}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Potongan Keterlambatan */}
+                    {latenessItems.length > 0 && (
+                      <div className="border rounded-lg p-4 bg-red-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={latenessItems.every(i => selectedSuggestionIds.has(i.id))}
+                              onCheckedChange={(checked) => {
+                                const newSelected = new Set(selectedSuggestionIds);
+                                latenessItems.forEach(i => {
+                                  if (checked) newSelected.add(i.id);
+                                  else newSelected.delete(i.id);
+                                });
+                                setSelectedSuggestionIds(newSelected);
+                              }}
+                              data-testid="checkbox-group-lateness"
+                            />
+                            <h3 className="text-lg font-semibold text-red-700 flex items-center gap-2">
+                              <AlertTriangle className="h-5 w-5" />
+                              Potongan Keterlambatan
+                            </h3>
+                          </div>
+                          <Badge variant="outline" className="bg-red-100">
+                            {latenessItems.length} hari
+                          </Badge>
+                        </div>
+                        <div className="space-y-2">
+                          {latenessItems.map(item => (
+                            <div key={item.id} className="flex items-center gap-3 bg-white p-3 rounded border">
+                              <Checkbox
+                                checked={selectedSuggestionIds.has(item.id)}
+                                onCheckedChange={(checked) => {
+                                  const newSelected = new Set(selectedSuggestionIds);
+                                  if (checked) newSelected.add(item.id);
+                                  else newSelected.delete(item.id);
+                                  setSelectedSuggestionIds(newSelected);
+                                }}
+                                data-testid={`checkbox-${item.id}`}
+                              />
+                              <div className="flex-1 text-sm">
+                                <div className="font-medium text-gray-900">{item.reason}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold text-red-700">-{formatRupiah(item.amount)}</div>
+                                <div className="text-xs text-gray-500">{item.minutes} menit</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 pt-3 border-t flex justify-between items-center">
+                          <span className="text-sm font-medium text-gray-700">
+                            Total ({latenessItems.filter(i => selectedSuggestionIds.has(i.id)).length} dipilih):
+                          </span>
+                          <span className="text-lg font-bold text-red-700">
+                            -{formatRupiah(latenessItems.filter(i => selectedSuggestionIds.has(i.id)).reduce((sum, i) => sum + i.amount, 0))}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Potongan Pulang Awal */}
+                    {earlyLeaveItems.length > 0 && (
+                      <div className="border rounded-lg p-4 bg-red-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={earlyLeaveItems.every(i => selectedSuggestionIds.has(i.id))}
+                              onCheckedChange={(checked) => {
+                                const newSelected = new Set(selectedSuggestionIds);
+                                earlyLeaveItems.forEach(i => {
+                                  if (checked) newSelected.add(i.id);
+                                  else newSelected.delete(i.id);
+                                });
+                                setSelectedSuggestionIds(newSelected);
+                              }}
+                              data-testid="checkbox-group-early-leave"
+                            />
+                            <h3 className="text-lg font-semibold text-red-700 flex items-center gap-2">
+                              <Clock className="h-5 w-5" />
+                              Potongan Pulang Awal
+                            </h3>
+                          </div>
+                          <Badge variant="outline" className="bg-red-100">
+                            {earlyLeaveItems.length} hari
+                          </Badge>
+                        </div>
+                        <div className="space-y-2">
+                          {earlyLeaveItems.map(item => (
+                            <div key={item.id} className="flex items-center gap-3 bg-white p-3 rounded border">
+                              <Checkbox
+                                checked={selectedSuggestionIds.has(item.id)}
+                                onCheckedChange={(checked) => {
+                                  const newSelected = new Set(selectedSuggestionIds);
+                                  if (checked) newSelected.add(item.id);
+                                  else newSelected.delete(item.id);
+                                  setSelectedSuggestionIds(newSelected);
+                                }}
+                                data-testid={`checkbox-${item.id}`}
+                              />
+                              <div className="flex-1 text-sm">
+                                <div className="font-medium text-gray-900">{item.reason}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold text-red-700">-{formatRupiah(item.amount)}</div>
+                                <div className="text-xs text-gray-500">{item.minutes} menit</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 pt-3 border-t flex justify-between items-center">
+                          <span className="text-sm font-medium text-gray-700">
+                            Total ({earlyLeaveItems.filter(i => selectedSuggestionIds.has(i.id)).length} dipilih):
+                          </span>
+                          <span className="text-lg font-bold text-red-700">
+                            -{formatRupiah(earlyLeaveItems.filter(i => selectedSuggestionIds.has(i.id)).reduce((sum, i) => sum + i.amount, 0))}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Potongan Alpha */}
+                    {alphaItems.length > 0 && (
+                      <div className="border rounded-lg p-4 bg-red-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={alphaItems.every(i => selectedSuggestionIds.has(i.id))}
+                              onCheckedChange={(checked) => {
+                                const newSelected = new Set(selectedSuggestionIds);
+                                alphaItems.forEach(i => {
+                                  if (checked) newSelected.add(i.id);
+                                  else newSelected.delete(i.id);
+                                });
+                                setSelectedSuggestionIds(newSelected);
+                              }}
+                              data-testid="checkbox-group-alpha"
+                            />
+                            <h3 className="text-lg font-semibold text-red-700 flex items-center gap-2">
+                              <X className="h-5 w-5" />
+                              Potongan Alpha
+                            </h3>
+                          </div>
+                          <Badge variant="outline" className="bg-red-100">
+                            {alphaItems.length} hari
+                          </Badge>
+                        </div>
+                        <div className="space-y-2">
+                          {alphaItems.map(item => (
+                            <div key={item.id} className="flex items-center gap-3 bg-white p-3 rounded border">
+                              <Checkbox
+                                checked={selectedSuggestionIds.has(item.id)}
+                                onCheckedChange={(checked) => {
+                                  const newSelected = new Set(selectedSuggestionIds);
+                                  if (checked) newSelected.add(item.id);
+                                  else newSelected.delete(item.id);
+                                  setSelectedSuggestionIds(newSelected);
+                                }}
+                                data-testid={`checkbox-${item.id}`}
+                              />
+                              <div className="flex-1 text-sm">
+                                <div className="font-medium text-gray-900">{item.reason}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold text-red-700">-{formatRupiah(item.amount)}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 pt-3 border-t flex justify-between items-center">
+                          <span className="text-sm font-medium text-gray-700">
+                            Total ({alphaItems.filter(i => selectedSuggestionIds.has(i.id)).length} dipilih):
+                          </span>
+                          <span className="text-lg font-bold text-red-700">
+                            -{formatRupiah(alphaItems.filter(i => selectedSuggestionIds.has(i.id)).reduce((sum, i) => sum + i.amount, 0))}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* No Suggestions */}
+                    {suggestionItems.length === 0 && (
+                      <div className="text-center py-8">
+                        <CheckCircle2 className="h-12 w-12 mx-auto text-green-600 mb-4" />
+                        <p className="text-lg font-semibold">Tidak Ada Suggestions</p>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Data absensi tidak menunjukkan adanya keterlambatan, alpha, atau lembur
+                        </p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
+              {/* Summary - Only Selected Items */}
+              {suggestionItems.length > 0 && (
+                <div className="border-t pt-4 mt-4">
+                  <h3 className="text-lg font-semibold mb-3">Ringkasan</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-green-700 font-medium">Total Bonus Dipilih:</span>
+                      <span className="text-green-700 font-bold">
+                        + {formatRupiah(
+                          suggestionItems
+                            .filter(i => i.kind === 'bonus' && selectedSuggestionIds.has(i.id))
+                            .reduce((sum, i) => sum + i.amount, 0)
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-red-700 font-medium">Total Potongan Dipilih:</span>
+                      <span className="text-red-700 font-bold">
+                        - {formatRupiah(
+                          suggestionItems
+                            .filter(i => i.kind === 'deduction' && selectedSuggestionIds.has(i.id))
+                            .reduce((sum, i) => sum + i.amount, 0)
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-t pt-2">
+                      <span className="font-bold">Dampak Bersih:</span>
+                      <span className="font-bold">
+                        {formatRupiah(
+                          suggestionItems
+                            .filter(i => selectedSuggestionIds.has(i.id))
+                            .reduce((sum, i) => i.kind === 'bonus' ? sum + i.amount : sum - i.amount, 0)
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSuggestionsDialogOpen(false);
+                setSuggestionItems([]);
+                setSelectedSuggestionIds(new Set());
+              }}
+              data-testid="button-cancel-suggestions"
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={() => applySuggestionsMutation.mutate()}
+              disabled={applySuggestionsMutation.isPending || selectedSuggestionIds.size === 0}
+              data-testid="button-apply-suggestions"
+            >
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              {applySuggestionsMutation.isPending ? 'Menerapkan...' : `Terapkan ${selectedSuggestionIds.size} Suggestions`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Hidden Salary Slip for Printing */}
       {selectedPayroll && (
