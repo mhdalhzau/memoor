@@ -2376,16 +2376,22 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ message: "No accessible stores" });
       }
       
-      const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+      // Get target month from request body or default to current month
+      const targetMonth = req.body.month || new Date().toISOString().slice(0, 7); // YYYY-MM
+      
+      // Validate month format
+      if (!/^\d{4}-\d{2}$/.test(targetMonth)) {
+        return res.status(400).json({ message: "Invalid month format. Expected YYYY-MM" });
+      }
       
       // Get payroll configuration
       const payrollConfig = await storage.getPayrollConfig();
       const payrollCycle = payrollConfig ? parseInt(payrollConfig.payrollCycle) : 30;
       const overtimeRate = payrollConfig ? parseFloat(payrollConfig.overtimeRate) : 10000;
       
-      // OPTIMIZATION: Fetch only relevant data for current month and accessible stores
-      const allOvertimeRecords = await storage.getOvertimeByStoresAndMonth(accessibleStoreIds, currentMonth);
-      const allPayrollRecords = await storage.getPayrollByStoresAndMonth(accessibleStoreIds, currentMonth);
+      // OPTIMIZATION: Fetch only relevant data for target month and accessible stores
+      const allOvertimeRecords = await storage.getOvertimeByStoresAndMonth(accessibleStoreIds, targetMonth);
+      const allPayrollRecords = await storage.getPayrollByStoresAndMonth(accessibleStoreIds, targetMonth);
       
       // Generate payroll per store (per-store requirement)
       const payrollPromises = [];
@@ -2407,7 +2413,7 @@ export function registerRoutes(app: Express): Server {
               const attendanceDate = new Date(attendance.date || attendance.createdAt);
               if (isNaN(attendanceDate.getTime())) return false;
               return attendance.userId === user.id &&
-                     attendanceDate.toISOString().slice(0, 7) === currentMonth && 
+                     attendanceDate.toISOString().slice(0, 7) === targetMonth && 
                      attendance.checkIn && attendance.checkOut;
             } catch (error) {
               console.warn('Error processing attendance date:', error);
@@ -2437,7 +2443,7 @@ export function registerRoutes(app: Express): Server {
               return overtime.userId === user.id &&
                      overtime.storeId === storeId &&
                      overtime.status === 'approved' &&
-                     overtimeDate.toISOString().slice(0, 7) === currentMonth;
+                     overtimeDate.toISOString().slice(0, 7) === targetMonth;
             } catch (error) {
               console.warn('Error processing overtime date:', error);
               return false;
@@ -2456,7 +2462,7 @@ export function registerRoutes(app: Express): Server {
           const existingPayroll = allPayrollRecords.find(p => 
             p.userId === user.id && 
             p.storeId === storeId && 
-            p.month === currentMonth
+            p.month === targetMonth
           );
           
           if (existingPayroll) {
@@ -2471,7 +2477,7 @@ export function registerRoutes(app: Express): Server {
             payrollPromises.push(storage.createPayroll({
               userId: user.id,
               storeId: storeId,
-              month: currentMonth,
+              month: targetMonth,
               baseSalary: basePay.toFixed(2),
               overtimePay: overtimePay.toFixed(2),
               totalAmount: totalAmount.toFixed(2),

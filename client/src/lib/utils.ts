@@ -42,3 +42,92 @@ export function formatNumber(amount: string | number | null | undefined): string
   
   return new Intl.NumberFormat('id-ID').format(numAmount);
 }
+
+// Indonesian month names
+const INDONESIAN_MONTHS = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+];
+
+// Format YYYY-MM to readable Indonesian format (e.g., "September 2025")
+export function formatIndonesianMonth(monthStr: string): string {
+  if (!monthStr || !monthStr.includes('-')) return monthStr;
+  
+  try {
+    const [year, month] = monthStr.split('-');
+    const monthIndex = parseInt(month) - 1;
+    
+    if (monthIndex < 0 || monthIndex > 11) return monthStr;
+    
+    return `${INDONESIAN_MONTHS[monthIndex]} ${year}`;
+  } catch (error) {
+    console.warn('Error formatting Indonesian month:', error);
+    return monthStr;
+  }
+}
+
+// Get current month in YYYY-MM format
+export function getCurrentMonth(): string {
+  return new Date().toISOString().slice(0, 7);
+}
+
+// Get previous month in YYYY-MM format
+export function getPreviousMonth(monthStr: string): string {
+  try {
+    const [year, month] = monthStr.split('-').map(Number);
+    const date = new Date(year, month - 1, 1);
+    date.setMonth(date.getMonth() - 1);
+    
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  } catch (error) {
+    console.warn('Error getting previous month:', error);
+    return monthStr;
+  }
+}
+
+// Get next month in YYYY-MM format
+export function getNextMonth(monthStr: string): string {
+  try {
+    const [year, month] = monthStr.split('-').map(Number);
+    const date = new Date(year, month - 1, 1);
+    date.setMonth(date.getMonth() + 1);
+    
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  } catch (error) {
+    console.warn('Error getting next month:', error);
+    return monthStr;
+  }
+}
+
+// Generate array of months for selection (last 12 months and next 6 months)
+export function getSelectableMonths(): Array<{ value: string; label: string }> {
+  const months = [];
+  const currentDate = new Date();
+  
+  // Generate 12 previous months
+  for (let i = 11; i >= 0; i--) {
+    const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+    const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const label = formatIndonesianMonth(value);
+    months.push({ value, label });
+  }
+  
+  // Add next 6 months
+  for (let i = 1; i <= 6; i++) {
+    const date = new Date(currentDate.getFullYear(), currentDate.getMonth() + i, 1);
+    const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const label = formatIndonesianMonth(value);
+    months.push({ value, label });
+  }
+  
+  return months;
+}
+
+// Format date range for display
+export function formatDateRange(startMonth: string, endMonth: string): string {
+  if (startMonth === endMonth) {
+    return formatIndonesianMonth(startMonth);
+  }
+  
+  return `${formatIndonesianMonth(startMonth)} - ${formatIndonesianMonth(endMonth)}`;
+}

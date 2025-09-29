@@ -4,6 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -23,7 +30,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { formatRupiah } from "@/lib/utils";
+import { 
+  formatRupiah, 
+  formatIndonesianMonth, 
+  getCurrentMonth, 
+  getPreviousMonth, 
+  getNextMonth, 
+  getSelectableMonths,
+  formatDateRange 
+} from "@/lib/utils";
 import { type Payroll, type User } from "@shared/schema";
 import {
   Wallet,
@@ -36,6 +51,12 @@ import {
   Plus,
   Minus,
   Trash2,
+  Filter,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Users,
+  Building2,
 } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 import { useRef } from "react";
@@ -57,6 +78,15 @@ export default function PayrollContent() {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [newBonus, setNewBonus] = useState({ name: "", amount: 0 });
   const [newDeduction, setNewDeduction] = useState({ name: "", amount: 0 });
+  
+  // Filtering state
+  const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonth());
+  const [selectedStore, setSelectedStore] = useState<string>("");
+  const [selectedEmployee, setSelectedEmployee] = useState<string>("");
+  const [generateForMonth, setGenerateForMonth] = useState<string>(getCurrentMonth());
+  
+  // Available month options
+  const selectableMonths = useMemo(() => getSelectableMonths(), []);
 
   const { data: payrollRecords, isLoading } = useQuery<PayrollWithUser[]>({
     queryKey: ["/api/payroll"],
@@ -99,6 +129,50 @@ export default function PayrollContent() {
       };
     }) || [];
 
+  // Apply filters to processed records
+  const filteredRecords = useMemo(() => {
+    let filtered = processedRecords;
+    
+    // Filter by month
+    if (selectedMonth) {
+      filtered = filtered.filter(record => record.month === selectedMonth);
+    }
+    
+    // Filter by store
+    if (selectedStore) {
+      filtered = filtered.filter(record => record.storeId.toString() === selectedStore);
+    }
+    
+    // Filter by employee
+    if (selectedEmployee) {
+      filtered = filtered.filter(record => record.userId === selectedEmployee);
+    }
+    
+    return filtered;
+  }, [processedRecords, selectedMonth, selectedStore, selectedEmployee]);
+
+  // Get unique months from records for filter options
+  const availableMonths = useMemo(() => {
+    const months = new Set(payrollRecords?.map(r => r.month) || []);
+    return Array.from(months).sort().reverse();
+  }, [payrollRecords]);
+
+  // Get active filter count
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedMonth && selectedMonth !== getCurrentMonth()) count++;
+    if (selectedStore) count++;
+    if (selectedEmployee) count++;
+    return count;
+  }, [selectedMonth, selectedStore, selectedEmployee]);
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSelectedMonth(getCurrentMonth());
+    setSelectedStore("");
+    setSelectedEmployee("");
+  };
+
   // Derive selected payroll from processed records
   const selectedPayroll = useMemo(() => {
     return selectedPayrollId
@@ -131,21 +205,22 @@ export default function PayrollContent() {
     }) || [];
 
   const generatePayrollMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/payroll/generate");
+    mutationFn: async (month?: string) => {
+      const targetMonth = month || generateForMonth;
+      const res = await apiRequest("POST", "/api/payroll/generate", { month: targetMonth });
       return await res.json();
     },
-    onSuccess: (data) => {
-      const currentMonth = new Date().toISOString().slice(0, 7);
+    onSuccess: (data, month) => {
+      const targetMonth = month || generateForMonth;
       const existingRecords =
-        payrollRecords?.filter((record) => record.month === currentMonth) || [];
+        payrollRecords?.filter((record) => record.month === targetMonth) || [];
       const isUpdate = existingRecords.length > 0;
 
       toast({
         title: "Success",
         description: isUpdate
-          ? `Payroll updated successfully for ${data.length} staff members!`
-          : `Payroll generated successfully for ${data.length} staff members!`,
+          ? `Payroll updated successfully for ${data.length} staff members for ${formatIndonesianMonth(targetMonth)}!`
+          : `Payroll generated successfully for ${data.length} staff members for ${formatIndonesianMonth(targetMonth)}!`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
     },
@@ -259,31 +334,199 @@ export default function PayrollContent() {
             <Wallet className="h-5 w-5" />
             Payroll Management
           </CardTitle>
-          <Button
-            onClick={() => generatePayrollMutation.mutate()}
-            disabled={generatePayrollMutation.isPending}
-            data-testid="button-generate-payroll"
-          >
-            <DollarSign className="h-4 w-4 mr-2" />
-            {generatePayrollMutation.isPending
-              ? "Processing..."
-              : (() => {
-                  const currentMonth = new Date().toISOString().slice(0, 7);
-                  const existingRecords =
-                    processedRecords?.filter(
-                      (record) => record.month === currentMonth,
-                    ) || [];
-                  return existingRecords.length > 0
-                    ? "Update Payroll"
-                    : "Generate Payroll";
-                })()}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Payroll Generation with Month Selection */}
+            <div className="flex items-center gap-2">
+              <Select
+                value={generateForMonth}
+                onValueChange={setGenerateForMonth}
+                data-testid="select-generate-month"
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Select month to generate" />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectableMonths.map(({ value, label }) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={() => generatePayrollMutation.mutate(generateForMonth)}
+                disabled={generatePayrollMutation.isPending}
+                data-testid="button-generate-payroll"
+              >
+                <DollarSign className="h-4 w-4 mr-2" />
+                {generatePayrollMutation.isPending
+                  ? "Processing..."
+                  : (() => {
+                      const existingRecords =
+                        processedRecords?.filter(
+                          (record) => record.month === generateForMonth,
+                        ) || [];
+                      return existingRecords.length > 0
+                        ? "Update Payroll"
+                        : "Generate Payroll";
+                    })()}
+              </Button>
+            </div>
+          </div>
+        </div>
+        
+        {/* Filtering Controls */}
+        <div className="space-y-4">
+          {/* Period Navigation */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedMonth(getPreviousMonth(selectedMonth))}
+              data-testid="button-previous-month"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <div className="flex items-center gap-2 px-4 py-2 bg-secondary rounded-md">
+              <Calendar className="h-4 w-4" />
+              <span className="font-medium">
+                {formatIndonesianMonth(selectedMonth)}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedMonth(getNextMonth(selectedMonth))}
+              data-testid="button-next-month"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          {/* Filter Controls */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
+            {/* Month Filter */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Period
+              </Label>
+              <Select
+                value={selectedMonth}
+                onValueChange={setSelectedMonth}
+                data-testid="select-filter-month"
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All periods" />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectableMonths.map(({ value, label }) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Store Filter */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Store
+              </Label>
+              <Select
+                value={selectedStore}
+                onValueChange={setSelectedStore}
+                data-testid="select-filter-store"
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All stores" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All stores</SelectItem>
+                  {stores?.map((store) => (
+                    <SelectItem key={store.id} value={store.id.toString()}>
+                      {store.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Employee Filter */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Employee
+              </Label>
+              <Select
+                value={selectedEmployee}
+                onValueChange={setSelectedEmployee}
+                data-testid="select-filter-employee"
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All employees" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All employees</SelectItem>
+                  {users?.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Filter Actions */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-2">
+                <Filter className="h-4 w-4" />
+                Actions
+              </Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearFilters}
+                  disabled={activeFilterCount === 0}
+                  data-testid="button-clear-filters"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Clear
+                </Button>
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary" data-testid="badge-filter-count">
+                    {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          {/* Results Summary */}
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span data-testid="text-results-count">
+              Showing {filteredRecords.length} of {processedRecords.length} payroll records
+              {selectedMonth && selectedMonth !== getCurrentMonth() && 
+                ` for ${formatIndonesianMonth(selectedMonth)}`
+              }
+            </span>
+            {filteredRecords.length !== processedRecords.length && (
+              <span className="text-blue-600">
+                Filters applied
+              </span>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <div className="text-center py-8">Loading payroll records...</div>
-        ) : payrollRecords && payrollRecords.length > 0 ? (
+        ) : filteredRecords && filteredRecords.length > 0 ? (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -300,7 +543,7 @@ export default function PayrollContent() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {processedRecords.map((record) => {
+                {filteredRecords.map((record) => {
                   const totalBonus =
                     record.bonusList?.reduce((sum, b) => sum + b.amount, 0) ||
                     0;
@@ -330,7 +573,9 @@ export default function PayrollContent() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>{record.month}</TableCell>
+                      <TableCell data-testid={`text-month-${record.id}`}>
+                        {formatIndonesianMonth(record.month)}
+                      </TableCell>
                       <TableCell data-testid={`text-base-salary-${record.id}`}>
                         {formatRupiah(record.baseSalary)}
                       </TableCell>
@@ -413,8 +658,30 @@ export default function PayrollContent() {
         ) : (
           <div className="text-center text-muted-foreground py-8">
             <Wallet className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No payroll records found</p>
-            <p className="text-sm">Generate payroll to get started</p>
+            {processedRecords.length === 0 ? (
+              <div>
+                <p>No payroll records found</p>
+                <p className="text-sm">Generate payroll to get started</p>
+              </div>
+            ) : (
+              <div>
+                <p>No payroll records match your current filters</p>
+                <p className="text-sm mb-4">
+                  {activeFilterCount > 0 && (
+                    <>Showing results for {formatIndonesianMonth(selectedMonth)}<br /></>
+                  )}
+                  Try adjusting your filters or clearing them
+                </p>
+                <Button 
+                  variant="outline" 
+                  onClick={clearFilters}
+                  data-testid="button-clear-filters-empty"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Clear Filters
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </CardContent>
@@ -429,7 +696,7 @@ export default function PayrollContent() {
                   Detail Payroll - {selectedPayroll?.user?.name}
                 </DialogTitle>
                 <p className="text-sm text-muted-foreground">
-                  Period: {selectedPayroll?.month} | Store:{" "}
+                  Period: {selectedPayroll?.month ? formatIndonesianMonth(selectedPayroll.month) : '-'} | Store:{" "}
                   {selectedPayroll?.store?.name}
                 </p>
               </div>
@@ -499,7 +766,7 @@ export default function PayrollContent() {
                           <strong>Periode</strong>
                         </td>
                         <td style={{ padding: "1px 0" }}>
-                          : {selectedPayroll?.month}
+                          : {selectedPayroll?.month ? formatIndonesianMonth(selectedPayroll.month) : '-'}
                         </td>
                       </tr>
                     </tbody>
