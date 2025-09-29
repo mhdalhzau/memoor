@@ -4,6 +4,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupDatabaseMiddleware } from "./middleware/integration";
 import { runStartupMigration } from "./startup-migration";
+import { ensureShiftsColumn } from "./db";
 
 const app = express();
 
@@ -78,6 +79,13 @@ app.use((req, res, next) => {
   
   // Setup database middleware untuk operasi CRUD yang dioptimalkan
   setupDatabaseMiddleware(app);
+  
+  // Ensure shifts column exists in stores table
+  try {
+    await ensureShiftsColumn();
+  } catch (error) {
+    console.error("Failed to ensure shifts column, continuing anyway:", error);
+  }
   
   // Run startup migration for Patam Lestari store (store ID 2)
   await runStartupMigration();

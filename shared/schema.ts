@@ -305,6 +305,15 @@ export const payrollConfig = mysqlTable("payroll_config", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Shift schedule schema and types
+export const shiftScheduleSchema = z.object({
+  name: z.string().min(1, "Shift name is required"),
+  start: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:mm)"),
+  end: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:mm)")
+});
+
+export type ShiftSchedule = z.infer<typeof shiftScheduleSchema>;
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -324,6 +333,17 @@ export const insertUserStoreSchema = createInsertSchema(userStores).omit({
 export const insertStoreSchema = createInsertSchema(stores).omit({
   id: true, // Omit auto-increment ID field
   createdAt: true,
+  shifts: true, // Omit to properly override with Zod schema
+}).extend({
+  shifts: z.string().optional().refine((val) => {
+    if (!val) return true; // Optional field
+    try {
+      const parsed = JSON.parse(val);
+      return z.array(shiftScheduleSchema).parse(parsed);
+    } catch {
+      return false;
+    }
+  }, "Invalid shifts format"),
 });
 
 export const insertAttendanceSchema = createInsertSchema(attendance).omit({
@@ -400,6 +420,8 @@ export const updatePayrollBonusDeductionSchema = z.object({
       return false;
     }
   }, "Invalid deductions format"),
+  baseSalary: z.string().optional(),
+  overtimePay: z.string().optional(),
 });
 
 export const insertProposalSchema = createInsertSchema(proposals).omit({

@@ -1,11 +1,48 @@
 // Attendance calculation utilities
+import type { Store } from './schema';
+
+// Shift schedule type matching both default and custom shifts
+export interface ShiftSchedule {
+  start: string;
+  end: string;
+}
+
+export interface ShiftSchedules {
+  [key: string]: ShiftSchedule;
+}
 
 // Shift time definitions (Indonesian SPBU shift standards)
-export const SHIFT_SCHEDULES = {
+export const SHIFT_SCHEDULES: ShiftSchedules = {
   pagi: { start: '07:00', end: '15:00' },
   siang: { start: '15:00', end: '23:00' },
   malam: { start: '23:00', end: '07:00' }
 };
+
+// Get store's custom shifts or return default shifts
+export function getStoreShifts(store?: Pick<Store, 'shifts'> | null): ShiftSchedules {
+  if (!store?.shifts) {
+    return SHIFT_SCHEDULES;
+  }
+  
+  try {
+    const parsed = JSON.parse(store.shifts);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return SHIFT_SCHEDULES;
+    }
+    
+    // Convert array format [{name, start, end}] to object format {name: {start, end}}
+    const shiftsObject: ShiftSchedules = {};
+    parsed.forEach((shift: { name: string; start: string; end: string }) => {
+      const key = shift.name.toLowerCase().replace(/\s+/g, '_');
+      shiftsObject[key] = { start: shift.start, end: shift.end };
+    });
+    
+    return shiftsObject;
+  } catch (error) {
+    console.error('Failed to parse store shifts:', error);
+    return SHIFT_SCHEDULES;
+  }
+}
 
 // Day boundary reset at 3 AM WIB (Indonesia business standard)
 const DAY_RESET_HOUR = 3;
@@ -36,53 +73,74 @@ function minutesToTime(minutes: number): string {
 }
 
 // Auto-detect shift based on check-in time
-export function detectShift(checkInTime: string): string {
+export function detectShift(checkInTime: string, customShifts?: ShiftSchedules): string {
+  const shifts = customShifts || SHIFT_SCHEDULES;
   const checkInMinutes = timeToMinutes(checkInTime);
   
-  // With 3 AM reset:
-  // 3 AM = 0 minutes, 7 AM = 240 minutes, 15 PM = 720 minutes, 23 PM = 1200 minutes
-  // 1 AM (next day) = 1320 minutes, 2 AM (next day) = 1380 minutes
+  // Find the closest shift based on check-in time
+  let closestShift = Object.keys(shifts)[0];
+  let minDifference = Infinity;
   
-  // Pagi shift: 05:00 - 13:00 (120 - 600 minutes from 3 AM)
-  if (checkInMinutes >= 120 && checkInMinutes < 600) { // 5:00 - 13:00
-    return 'pagi';
-  }
+  Object.entries(shifts).forEach(([shiftName, schedule]) => {
+    const shiftStartMinutes = timeToMinutes(schedule.start);
+    const difference = Math.abs(checkInMinutes - shiftStartMinutes);
+    
+    if (difference < minDifference) {
+      minDifference = difference;
+      closestShift = shiftName;
+    }
+  });
   
-  // Siang shift: 13:00 - 21:00 (600 - 1080 minutes from 3 AM)
-  if (checkInMinutes >= 600 && checkInMinutes < 1080) { // 13:00 - 21:00
-    return 'siang';
-  }
-  
-  // Malam shift: 21:00 - 05:00 (1080+ minutes or early morning 0-120 minutes)
-  return 'malam';
+  return closestShift;
 }
 
 // Calculate lateness in minutes
-export function calculateLateness(checkInTime: string, shift: string): number {
-  const checkInMinutes = timeToMinutes(checkInTime);
-  const shiftStartMinutes = timeToMinutes(SHIFT_SCHEDULES[shift as keyof typeof SHIFT_SCHEDULES].start);
+export function calculateLateness(checkInTime: string, shift: string, customShifts?: ShiftSchedules): number {
+  const shifts = customShifts || SHIFT_SCHEDULES;
+  const shiftSchedule = shifts[shift];
   
-  // With 3 AM reset, all calculations are simpler:
-  // Pagi: 7 AM = 240 minutes, Siang: 3 PM = 720 minutes, Malam: 11 PM = 1200 minutes
+  if (!shiftSchedule) {
+    console.warn(`Shift "${shift}" not found in shifts, using 0 lateness`);
+    return 0;
+  }
+  
+  const checkInMinutes = timeToMinutes(checkInTime);
+  const shiftStartMinutes = timeToMinutes(shiftSchedule.start);
   
   return Math.max(0, checkInMinutes - shiftStartMinutes);
 }
 
 // Calculate early arrival in minutes (positive when arriving before shift start)
-export function calculateEarlyArrival(checkInTime: string, shift: string): number {
+export function calculateEarlyArrival(checkInTime: string, shift: string, customShifts?: ShiftSchedules): number {
+  const shifts = customShifts || SHIFT_SCHEDULES;
+  const shiftSchedule = shifts[shift];
+  
+  if (!shiftSchedule) {
+    console.warn(`Shift "${shift}" not found in shifts, using 0 early arrival`);
+    return 0;
+  }
+  
   const checkInMinutes = timeToMinutes(checkInTime);
-  const shiftStartMinutes = timeToMinutes(SHIFT_SCHEDULES[shift as keyof typeof SHIFT_SCHEDULES].start);
+  const shiftStartMinutes = timeToMinutes(shiftSchedule.start);
   
   // Return positive minutes when arriving early (check-in before shift start)
   return Math.max(0, shiftStartMinutes - checkInMinutes);
 }
 
 // Calculate overtime in minutes
-export function calculateOvertime(checkOutTime: string, shift: string): number {
+export function calculateOvertime(checkOutTime: string, shift: string, customShifts?: ShiftSchedules): number {
   if (!checkOutTime) return 0;
   
-  const shiftStart = timeToMinutes(SHIFT_SCHEDULES[shift as keyof typeof SHIFT_SCHEDULES].start);
-  let shiftEnd = timeToMinutes(SHIFT_SCHEDULES[shift as keyof typeof SHIFT_SCHEDULES].end);
+  const shifts = customShifts || SHIFT_SCHEDULES;
+  const shiftSchedule = shifts[shift];
+  
+  if (!shiftSchedule) {
+    console.warn(`Shift "${shift}" not found in shifts, using 0 overtime`);
+    return 0;
+  }
+  
+  const shiftStart = timeToMinutes(shiftSchedule.start);
+  let shiftEnd = timeToMinutes(shiftSchedule.end);
   let checkOut = timeToMinutes(checkOutTime);
   
   // Handle wrap-around shifts (night shift: 23:00-07:00)

@@ -2641,6 +2641,8 @@ export function registerRoutes(app: Express): Server {
       const payroll = await storage.updatePayrollBonusDeduction(req.params.id, {
         bonuses: validatedData.bonuses,
         deductions: validatedData.deductions,
+        baseSalary: validatedData.baseSalary,
+        overtimePay: validatedData.overtimePay,
       });
       
       if (!payroll) return res.status(404).json({ message: "Payroll not found" });

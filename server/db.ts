@@ -63,6 +63,34 @@ export async function ensureDatabaseConnection(): Promise<void> {
   }
 }
 
+// Ensure shifts column exists in stores table
+export async function ensureShiftsColumn(): Promise<void> {
+  try {
+    console.log("🔄 Checking if shifts column exists in stores table...");
+    const connection = await pool.getConnection();
+    
+    // Check if column exists
+    const [columns] = await connection.execute(
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stores' AND COLUMN_NAME = 'shifts'"
+    );
+    
+    if ((columns as any[]).length === 0) {
+      console.log("➕ Adding shifts column to stores table...");
+      await connection.execute(
+        "ALTER TABLE stores ADD COLUMN shifts TEXT DEFAULT NULL"
+      );
+      console.log("✅ Shifts column added successfully");
+    } else {
+      console.log("✅ Shifts column already exists");
+    }
+    
+    connection.release();
+  } catch (error) {
+    console.error("❌ Failed to ensure shifts column:", error);
+    throw error;
+  }
+}
+
 // Create Drizzle database instance with MySQL schema
 export const db = drizzle(pool, { schema, mode: "default" });
 

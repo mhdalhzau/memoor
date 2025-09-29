@@ -8,9 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Store, Building, Users, MapPin, Edit, Trash2, Plus, Phone } from "lucide-react";
+import { Store, Building, Users, MapPin, Edit, Trash2, Plus, Phone, Clock } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -30,9 +30,16 @@ const storeSchema = z.object({
   exitTimeStart: z.string().default("17:00"),
   exitTimeEnd: z.string().default("19:00"),
   timezone: z.string().default("Asia/Jakarta"),
+  shifts: z.string().optional(),
 });
 
 type StoreData = z.infer<typeof storeSchema>;
+
+interface Shift {
+  name: string;
+  start: string;
+  end: string;
+}
 
 interface StoreInfo {
   id: number;
@@ -46,12 +53,221 @@ interface StoreInfo {
   exitTimeStart?: string;
   exitTimeEnd?: string;
   timezone?: string;
+  shifts?: string;
   employeeCount: number;
   status: "active" | "inactive";
   createdAt: string;
 }
 
-// Using the User type from the backend instead of separate StoreEmployee interface
+interface ShiftManagementSectionProps {
+  shifts: Shift[];
+  onAdd: (shift: Shift) => void;
+  onEdit: (index: number, shift: Shift) => void;
+  onDelete: (index: number) => void;
+}
+
+function ShiftManagementSection({ shifts, onAdd, onEdit, onDelete }: ShiftManagementSectionProps) {
+  const [newShift, setNewShift] = useState<Shift>({ name: "", start: "07:00", end: "15:00" });
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editShift, setEditShift] = useState<Shift>({ name: "", start: "", end: "" });
+  const [error, setError] = useState<string>("");
+
+  const validateShiftTimes = (start: string, end: string): boolean => {
+    if (!start || !end) {
+      setError("Waktu shift harus diisi");
+      return false;
+    }
+
+    const [startHour, startMin] = start.split(':').map(Number);
+    const [endHour, endMin] = end.split(':').map(Number);
+    const startMinutes = startHour * 60 + startMin;
+    let endMinutes = endHour * 60 + endMin;
+
+    if (endMinutes <= startMinutes) {
+      endMinutes += 24 * 60;
+    }
+
+    return true;
+  };
+
+  const handleAdd = () => {
+    if (!newShift.name.trim()) {
+      setError("Nama shift harus diisi");
+      return;
+    }
+
+    if (!validateShiftTimes(newShift.start, newShift.end)) {
+      return;
+    }
+
+    onAdd(newShift);
+    setNewShift({ name: "", start: "07:00", end: "15:00" });
+    setError("");
+  };
+
+  const handleEditClick = (index: number) => {
+    setEditingIndex(index);
+    setEditShift({ ...shifts[index] });
+    setError("");
+  };
+
+  const handleEditSave = () => {
+    if (editingIndex === null) return;
+
+    if (!editShift.name.trim()) {
+      setError("Nama shift harus diisi");
+      return;
+    }
+
+    if (!validateShiftTimes(editShift.start, editShift.end)) {
+      return;
+    }
+
+    onEdit(editingIndex, editShift);
+    setEditingIndex(null);
+    setError("");
+  };
+
+  const handleEditCancel = () => {
+    setEditingIndex(null);
+    setError("");
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <Label className="text-sm font-semibold text-blue-900 flex items-center gap-2 mb-3">
+          <Clock className="h-4 w-4" />
+          Manajemen Shift
+        </Label>
+        <p className="text-xs text-blue-700 mb-4">
+          Tambah shift kustom untuk toko ini. Jika tidak diatur, akan menggunakan shift default (Pagi, Siang, Malam).
+        </p>
+
+        {error && (
+          <div className="p-2 mb-3 bg-red-100 border border-red-300 rounded text-xs text-red-700">
+            {error}
+          </div>
+        )}
+
+        {shifts.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {shifts.map((shift, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between p-3 bg-white rounded border border-gray-200"
+              >
+                {editingIndex === index ? (
+                  <div className="flex items-center gap-2 flex-1">
+                    <Input
+                      value={editShift.name}
+                      onChange={(e) => setEditShift({ ...editShift, name: e.target.value })}
+                      placeholder="Nama shift"
+                      className="w-32"
+                      data-testid={`input-edit-shift-name-${index}`}
+                    />
+                    <Input
+                      type="time"
+                      value={editShift.start}
+                      onChange={(e) => setEditShift({ ...editShift, start: e.target.value })}
+                      className="w-28"
+                      data-testid={`input-edit-shift-start-${index}`}
+                    />
+                    <span className="text-gray-400">-</span>
+                    <Input
+                      type="time"
+                      value={editShift.end}
+                      onChange={(e) => setEditShift({ ...editShift, end: e.target.value })}
+                      className="w-28"
+                      data-testid={`input-edit-shift-end-${index}`}
+                    />
+                    <Button
+                      size="sm"
+                      onClick={handleEditSave}
+                      data-testid={`button-save-shift-${index}`}
+                    >
+                      Simpan
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleEditCancel}
+                      data-testid={`button-cancel-edit-shift-${index}`}
+                    >
+                      Batal
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <Badge variant="outline" className="font-medium">
+                        {shift.name}
+                      </Badge>
+                      <span className="text-sm text-gray-600">
+                        {shift.start} - {shift.end}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleEditClick(index)}
+                        data-testid={`button-edit-shift-${index}`}
+                      >
+                        <Edit className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onDelete(index)}
+                        data-testid={`button-delete-shift-${index}`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <Input
+            value={newShift.name}
+            onChange={(e) => setNewShift({ ...newShift, name: e.target.value })}
+            placeholder="Nama shift (e.g., Pagi)"
+            className="w-40"
+            data-testid="input-new-shift-name"
+          />
+          <Input
+            type="time"
+            value={newShift.start}
+            onChange={(e) => setNewShift({ ...newShift, start: e.target.value })}
+            className="w-32"
+            data-testid="input-new-shift-start"
+          />
+          <span className="text-gray-400">-</span>
+          <Input
+            type="time"
+            value={newShift.end}
+            onChange={(e) => setNewShift({ ...newShift, end: e.target.value })}
+            className="w-32"
+            data-testid="input-new-shift-end"
+          />
+          <Button
+            size="sm"
+            onClick={handleAdd}
+            data-testid="button-add-shift"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Tambah Shift
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function StoreManagementContent() {
   const { user } = useAuth();
@@ -61,26 +277,24 @@ export default function StoreManagementContent() {
   const [selectedStore, setSelectedStore] = useState<StoreInfo | null>(null);
   const [editingStore, setEditingStore] = useState<StoreInfo | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [createShifts, setCreateShifts] = useState<Shift[]>([]);
+  const [editShifts, setEditShifts] = useState<Shift[]>([]);
 
-  // Fetch stores
   const { data: stores = [], refetch: refetchStores, isLoading: storesLoading, error: storesError } = useQuery<StoreInfo[]>({
     queryKey: ["/api/stores"],
     enabled: user?.role === "manager",
   });
 
-  // Fetch users to show available managers
   const { data: users = [] } = useQuery<any[]>({
     queryKey: ["/api/users"],
     enabled: user?.role === "manager",
   });
 
-  // Fetch employees for selected store
   const { data: storeEmployees = [], isLoading: employeesLoading, error: employeesError } = useQuery<any[]>({
     queryKey: ["/api/stores", selectedStore?.id, "employees"],
     enabled: user?.role === "manager" && !!selectedStore,
   });
 
-  // Create store mutation
   const createStoreMutation = useMutation({
     mutationFn: async (data: StoreData) => {
       const response = await apiRequest('POST', '/api/stores', data);
@@ -88,11 +302,12 @@ export default function StoreManagementContent() {
     },
     onSuccess: () => {
       toast({
-        title: "✅ Success",
-        description: "Store created successfully",
+        title: "✅ Sukses",
+        description: "Toko berhasil dibuat",
       });
       refetchStores();
       setActiveTab("list");
+      setCreateShifts([]);
     },
     onError: (error: any) => {
       toast({
@@ -103,7 +318,6 @@ export default function StoreManagementContent() {
     },
   });
 
-  // Update store mutation
   const updateStoreMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: Partial<StoreData> }) => {
       const response = await apiRequest('PATCH', `/api/stores/${id}`, data);
@@ -111,17 +325,18 @@ export default function StoreManagementContent() {
     },
     onSuccess: () => {
       toast({
-        title: "✅ Success",
-        description: "Store updated successfully",
+        title: "✅ Sukses",
+        description: "Toko berhasil diupdate",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/stores"] });
       setEditDialogOpen(false);
       setEditingStore(null);
+      setEditShifts([]);
     },
     onError: (error: any) => {
       toast({
         title: "❌ Error",
-        description: error.message || "Failed to update store",
+        description: error.message || "Gagal update toko",
         variant: "destructive",
       });
     },
@@ -140,6 +355,7 @@ export default function StoreManagementContent() {
       exitTimeStart: "17:00",
       exitTimeEnd: "19:00",
       timezone: "Asia/Jakarta",
+      shifts: "",
     },
   });
 
@@ -156,21 +372,35 @@ export default function StoreManagementContent() {
       exitTimeStart: "17:00",
       exitTimeEnd: "19:00",
       timezone: "Asia/Jakarta",
+      shifts: "",
     },
   });
 
   const onCreateStore = (data: StoreData) => {
-    createStoreMutation.mutate(data);
+    const shiftsJson = createShifts.length > 0 ? JSON.stringify(createShifts) : "";
+    createStoreMutation.mutate({ ...data, shifts: shiftsJson });
   };
 
   const onEditStore = (data: StoreData) => {
     if (editingStore) {
-      updateStoreMutation.mutate({ id: editingStore.id, data });
+      const shiftsJson = editShifts.length > 0 ? JSON.stringify(editShifts) : "";
+      updateStoreMutation.mutate({ id: editingStore.id, data: { ...data, shifts: shiftsJson } });
     }
   };
 
   const openEditDialog = (store: StoreInfo) => {
     setEditingStore(store);
+    
+    let parsedShifts: Shift[] = [];
+    if (store.shifts) {
+      try {
+        parsedShifts = JSON.parse(store.shifts);
+      } catch (e) {
+        console.error("Failed to parse shifts:", e);
+      }
+    }
+    setEditShifts(parsedShifts);
+    
     editForm.reset({
       name: store.name,
       address: store.address,
@@ -182,6 +412,7 @@ export default function StoreManagementContent() {
       exitTimeStart: store.exitTimeStart || "17:00",
       exitTimeEnd: store.exitTimeEnd || "19:00",
       timezone: store.timezone || "Asia/Jakarta",
+      shifts: store.shifts || "",
     });
     setEditDialogOpen(true);
   };
@@ -189,6 +420,7 @@ export default function StoreManagementContent() {
   const closeEditDialog = () => {
     setEditDialogOpen(false);
     setEditingStore(null);
+    setEditShifts([]);
     editForm.reset();
   };
 
@@ -198,14 +430,6 @@ export default function StoreManagementContent() {
       case "inactive": return "bg-red-100 text-red-800";
       default: return "bg-gray-100 text-gray-800";
     }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(amount);
   };
 
   if (user?.role !== "manager") {
@@ -223,16 +447,16 @@ export default function StoreManagementContent() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Store Management</h1>
-          <p className="text-gray-600">Manage store information and personnel</p>
+          <h1 className="text-2xl font-bold">Manajemen Toko</h1>
+          <p className="text-gray-600">Kelola informasi toko dan personel</p>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="list">Store List</TabsTrigger>
-          <TabsTrigger value="create">Create Store</TabsTrigger>
-          {selectedStore && <TabsTrigger value="employees">Store Employees</TabsTrigger>}
+          <TabsTrigger value="list">Daftar Toko</TabsTrigger>
+          <TabsTrigger value="create">Buat Toko</TabsTrigger>
+          {selectedStore && <TabsTrigger value="employees">Karyawan Toko</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="list" className="space-y-4">
@@ -240,7 +464,7 @@ export default function StoreManagementContent() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Building className="h-5 w-5" />
-                Store Directory
+                Direktori Toko
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -251,26 +475,26 @@ export default function StoreManagementContent() {
               )}
               {storesLoading && (
                 <div className="flex items-center justify-center p-8">
-                  <p className="text-gray-500">Loading stores...</p>
+                  <p className="text-gray-500">Memuat toko...</p>
                 </div>
               )}
               {!storesLoading && stores.length === 0 && !storesError && (
                 <div className="text-center p-8">
                   <Building className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                  <p className="text-gray-500">No stores found</p>
-                  <p className="text-sm text-gray-400 mt-1">Create your first store to get started</p>
+                  <p className="text-gray-500">Tidak ada toko</p>
+                  <p className="text-sm text-gray-400 mt-1">Buat toko pertama Anda untuk memulai</p>
                 </div>
               )}
               {!storesLoading && stores.length > 0 && (
               <Table data-testid="table-stores">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Store Name</TableHead>
-                    <TableHead>Address</TableHead>
+                    <TableHead>Nama Toko</TableHead>
+                    <TableHead>Alamat</TableHead>
                     <TableHead>Manager</TableHead>
-                    <TableHead>Employees</TableHead>
+                    <TableHead>Karyawan</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -300,7 +524,7 @@ export default function StoreManagementContent() {
                               setActiveTab("employees");
                             }}
                             data-testid={`button-view-employees-${store.id}`}
-                            title="View Employees"
+                            title="Lihat Karyawan"
                           >
                             <Users className="h-4 w-4" />
                           </Button>
@@ -309,7 +533,7 @@ export default function StoreManagementContent() {
                             variant="outline"
                             onClick={() => openEditDialog(store)}
                             data-testid={`button-edit-store-${store.id}`}
-                            title="Edit Store"
+                            title="Edit Toko"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -329,7 +553,7 @@ export default function StoreManagementContent() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Plus className="h-5 w-5" />
-                Create New Store
+                Buat Toko Baru
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -341,10 +565,10 @@ export default function StoreManagementContent() {
                       name="name"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Store Name</FormLabel>
+                          <FormLabel>Nama Toko</FormLabel>
                           <FormControl>
                             <Input 
-                              placeholder="Enter store name" 
+                              placeholder="Masukkan nama toko" 
                               data-testid="input-store-name"
                               {...field} 
                             />
@@ -359,10 +583,10 @@ export default function StoreManagementContent() {
                       name="phone"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Phone Number</FormLabel>
+                          <FormLabel>Nomor Telepon</FormLabel>
                           <FormControl>
                             <Input 
-                              placeholder="Enter phone number" 
+                              placeholder="Masukkan nomor telepon" 
                               data-testid="input-store-phone"
                               {...field} 
                             />
@@ -381,10 +605,10 @@ export default function StoreManagementContent() {
                           <FormControl>
                             <Select value={field.value || ""} onValueChange={field.onChange}>
                               <SelectTrigger data-testid="select-store-manager">
-                                <SelectValue placeholder="Select a manager" />
+                                <SelectValue placeholder="Pilih manager" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="no-manager">No Manager</SelectItem>
+                                <SelectItem value="no-manager">Tidak ada manager</SelectItem>
                                 {users
                                   .filter(user => user.role === 'manager')
                                   .map((manager) => (
@@ -407,10 +631,10 @@ export default function StoreManagementContent() {
                     name="address"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Address</FormLabel>
+                        <FormLabel>Alamat</FormLabel>
                         <FormControl>
                           <Textarea 
-                            placeholder="Enter store address" 
+                            placeholder="Masukkan alamat toko" 
                             data-testid="input-store-address"
                             {...field} 
                           />
@@ -425,26 +649,36 @@ export default function StoreManagementContent() {
                     name="description"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Description</FormLabel>
+                        <FormLabel>Deskripsi</FormLabel>
                         <FormControl>
-                          <Textarea placeholder="Enter store description" {...field} />
+                          <Textarea placeholder="Masukkan deskripsi toko" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
 
-                  {/* Entry/Exit Time Configuration */}
+                  <ShiftManagementSection
+                    shifts={createShifts}
+                    onAdd={(shift) => setCreateShifts([...createShifts, shift])}
+                    onEdit={(index, shift) => {
+                      const newShifts = [...createShifts];
+                      newShifts[index] = shift;
+                      setCreateShifts(newShifts);
+                    }}
+                    onDelete={(index) => setCreateShifts(createShifts.filter((_, i) => i !== index))}
+                  />
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
                     <div className="space-y-4">
-                      <Label className="text-sm font-medium text-gray-700">Entry Time Settings</Label>
+                      <Label className="text-sm font-medium text-gray-700">Pengaturan Waktu Masuk</Label>
                       <div className="grid grid-cols-2 gap-2">
                         <FormField
                           control={createForm.control}
                           name="entryTimeStart"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-xs">Start Time</FormLabel>
+                              <FormLabel className="text-xs">Waktu Mulai</FormLabel>
                               <FormControl>
                                 <Input 
                                   type="time" 
@@ -461,7 +695,7 @@ export default function StoreManagementContent() {
                           name="entryTimeEnd"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-xs">End Time</FormLabel>
+                              <FormLabel className="text-xs">Waktu Akhir</FormLabel>
                               <FormControl>
                                 <Input 
                                   type="time" 
@@ -476,14 +710,14 @@ export default function StoreManagementContent() {
                       </div>
                     </div>
                     <div className="space-y-4">
-                      <Label className="text-sm font-medium text-gray-700">Exit Time Settings</Label>
+                      <Label className="text-sm font-medium text-gray-700">Pengaturan Waktu Keluar</Label>
                       <div className="grid grid-cols-2 gap-2">
                         <FormField
                           control={createForm.control}
                           name="exitTimeStart"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-xs">Start Time</FormLabel>
+                              <FormLabel className="text-xs">Waktu Mulai</FormLabel>
                               <FormControl>
                                 <Input 
                                   type="time" 
@@ -500,7 +734,7 @@ export default function StoreManagementContent() {
                           name="exitTimeEnd"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-xs">End Time</FormLabel>
+                              <FormLabel className="text-xs">Waktu Akhir</FormLabel>
                               <FormControl>
                                 <Input 
                                   type="time" 
@@ -525,7 +759,7 @@ export default function StoreManagementContent() {
                         <FormControl>
                           <Select value={field.value} onValueChange={field.onChange}>
                             <SelectTrigger data-testid="select-timezone">
-                              <SelectValue placeholder="Select timezone" />
+                              <SelectValue placeholder="Pilih timezone" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="Asia/Jakarta">Asia/Jakarta (WIB)</SelectItem>
@@ -545,7 +779,7 @@ export default function StoreManagementContent() {
                     disabled={createStoreMutation.isPending}
                     data-testid="button-create-store"
                   >
-                    {createStoreMutation.isPending ? "Creating..." : "Create Store"}
+                    {createStoreMutation.isPending ? "Membuat..." : "Buat Toko"}
                   </Button>
                 </form>
               </Form>
@@ -559,7 +793,7 @@ export default function StoreManagementContent() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
-                  {selectedStore.name} - Employees
+                  {selectedStore.name} - Karyawan
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -568,7 +802,7 @@ export default function StoreManagementContent() {
                     <div>
                       <Label className="text-sm font-medium flex items-center gap-1">
                         <Building className="h-4 w-4" />
-                        Store Info
+                        Info Toko
                       </Label>
                       <p className="text-sm text-gray-600 font-medium" data-testid={`text-store-name-${selectedStore.id}`}>{selectedStore.name}</p>
                       <p className="text-xs text-gray-500 flex items-start gap-1 mt-1">
@@ -577,41 +811,33 @@ export default function StoreManagementContent() {
                       </p>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium">Contact</Label>
+                      <Label className="text-sm font-medium">Kontak</Label>
                       <p className="text-sm text-gray-600 flex items-center gap-1">
                         <Phone className="h-3 w-3" />
-                        {selectedStore.phone || "No phone"}
+                        {selectedStore.phone || "Tidak ada telepon"}
                       </p>
                     </div>
                     <div>
                       <Label className="text-sm font-medium">Manager</Label>
-                      <p className="text-sm text-gray-600">{selectedStore.manager || "No manager assigned"}</p>
+                      <p className="text-sm text-gray-600">{selectedStore.manager || "Tidak ada manager"}</p>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium">Total Employees</Label>
-                      <p className="text-sm text-gray-600 flex items-center gap-1">
-                        <Users className="h-3 w-3" />
-                        {selectedStore.employeeCount || 0} employees
-                      </p>
+                      <Label className="text-sm font-medium">Total Karyawan</Label>
+                      <p className="text-sm text-gray-600 font-bold">{selectedStore.employeeCount || 0}</p>
                     </div>
                   </div>
                 </div>
 
-                {employeesError && (
-                  <div className="p-4 mb-4 bg-red-50 border border-red-200 rounded-md">
-                    <p className="text-red-700 text-sm">Error loading employees: {(employeesError as any)?.message}</p>
-                  </div>
-                )}
                 {employeesLoading && (
                   <div className="flex items-center justify-center p-8">
-                    <p className="text-gray-500">Loading employees...</p>
+                    <p className="text-gray-500">Memuat karyawan...</p>
                   </div>
                 )}
-                {!employeesLoading && storeEmployees.length === 0 && !employeesError && (
+
+                {!employeesLoading && storeEmployees.length === 0 && (
                   <div className="text-center p-8">
                     <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                    <p className="text-gray-500">No employees found in this store</p>
-                    <p className="text-sm text-gray-400 mt-1">Employees need to be assigned to this store</p>
+                    <p className="text-gray-500">Tidak ada karyawan</p>
                   </div>
                 )}
 
@@ -619,33 +845,21 @@ export default function StoreManagementContent() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Name</TableHead>
+                        <TableHead>Nama</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Role</TableHead>
-                        <TableHead>Salary</TableHead>
-                        <TableHead>Join Date</TableHead>
+                        <TableHead>Phone</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {storeEmployees.map((employee) => (
-                        <TableRow key={employee.id} data-testid={`row-employee-${employee.id}`}>
-                          <TableCell className="font-medium" data-testid={`text-employee-name-${employee.id}`}>
-                            {employee.name}
-                          </TableCell>
-                          <TableCell data-testid={`text-employee-email-${employee.id}`}>
-                            {employee.email}
-                          </TableCell>
+                        <TableRow key={employee.id}>
+                          <TableCell className="font-medium">{employee.name}</TableCell>
+                          <TableCell>{employee.email}</TableCell>
                           <TableCell>
-                            <Badge className="capitalize" data-testid={`badge-employee-role-${employee.id}`}>
-                              {employee.role}
-                            </Badge>
+                            <Badge variant="outline">{employee.role}</Badge>
                           </TableCell>
-                          <TableCell data-testid={`text-employee-salary-${employee.id}`}>
-                            {employee.salary ? formatCurrency(employee.salary) : "-"}
-                          </TableCell>
-                          <TableCell data-testid={`text-employee-joindate-${employee.id}`}>
-                            {employee.createdAt ? new Date(employee.createdAt).toLocaleDateString('id-ID') : '-'}
-                          </TableCell>
+                          <TableCell>{employee.phone || "-"}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -655,96 +869,26 @@ export default function StoreManagementContent() {
             </Card>
           </TabsContent>
         )}
+      </Tabs>
 
-        {/* Edit Store Dialog */}
-        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Edit className="h-5 w-5" />
-                Edit Store: {editingStore?.name}
-              </DialogTitle>
-            </DialogHeader>
-            
-            <Form {...editForm}>
-              <form onSubmit={editForm.handleSubmit(onEditStore)} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={editForm.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Store Name</FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="Enter store name" 
-                            data-testid="input-edit-store-name"
-                            {...field} 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={editForm.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Phone Number</FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="Enter phone number" 
-                            data-testid="input-edit-store-phone"
-                            {...field} 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={editForm.control}
-                    name="manager"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Manager</FormLabel>
-                        <FormControl>
-                          <Select value={field.value || ""} onValueChange={field.onChange}>
-                            <SelectTrigger data-testid="select-edit-store-manager">
-                              <SelectValue placeholder="Select a manager" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="no-manager">No Manager</SelectItem>
-                              {users
-                                .filter(user => user.role === 'manager')
-                                .map((manager) => (
-                                  <SelectItem key={manager.id} value={manager.name}>
-                                    {manager.name}
-                                  </SelectItem>
-                                ))
-                              }
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Toko</DialogTitle>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(onEditStore)} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={editForm.control}
-                  name="address"
+                  name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Address</FormLabel>
+                      <FormLabel>Nama Toko</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Enter store address" 
-                          data-testid="input-edit-store-address"
+                        <Input 
+                          placeholder="Masukkan nama toko" 
+                          data-testid="input-edit-store-name"
                           {...field} 
                         />
                       </FormControl>
@@ -755,14 +899,14 @@ export default function StoreManagementContent() {
 
                 <FormField
                   control={editForm.control}
-                  name="description"
+                  name="phone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Description</FormLabel>
+                      <FormLabel>Nomor Telepon</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Enter store description" 
-                          data-testid="input-edit-store-description"
+                        <Input 
+                          placeholder="Masukkan nomor telepon" 
+                          data-testid="input-edit-store-phone"
                           {...field} 
                         />
                       </FormControl>
@@ -771,103 +915,27 @@ export default function StoreManagementContent() {
                   )}
                 />
 
-                {/* Entry/Exit Time Configuration */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="space-y-4">
-                    <Label className="text-sm font-medium text-gray-700">Entry Time Settings</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <FormField
-                        control={editForm.control}
-                        name="entryTimeStart"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Start Time</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="time" 
-                                data-testid="input-edit-entry-time-start"
-                                {...field} 
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={editForm.control}
-                        name="entryTimeEnd"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">End Time</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="time" 
-                                data-testid="input-edit-entry-time-end"
-                                {...field} 
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <Label className="text-sm font-medium text-gray-700">Exit Time Settings</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <FormField
-                        control={editForm.control}
-                        name="exitTimeStart"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Start Time</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="time" 
-                                data-testid="input-edit-exit-time-start"
-                                {...field} 
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={editForm.control}
-                        name="exitTimeEnd"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">End Time</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="time" 
-                                data-testid="input-edit-exit-time-end"
-                                {...field} 
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </div>
-                </div>
-
                 <FormField
                   control={editForm.control}
-                  name="timezone"
+                  name="manager"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Timezone</FormLabel>
+                      <FormLabel>Manager</FormLabel>
                       <FormControl>
-                        <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger data-testid="select-edit-timezone">
-                            <SelectValue placeholder="Select timezone" />
+                        <Select value={field.value || ""} onValueChange={field.onChange}>
+                          <SelectTrigger data-testid="select-edit-store-manager">
+                            <SelectValue placeholder="Pilih manager" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="Asia/Jakarta">Asia/Jakarta (WIB)</SelectItem>
-                            <SelectItem value="Asia/Makassar">Asia/Makassar (WITA)</SelectItem>
-                            <SelectItem value="Asia/Jayapura">Asia/Jayapura (WIT)</SelectItem>
+                            <SelectItem value="no-manager">Tidak ada manager</SelectItem>
+                            {users
+                              .filter(user => user.role === 'manager')
+                              .map((manager) => (
+                                <SelectItem key={manager.id} value={manager.name}>
+                                  {manager.name}
+                                </SelectItem>
+                              ))
+                            }
                           </SelectContent>
                         </Select>
                       </FormControl>
@@ -875,29 +943,177 @@ export default function StoreManagementContent() {
                     </FormItem>
                   )}
                 />
+              </div>
 
-                <div className="flex gap-2 justify-end">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={closeEditDialog}
-                    data-testid="button-cancel-edit"
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={updateStoreMutation.isPending}
-                    data-testid="button-save-edit"
-                  >
-                    {updateStoreMutation.isPending ? "Saving..." : "Save Changes"}
-                  </Button>
+              <FormField
+                control={editForm.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Alamat</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Masukkan alamat toko" 
+                        data-testid="input-edit-store-address"
+                        {...field} 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={editForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Deskripsi</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Masukkan deskripsi toko" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <ShiftManagementSection
+                shifts={editShifts}
+                onAdd={(shift) => setEditShifts([...editShifts, shift])}
+                onEdit={(index, shift) => {
+                  const newShifts = [...editShifts];
+                  newShifts[index] = shift;
+                  setEditShifts(newShifts);
+                }}
+                onDelete={(index) => setEditShifts(editShifts.filter((_, i) => i !== index))}
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                <div className="space-y-4">
+                  <Label className="text-sm font-medium text-gray-700">Pengaturan Waktu Masuk</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FormField
+                      control={editForm.control}
+                      name="entryTimeStart"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Waktu Mulai</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="time" 
+                              data-testid="input-edit-entry-time-start"
+                              {...field} 
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={editForm.control}
+                      name="entryTimeEnd"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Waktu Akhir</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="time" 
+                              data-testid="input-edit-entry-time-end"
+                              {...field} 
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
-      </Tabs>
+                <div className="space-y-4">
+                  <Label className="text-sm font-medium text-gray-700">Pengaturan Waktu Keluar</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FormField
+                      control={editForm.control}
+                      name="exitTimeStart"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Waktu Mulai</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="time" 
+                              data-testid="input-edit-exit-time-start"
+                              {...field} 
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={editForm.control}
+                      name="exitTimeEnd"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Waktu Akhir</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="time" 
+                              data-testid="input-edit-exit-time-end"
+                              {...field} 
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <FormField
+                control={editForm.control}
+                name="timezone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Timezone</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger data-testid="select-edit-timezone">
+                          <SelectValue placeholder="Pilih timezone" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Asia/Jakarta">Asia/Jakarta (WIB)</SelectItem>
+                          <SelectItem value="Asia/Makassar">Asia/Makassar (WITA)</SelectItem>
+                          <SelectItem value="Asia/Jayapura">Asia/Jayapura (WIT)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex gap-2">
+                <Button 
+                  type="submit" 
+                  className="flex-1" 
+                  disabled={updateStoreMutation.isPending}
+                  data-testid="button-update-store"
+                >
+                  {updateStoreMutation.isPending ? "Menyimpan..." : "Simpan Perubahan"}
+                </Button>
+                <Button 
+                  type="button"
+                  variant="outline"
+                  onClick={closeEditDialog}
+                  data-testid="button-cancel-edit-store"
+                >
+                  Batal
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
