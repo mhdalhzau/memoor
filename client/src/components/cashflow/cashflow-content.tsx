@@ -166,7 +166,7 @@ export default function CashflowContent() {
     resolver: zodResolver(cashflowSchema),
     defaultValues: {
       category: "Income",
-      type: "Pendapatan Lain-lain",
+      type: "Penjualan (Transfer rekening)",
       amount: 0,
       description: "",
       date: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
@@ -341,9 +341,9 @@ export default function CashflowContent() {
   // Watch for category changes to reset type and related fields
   useEffect(() => {
     if (watchCategory === "Income") {
-      form.setValue("type", "Pendapatan Lain-lain");
+      form.setValue("type", "Penjualan (Transfer rekening)");
     } else if (watchCategory === "Expense") {
-      form.setValue("type", "Pengeluaran Lain-lain");
+      form.setValue("type", "Pembelian stok (Pembelian Minyak)");
     } else if (watchCategory === "Investment") {
       form.setValue("type", "Investasi Lain-lain");
     }
