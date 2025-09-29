@@ -123,7 +123,10 @@ type SortDirection = 'asc' | 'desc';
 interface DateRangePreset {
   label: string;
   range: DateRange;
+  value: string;
 }
+
+type DateFilterMode = 'month' | 'range';
 
 // Simple Attendance Table Component
 interface AttendanceTableProps {
@@ -256,10 +259,12 @@ export default function PayrollContent() {
   const [itemToDelete, setItemToDelete] = useState<{ type: 'bonus' | 'deduction', recordId: string, index: number } | null>(null);
   
   // Date range filter state
+  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('month');
   const [dateRange, setDateRange] = useState<DateRange>({
-    from: startOfMonth(new Date()),
-    to: endOfMonth(new Date()),
+    from: undefined,
+    to: undefined,
   });
+  const [selectedPreset, setSelectedPreset] = useState<string>('this-month');
   const [showDateRangePicker, setShowDateRangePicker] = useState(false);
   
   // Filtering state
@@ -287,6 +292,118 @@ export default function PayrollContent() {
   const [newDeduction, setNewDeduction] = useState({ name: "", amount: 0 });
   
   const selectableMonths = useMemo(() => getSelectableMonths(), []);
+
+  // Date range presets
+  const dateRangePresets = useMemo((): DateRangePreset[] => {
+    const now = new Date();
+    const thisMonthStart = startOfMonth(now);
+    const thisMonthEnd = endOfMonth(now);
+    const lastMonthStart = startOfMonth(subMonths(now, 1));
+    const lastMonthEnd = endOfMonth(subMonths(now, 1));
+    const threeMonthsAgoStart = startOfMonth(subMonths(now, 2));
+    
+    return [
+      {
+        label: 'Bulan Ini',
+        value: 'this-month',
+        range: { from: thisMonthStart, to: thisMonthEnd }
+      },
+      {
+        label: 'Bulan Lalu',
+        value: 'last-month', 
+        range: { from: lastMonthStart, to: lastMonthEnd }
+      },
+      {
+        label: '3 Bulan Terakhir',
+        value: 'last-3-months',
+        range: { from: threeMonthsAgoStart, to: thisMonthEnd }
+      },
+      {
+        label: 'Rentang Kustom',
+        value: 'custom',
+        range: { from: undefined, to: undefined }
+      }
+    ];
+  }, []);
+
+  // Helper function to validate date range
+  const validateDateRange = useCallback((from: Date | undefined, to: Date | undefined): { isValid: boolean; error?: string } => {
+    if (!from || !to) {
+      return { isValid: false, error: 'Kedua tanggal harus dipilih' };
+    }
+    
+    if (from > to) {
+      return { isValid: false, error: 'Tanggal mulai tidak boleh lebih besar dari tanggal akhir' };
+    }
+    
+    const diffInMonths = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+    if (diffInMonths > 12) {
+      return { isValid: false, error: 'Rentang tanggal tidak boleh lebih dari 12 bulan' };
+    }
+    
+    const now = new Date();
+    if (from > now) {
+      return { isValid: false, error: 'Tanggal mulai tidak boleh di masa depan' };
+    }
+    
+    return { isValid: true };
+  }, []);
+
+  // Helper function to apply date range preset
+  const applyDateRangePreset = useCallback((presetValue: string) => {
+    const preset = dateRangePresets.find(p => p.value === presetValue);
+    if (preset) {
+      setSelectedPreset(presetValue);
+      if (presetValue === 'custom') {
+        setShowDateRangePicker(true);
+        // Keep existing custom range if valid
+        if (dateRange.from && dateRange.to) {
+          const validation = validateDateRange(dateRange.from, dateRange.to);
+          if (!validation.isValid) {
+            setDateRange({ from: undefined, to: undefined });
+          }
+        }
+      } else {
+        const validation = validateDateRange(preset.range.from, preset.range.to);
+        if (validation.isValid) {
+          setDateRange(preset.range);
+          setShowDateRangePicker(false);
+          // Switch to range mode when using presets
+          setDateFilterMode('range');
+          // Clear month filter when using date range
+          setSelectedMonth('');
+        } else {
+          toast({
+            title: "Error",
+            description: validation.error || "Rentang tanggal tidak valid",
+            variant: "destructive",
+          });
+        }
+      }
+    }
+  }, [dateRangePresets, dateRange, validateDateRange, toast]);
+
+  // Helper function to format date range display
+  const formatDateRangeDisplay = useCallback(() => {
+    if (dateFilterMode === 'month' && selectedMonth) {
+      return formatIndonesianMonth(selectedMonth);
+    }
+    
+    if (dateFilterMode === 'range' && dateRange.from && dateRange.to) {
+      const preset = dateRangePresets.find(p => 
+        p.range.from?.getTime() === dateRange.from?.getTime() && 
+        p.range.to?.getTime() === dateRange.to?.getTime()
+      );
+      
+      if (preset) {
+        return preset.label;
+      }
+      
+      return `${format(dateRange.from, 'dd MMM yyyy')} - ${format(dateRange.to, 'dd MMM yyyy')}`;
+    }
+    
+    return 'Pilih periode';
+  }, [dateFilterMode, selectedMonth, dateRange, dateRangePresets]);
 
   const { data: payrollRecords, isLoading, error } = useQuery<PayrollWithUser[]>({
     queryKey: ["/api/payroll"],
@@ -339,8 +456,23 @@ export default function PayrollContent() {
   const filteredRecords = useMemo(() => {
     let filtered = processedRecords;
     
-    if (selectedMonth) {
+    // Apply date filtering based on mode
+    if (dateFilterMode === 'month' && selectedMonth) {
       filtered = filtered.filter(record => record.month === selectedMonth);
+    } else if (dateFilterMode === 'range' && dateRange.from && dateRange.to) {
+      filtered = filtered.filter(record => {
+        // Parse the record month (e.g., "2025-09" -> September 2025)
+        const [yearStr, monthStr] = record.month.split('-');
+        const year = parseInt(yearStr);
+        const month = parseInt(monthStr) - 1; // JavaScript months are 0-indexed
+        
+        // Get the start and end of the record's month
+        const recordMonthStart = startOfMonth(new Date(year, month));
+        const recordMonthEnd = endOfMonth(new Date(year, month));
+        
+        // Check for overlap: startOfMonth(recordMonth) <= to && endOfMonth(recordMonth) >= from
+        return recordMonthStart <= dateRange.to! && recordMonthEnd >= dateRange.from!;
+      });
     }
     
     if (selectedStore) {
@@ -359,15 +491,8 @@ export default function PayrollContent() {
       );
     }
     
-    if (dateRange.from && dateRange.to) {
-      filtered = filtered.filter(record => {
-        const recordDate = new Date(record.month + "-01");
-        return recordDate >= dateRange.from! && recordDate <= dateRange.to!;
-      });
-    }
-    
     return filtered;
-  }, [processedRecords, selectedMonth, selectedStore, selectedEmployee, searchQuery, dateRange]);
+  }, [processedRecords, dateFilterMode, selectedMonth, dateRange, selectedStore, selectedEmployee, searchQuery]);
 
   const summaryStats = useMemo(() => {
     const total = filteredRecords.reduce((sum, record) => {
@@ -383,22 +508,32 @@ export default function PayrollContent() {
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (selectedMonth && selectedMonth !== getCurrentMonth()) count++;
+    
+    // Count date filter
+    if (dateFilterMode === 'month' && selectedMonth && selectedMonth !== getCurrentMonth()) {
+      count++;
+    } else if (dateFilterMode === 'range' && dateRange.from && dateRange.to) {
+      count++;
+    }
+    
     if (selectedStore) count++;
     if (selectedEmployee) count++;
     if (searchQuery) count++;
     return count;
-  }, [selectedMonth, selectedStore, selectedEmployee, searchQuery]);
+  }, [dateFilterMode, selectedMonth, dateRange, selectedStore, selectedEmployee, searchQuery]);
 
   const clearFilters = () => {
+    setDateFilterMode('month');
     setSelectedMonth(getCurrentMonth());
     setSelectedStore("");
     setSelectedEmployee("");
     setSearchQuery("");
     setDateRange({
-      from: startOfMonth(new Date()),
-      to: endOfMonth(new Date()),
+      from: undefined,
+      to: undefined,
     });
+    setSelectedPreset('this-month');
+    setShowDateRangePicker(false);
   };
 
   const selectedPayroll = useMemo(() => {
@@ -550,7 +685,7 @@ export default function PayrollContent() {
     doc.setFontSize(18);
     doc.text("Laporan Payroll", 14, 22);
     doc.setFontSize(11);
-    doc.text(`Periode: ${formatIndonesianMonth(selectedMonth)}`, 14, 30);
+    doc.text(`Periode: ${formatDateRangeDisplay()}`, 14, 30);
     doc.text(`Total: ${formatRupiah(summaryStats.total)}`, 14, 37);
     
     const tableData = filteredRecords.map(record => {
@@ -581,7 +716,10 @@ export default function PayrollContent() {
       headStyles: { fillColor: [59, 130, 246] },
     });
 
-    doc.save(`payroll-${selectedMonth}.pdf`);
+    const fileName = dateFilterMode === 'month' && selectedMonth 
+      ? `payroll-${selectedMonth}.pdf`
+      : `payroll-${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+    doc.save(fileName);
     
     toast({
       title: "Berhasil",
@@ -619,7 +757,10 @@ export default function PayrollContent() {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `payroll-${selectedMonth}.csv`;
+    const fileName = dateFilterMode === 'month' && selectedMonth 
+      ? `payroll-${selectedMonth}.csv`
+      : `payroll-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.download = fileName;
     link.click();
     
     toast({
@@ -853,63 +994,18 @@ export default function PayrollContent() {
             </Card>
           </div>
 
-          {/* Date Range Filter */}
+          {/* Advanced Date Range Filter */}
           <div className="mt-6 p-4 bg-muted/50 rounded-lg space-y-4">
+            {/* Date Range Selection Header */}
             <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-4 flex-wrap">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Dari Tanggal</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-[240px] justify-start text-left font-normal",
-                          !dateRange.from && "text-muted-foreground"
-                        )}
-                        data-testid="button-date-from"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dateRange.from ? format(dateRange.from, "PPP") : "Pilih tanggal"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={dateRange.from}
-                        onSelect={(date) => setDateRange(prev => ({ ...prev, from: date }))}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Sampai Tanggal</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-[240px] justify-start text-left font-normal",
-                          !dateRange.to && "text-muted-foreground"
-                        )}
-                        data-testid="button-date-to"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dateRange.to ? format(dateRange.to, "PPP") : "Pilih tanggal"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={dateRange.to}
-                        onSelect={(date) => setDateRange(prev => ({ ...prev, to: date }))}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
+              <div className="flex items-center gap-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Filter className="h-5 w-5" />
+                  Filter & Export
+                </h3>
+                <Badge variant="outline" className="text-sm" data-testid="badge-current-period">
+                  {formatDateRangeDisplay()}
+                </Badge>
               </div>
               
               <div className="flex items-center gap-2">
@@ -931,31 +1027,180 @@ export default function PayrollContent() {
                 </Button>
               </div>
             </div>
-            
-            {/* Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium flex items-center gap-2">
-                  <CalendarIcon className="h-4 w-4" />
-                  Periode
-                </Label>
-                <Select
-                  value={selectedMonth}
-                  onValueChange={setSelectedMonth}
-                  data-testid="select-filter-month"
+
+            {/* Date Range Mode Toggle */}
+            <div className="flex items-center gap-4 p-3 bg-background rounded-lg border">
+              <Label className="text-sm font-medium">Mode Filter:</Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={dateFilterMode === 'month' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setDateFilterMode('month');
+                    setSelectedMonth(getCurrentMonth());
+                    setDateRange({ from: undefined, to: undefined });
+                  }}
+                  data-testid="button-mode-month"
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Semua periode" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectableMonths.map(({ value, label }) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <CalendarIcon className="h-4 w-4 mr-1" />
+                  Basic (Bulan)
+                </Button>
+                <Button
+                  variant={dateFilterMode === 'range' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setDateFilterMode('range');
+                    setSelectedMonth('');
+                    applyDateRangePreset('this-month');
+                  }}
+                  data-testid="button-mode-range"
+                >
+                  <CalendarIcon className="h-4 w-4 mr-1" />
+                  Advanced (Rentang)
+                </Button>
               </div>
+            </div>
+
+            {/* Date Range Presets (visible in range mode) */}
+            {dateFilterMode === 'range' && (
+              <div className="p-3 bg-background rounded-lg border">
+                <Label className="text-sm font-medium mb-3 block">Pilih Periode Cepat:</Label>
+                <div className="flex flex-wrap gap-2">
+                  {dateRangePresets.map((preset) => (
+                    <Button
+                      key={preset.value}
+                      variant={selectedPreset === preset.value ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => applyDateRangePreset(preset.value)}
+                      data-testid={`button-preset-${preset.value}`}
+                    >
+                      {preset.label}
+                    </Button>
+                  ))}
+                </div>
+                
+                {/* Custom Date Range Picker */}
+                {selectedPreset === 'custom' && (
+                  <div className="mt-4 flex items-center gap-4 flex-wrap">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Dari Tanggal</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-[200px] justify-start text-left font-normal",
+                              !dateRange.from && "text-muted-foreground"
+                            )}
+                            data-testid="button-custom-date-from"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {dateRange.from ? format(dateRange.from, "dd/MM/yyyy") : "Pilih tanggal"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={dateRange.from}
+                            onSelect={(date) => {
+                              setDateRange(prev => ({ ...prev, from: date }));
+                              if (date && dateRange.to) {
+                                const validation = validateDateRange(date, dateRange.to);
+                                if (validation.isValid) {
+                                  setDateFilterMode('range');
+                                } else {
+                                  toast({
+                                    title: "Rentang Tanggal Tidak Valid",
+                                    description: validation.error,
+                                    variant: "destructive",
+                                  });
+                                }
+                              }
+                            }}
+                            disabled={(date) => date > new Date() || date < new Date("2020-01-01")}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Sampai Tanggal</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-[200px] justify-start text-left font-normal",
+                              !dateRange.to && "text-muted-foreground"
+                            )}
+                            data-testid="button-custom-date-to"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {dateRange.to ? format(dateRange.to, "dd/MM/yyyy") : "Pilih tanggal"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={dateRange.to}
+                            onSelect={(date) => {
+                              setDateRange(prev => ({ ...prev, to: date }));
+                              if (date && dateRange.from) {
+                                const validation = validateDateRange(dateRange.from, date);
+                                if (validation.isValid) {
+                                  setDateFilterMode('range');
+                                } else {
+                                  toast({
+                                    title: "Rentang Tanggal Tidak Valid",
+                                    description: validation.error,
+                                    variant: "destructive",
+                                  });
+                                }
+                              }
+                            }}
+                            disabled={(date) => 
+                              date > new Date() || 
+                              date < new Date("2020-01-01") ||
+                              (dateRange.from && date < dateRange.from)
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Other Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Month Selector (visible in basic mode) */}
+              {dateFilterMode === 'month' && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <CalendarIcon className="h-4 w-4" />
+                    Periode
+                  </Label>
+                  <Select
+                    value={selectedMonth}
+                    onValueChange={setSelectedMonth}
+                    data-testid="select-filter-month"
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Semua periode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectableMonths.map(({ value, label }) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2">
