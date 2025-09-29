@@ -63,15 +63,31 @@ const ATTENDANCE_STATUS_OPTIONS = [
 
 // Dynamic shift options will be generated based on store settings
 
-export default function AttendanceDetailPage() {
+interface AttendanceDetailPageProps {
+  employeeIdProp?: string;
+  yearProp?: number;
+  monthProp?: number;
+  readOnly?: boolean;
+  compact?: boolean;
+}
+
+export default function AttendanceDetailPage({ 
+  employeeIdProp, 
+  yearProp, 
+  monthProp, 
+  readOnly = false, 
+  compact = false 
+}: AttendanceDetailPageProps = {}) {
   const params = useParams();
   const { toast } = useToast();
-  const employeeId = params.employeeId as string;
+  
+  // Use props when provided, otherwise fall back to useParams()
+  const employeeId = employeeIdProp || (params.employeeId as string);
   
   // State for current month and year
   const currentDate = new Date();
-  const [year, setYear] = useState(currentDate.getFullYear());
-  const [month, setMonth] = useState(currentDate.getMonth() + 1);
+  const [year, setYear] = useState(yearProp || currentDate.getFullYear());
+  const [month, setMonth] = useState(monthProp || (currentDate.getMonth() + 1));
   
   // State for attendance data
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
@@ -109,6 +125,12 @@ export default function AttendanceDetailPage() {
       label: `${key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')} (${schedule.start}-${schedule.end})`
     }));
   };
+
+  // Sync state with props when they change
+  useEffect(() => {
+    if (yearProp !== undefined) setYear(yearProp);
+    if (monthProp !== undefined) setMonth(monthProp);
+  }, [yearProp, monthProp]);
 
   // Update local state when data loads
   useEffect(() => {
@@ -356,104 +378,110 @@ export default function AttendanceDetailPage() {
   const summary = calculateSummary();
 
   return (
-    <div className="container mx-auto py-8">
+    <div className={compact ? "" : "container mx-auto py-8"}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => window.location.href = '/attendance'}
-            data-testid="button-back-to-list"
-          >
-            <ArrowLeftIcon className="h-4 w-4 mr-2" />
-            Kembali ke Daftar
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100" data-testid="text-employee-name">
-              {monthlyData.employee.name}
-            </h1>
-            <div className="space-y-2">
-              <p className="text-gray-600 dark:text-gray-400" data-testid="text-store-info">
-                Toko: {monthlyData.employee.stores.map((s: any) => s.name).join(', ')}
-              </p>
-              {monthlyData.employee.stores.length > 1 && (
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Jadwal Shift:
-                  </label>
-                  <Select
-                    value={selectedStoreId?.toString() || monthlyData.employee.stores[0]?.id?.toString()}
-                    onValueChange={(value) => setSelectedStoreId(parseInt(value))}
-                  >
-                    <SelectTrigger className="w-48" data-testid="select-store-shift">
-                      <SelectValue placeholder="Pilih toko untuk jadwal shift" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {monthlyData.employee.stores.map((store: any) => (
-                        <SelectItem key={store.id} value={store.id.toString()}>
-                          {store.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+      {!compact && (
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => window.location.href = '/attendance'}
+              data-testid="button-back-to-list"
+            >
+              <ArrowLeftIcon className="h-4 w-4 mr-2" />
+              Kembali ke Daftar
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100" data-testid="text-employee-name">
+                {monthlyData.employee.name}
+              </h1>
+              <div className="space-y-2">
+                <p className="text-gray-600 dark:text-gray-400" data-testid="text-store-info">
+                  Toko: {monthlyData.employee.stores.map((s: any) => s.name).join(', ')}
+                </p>
+                {monthlyData.employee.stores.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Jadwal Shift:
+                    </label>
+                    <Select
+                      value={selectedStoreId?.toString() || monthlyData.employee.stores[0]?.id?.toString()}
+                      onValueChange={(value) => setSelectedStoreId(parseInt(value))}
+                    >
+                      <SelectTrigger className="w-48" data-testid="select-store-shift">
+                        <SelectValue placeholder="Pilih toko untuk jadwal shift" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {monthlyData.employee.stores.map((store: any) => (
+                          <SelectItem key={store.id} value={store.id.toString()}>
+                            {store.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+          {!readOnly && (
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                onClick={exportToCSV}
+                data-testid="button-export-csv"
+              >
+                <FileDownIcon className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
+              <Button 
+                onClick={() => saveMutation.mutate()}
+                disabled={!hasChanges || saveMutation.isPending}
+                data-testid="button-save-changes"
+              >
+                <SaveIcon className="h-4 w-4 mr-2" />
+                {saveMutation.isPending ? 'Menyimpan...' : 'Simpan Perubahan'}
+              </Button>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            onClick={exportToCSV}
-            data-testid="button-export-csv"
-          >
-            <FileDownIcon className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
-          <Button 
-            onClick={() => saveMutation.mutate()}
-            disabled={!hasChanges || saveMutation.isPending}
-            data-testid="button-save-changes"
-          >
-            <SaveIcon className="h-4 w-4 mr-2" />
-            {saveMutation.isPending ? 'Menyimpan...' : 'Simpan Perubahan'}
-          </Button>
-        </div>
-      </div>
+      )}
 
       {/* Month Navigation */}
-      <Card className="mb-6">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <Button 
-              variant="outline" 
-              onClick={() => navigateMonth('prev')}
-              data-testid="button-prev-month"
-            >
-              <ChevronLeftIcon className="h-4 w-4 mr-2" />
-              Bulan Sebelumnya
-            </Button>
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="h-5 w-5 text-gray-600" />
-              <span className="text-lg font-semibold" data-testid="text-current-month">
-                {monthName} {year}
-              </span>
+      {!readOnly && (
+        <Card className="mb-6">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <Button 
+                variant="outline" 
+                onClick={() => navigateMonth('prev')}
+                data-testid="button-prev-month"
+              >
+                <ChevronLeftIcon className="h-4 w-4 mr-2" />
+                Bulan Sebelumnya
+              </Button>
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="h-5 w-5 text-gray-600" />
+                <span className="text-lg font-semibold" data-testid="text-current-month">
+                  {monthName} {year}
+                </span>
+              </div>
+              <Button 
+                variant="outline" 
+                onClick={() => navigateMonth('next')}
+                data-testid="button-next-month"
+              >
+                Bulan Selanjutnya
+                <ChevronRightIcon className="h-4 w-4 ml-2" />
+              </Button>
             </div>
-            <Button 
-              variant="outline" 
-              onClick={() => navigateMonth('next')}
-              data-testid="button-next-month"
-            >
-              Bulan Selanjutnya
-              <ChevronRightIcon className="h-4 w-4 ml-2" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Statistics */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-4 mb-6">
+      <div className={`grid grid-cols-3 md:grid-cols-6 gap-4 ${compact ? 'mb-4' : 'mb-6'}`}>
         <Card>
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-green-600" data-testid="summary-hadir-count">{summary.hadirCount}</div>
@@ -518,56 +546,80 @@ export default function AttendanceDetailPage() {
                       </TableCell>
                       <TableCell>{record.day}</TableCell>
                       <TableCell>
-                        <Select
-                          value={record.attendanceStatus}
-                          onValueChange={(value) => updateAttendanceRecord(index, 'attendanceStatus', value)}
-                        >
-                          <SelectTrigger className="w-32" data-testid={`select-status-${record.date}`}>
-                            <SelectValue placeholder="Pilih status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ATTENDANCE_STATUS_OPTIONS.map(option => (
-                              <SelectItem key={option.value} value={option.value}>
-                                <Badge className={option.color}>{option.label}</Badge>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        {readOnly ? (
+                          <Badge className={statusOption?.color || "bg-gray-100 text-gray-600"}>
+                            {statusOption?.label || record.attendanceStatus}
+                          </Badge>
+                        ) : (
+                          <Select
+                            value={record.attendanceStatus}
+                            onValueChange={(value) => updateAttendanceRecord(index, 'attendanceStatus', value)}
+                          >
+                            <SelectTrigger className="w-32" data-testid={`select-status-${record.date}`}>
+                              <SelectValue placeholder="Pilih status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ATTENDANCE_STATUS_OPTIONS.map(option => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  <Badge className={option.color}>{option.label}</Badge>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                       </TableCell>
                       <TableCell>
-                        <Select
-                          value={record.shift}
-                          onValueChange={(value) => updateAttendanceRecord(index, 'shift', value)}
-                        >
-                          <SelectTrigger className="w-32" data-testid={`select-shift-${record.date}`}>
-                            <SelectValue placeholder="Pilih shift" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {generateShiftOptions().map(option => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        {readOnly ? (
+                          <span className="text-sm">
+                            {generateShiftOptions().find(opt => opt.value === record.shift)?.label || record.shift || '-'}
+                          </span>
+                        ) : (
+                          <Select
+                            value={record.shift}
+                            onValueChange={(value) => updateAttendanceRecord(index, 'shift', value)}
+                          >
+                            <SelectTrigger className="w-32" data-testid={`select-shift-${record.date}`}>
+                              <SelectValue placeholder="Pilih shift" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {generateShiftOptions().map(option => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                       </TableCell>
                       <TableCell>
-                        <Input
-                          type="time"
-                          value={record.checkIn}
-                          onChange={(e) => updateAttendanceRecord(index, 'checkIn', e.target.value)}
-                          className="w-24"
-                          data-testid={`input-checkin-${record.date}`}
-                        />
+                        {readOnly ? (
+                          <span className="text-sm">
+                            {record.checkIn || '-'}
+                          </span>
+                        ) : (
+                          <Input
+                            type="time"
+                            value={record.checkIn}
+                            onChange={(e) => updateAttendanceRecord(index, 'checkIn', e.target.value)}
+                            className="w-24"
+                            data-testid={`input-checkin-${record.date}`}
+                          />
+                        )}
                       </TableCell>
                       <TableCell>
-                        <Input
-                          type="time"
-                          value={record.checkOut}
-                          onChange={(e) => updateAttendanceRecord(index, 'checkOut', e.target.value)}
-                          className="w-24"
-                          data-testid={`input-checkout-${record.date}`}
-                        />
+                        {readOnly ? (
+                          <span className="text-sm">
+                            {record.checkOut || '-'}
+                          </span>
+                        ) : (
+                          <Input
+                            type="time"
+                            value={record.checkOut}
+                            onChange={(e) => updateAttendanceRecord(index, 'checkOut', e.target.value)}
+                            className="w-24"
+                            data-testid={`input-checkout-${record.date}`}
+                          />
+                        )}
                       </TableCell>
                       <TableCell>
                         <span 
@@ -594,13 +646,19 @@ export default function AttendanceDetailPage() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Textarea
-                          value={record.notes}
-                          onChange={(e) => updateAttendanceRecord(index, 'notes', e.target.value)}
-                          placeholder="Catatan..."
-                          className="min-h-[60px] w-48"
-                          data-testid={`textarea-notes-${record.date}`}
-                        />
+                        {readOnly ? (
+                          <span className="text-sm text-gray-600 max-w-48 break-words">
+                            {record.notes || '-'}
+                          </span>
+                        ) : (
+                          <Textarea
+                            value={record.notes}
+                            onChange={(e) => updateAttendanceRecord(index, 'notes', e.target.value)}
+                            placeholder="Catatan..."
+                            className="min-h-[60px] w-48"
+                            data-testid={`textarea-notes-${record.date}`}
+                          />
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -612,7 +670,7 @@ export default function AttendanceDetailPage() {
       </Card>
 
       {/* Bottom Actions */}
-      {hasChanges && (
+      {!readOnly && hasChanges && (
         <div className="mt-6 flex justify-center">
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
             <div className="flex items-center gap-4">

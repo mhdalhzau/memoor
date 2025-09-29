@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,11 +47,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { 
   formatRupiah, 
   formatIndonesianMonth, 
+  formatIndonesianDate,
+  formatTime,
   getCurrentMonth, 
   getSelectableMonths,
   cn,
@@ -77,10 +80,14 @@ import {
   XCircle,
   Search,
   FileSpreadsheet,
+  Clock,
+  CheckSquare,
+  AlertTriangle,
+  UserCheck,
 } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 import { useRef } from "react";
-import { format, startOfMonth, endOfMonth } from "date-fns";
+import { format, startOfMonth, endOfMonth, addDays, subDays, isWithinInterval, addMonths, subMonths } from "date-fns";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -94,6 +101,147 @@ interface PayrollWithUser extends Payroll {
 interface DateRange {
   from: Date | undefined;
   to: Date | undefined;
+}
+
+interface AttendanceRecord {
+  id: string;
+  date: string;
+  checkIn?: string;
+  checkOut?: string;
+  shift?: string;
+  latenessMinutes?: number;
+  overtimeMinutes?: number;
+  workingHours?: number;
+  attendanceStatus?: string;
+  status?: string;
+  notes?: string;
+}
+
+type SortField = 'date' | 'checkIn' | 'checkOut' | 'workingHours' | 'overtimeMinutes' | 'attendanceStatus';
+type SortDirection = 'asc' | 'desc';
+
+interface DateRangePreset {
+  label: string;
+  range: DateRange;
+}
+
+// Simple Attendance Table Component
+interface AttendanceTableProps {
+  employeeId?: string;
+  month?: string;
+}
+
+function AttendanceTable({ employeeId, month }: AttendanceTableProps) {
+  if (!employeeId || !month) {
+    return (
+      <div className="pt-6 border-t">
+        <div className="flex items-center gap-2 mb-4">
+          <Clock className="h-5 w-5" />
+          <Label className="text-lg">Rekap Absensi</Label>
+        </div>
+        <div className="text-center py-8 text-muted-foreground">
+          <p className="text-sm">Data absensi tidak tersedia</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Parse month (e.g. "2025-09") into year and month
+  const [yearStr, monthStr] = month.split('-');
+  const year = parseInt(yearStr);
+  const monthNum = parseInt(monthStr);
+
+  const { data: attendanceData, isLoading } = useQuery<{
+    employee: any;
+    attendanceData: AttendanceRecord[];
+  }>({
+    queryKey: [`/api/employees/${employeeId}/attendance/${year}/${monthNum}`],
+    enabled: !!employeeId && !!year && !!monthNum,
+  });
+
+  const formatAttendanceStatus = (status: string) => {
+    switch (status) {
+      case 'hadir': return 'Hadir';
+      case 'cuti': return 'Cuti';
+      case 'alpha': return 'Alpha';
+      case 'belum_diatur': return 'Belum Diatur';
+      default: return status || '-';
+    }
+  };
+
+  const getStatusBadgeColor = (status: string) => {
+    switch (status) {
+      case 'hadir': return 'bg-green-100 text-green-800';
+      case 'cuti': return 'bg-blue-100 text-blue-800';
+      case 'alpha': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-600';
+    }
+  };
+
+  return (
+    <div className="pt-6 border-t">
+      <div className="flex items-center gap-2 mb-4">
+        <Clock className="h-5 w-5" />
+        <Label className="text-lg">Rekap Absensi</Label>
+        <Badge variant="outline" className="text-xs">
+          {formatIndonesianMonth(month)}
+        </Badge>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[100px]">Tanggal</TableHead>
+                <TableHead className="w-[80px]">Masuk</TableHead>
+                <TableHead className="w-[80px]">Keluar</TableHead>
+                <TableHead className="w-[100px]">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {attendanceData?.attendanceData?.length ? (
+                attendanceData.attendanceData.map((record, index) => (
+                  <TableRow key={index} data-testid={`row-attendance-${index}`}>
+                    <TableCell className="font-medium" data-testid={`text-date-${index}`}>
+                      {formatIndonesianDate(record.date)}
+                    </TableCell>
+                    <TableCell data-testid={`text-checkin-${index}`}>
+                      {record.checkIn ? formatTime(record.checkIn) : '-'}
+                    </TableCell>
+                    <TableCell data-testid={`text-checkout-${index}`}>
+                      {record.checkOut ? formatTime(record.checkOut) : '-'}
+                    </TableCell>
+                    <TableCell data-testid={`text-status-${index}`}>
+                      <Badge 
+                        variant="outline" 
+                        className={cn("text-xs", getStatusBadgeColor(record.attendanceStatus || record.status || ''))}
+                      >
+                        {formatAttendanceStatus(record.attendanceStatus || record.status || '')}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                    <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Belum ada data absensi untuk bulan ini</p>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function PayrollContent() {
@@ -112,6 +260,7 @@ export default function PayrollContent() {
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date()),
   });
+  const [showDateRangePicker, setShowDateRangePicker] = useState(false);
   
   // Filtering state
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonth());
@@ -119,6 +268,17 @@ export default function PayrollContent() {
   const [selectedEmployee, setSelectedEmployee] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [generateForMonth, setGenerateForMonth] = useState<string>(getCurrentMonth());
+  
+  // Bulk editing state
+  const [selectedRecords, setSelectedRecords] = useState<Set<string>>(new Set());
+  const [bulkEditMode, setBulkEditMode] = useState(false);
+  const [bulkEditValues, setBulkEditValues] = useState({
+    baseSalary: '',
+    overtimePay: '',
+    bonus: { name: '', amount: 0 },
+    deduction: { name: '', amount: 0 }
+  });
+  
   
   // Inline editing state
   const [editingField, setEditingField] = useState<{ recordId: string; field: string } | null>(null);
@@ -247,28 +407,6 @@ export default function PayrollContent() {
       : null;
   }, [processedRecords, selectedPayrollId]);
 
-  const { data: allAttendanceRecords } = useQuery<Array<any>>({
-    queryKey: ["/api/attendance/user", selectedPayroll?.userId],
-    enabled: !!selectedPayroll?.userId && (attendanceDialogOpen || detailDialogOpen),
-  });
-
-  const attendanceRecords = useMemo(() => {
-    if (!allAttendanceRecords || !selectedPayroll?.month) return [];
-    
-    return allAttendanceRecords.filter((record) => {
-      if (!record?.date && !record?.createdAt) return false;
-      
-      try {
-        const recordDate = new Date(record.date || record.createdAt);
-        if (isNaN(recordDate.getTime())) return false;
-        const recordMonth = recordDate.toISOString().slice(0, 7);
-        return recordMonth === selectedPayroll.month;
-      } catch (error) {
-        console.warn('Error processing attendance record date:', error);
-        return false;
-      }
-    });
-  }, [allAttendanceRecords, selectedPayroll]);
 
   const generatePayrollMutation = useMutation({
     mutationFn: async (month?: string) => {
@@ -489,6 +627,7 @@ export default function PayrollContent() {
       description: "Laporan payroll berhasil diekspor ke Excel/CSV!",
     });
   };
+
 
   const startInlineEdit = (recordId: string, field: string, currentValue: string) => {
     setEditingField({ recordId, field });
@@ -1121,111 +1260,119 @@ export default function PayrollContent() {
                                     </div>
                                   </div>
                                 </DialogHeader>
-                                <ScrollArea className="h-[600px] pr-4" ref={detailPrintRef}>
-                                  <div className="space-y-6">
-                                    <div className="grid grid-cols-2 gap-4">
-                                      <div>
-                                        <Label>Gaji Pokok</Label>
-                                        <p className="text-lg font-semibold">{formatRupiah(record.baseSalary)}</p>
-                                      </div>
-                                      <div>
-                                        <Label>Lembur</Label>
-                                        <p className="text-lg font-semibold">{formatRupiah(record.overtimePay || "0")}</p>
-                                      </div>
-                                    </div>
-
-                                    <div>
-                                      <div className="flex items-center justify-between mb-2">
-                                        <Label>Bonus</Label>
-                                      </div>
-                                      <div className="space-y-2">
-                                        {record.bonusList?.map((bonus, index) => (
-                                          <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
+                                <div className="h-[600px]" ref={detailPrintRef}>
+                                  <ScrollArea className="h-[580px] pr-4">
+                                        <div className="space-y-6">
+                                          <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                              <p className="font-medium">{bonus.name}</p>
-                                              <p className="text-sm text-muted-foreground">{formatRupiah(bonus.amount)}</p>
+                                              <Label>Gaji Pokok</Label>
+                                              <p className="text-lg font-semibold">{formatRupiah(record.baseSalary)}</p>
                                             </div>
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={() => confirmDelete('bonus', record.id, index)}
-                                              data-testid={`button-delete-bonus-${record.id}-${index}`}
-                                            >
-                                              <Trash2 className="h-4 w-4 text-destructive" />
-                                            </Button>
-                                          </div>
-                                        ))}
-                                        <div className="flex gap-2">
-                                          <Input
-                                            placeholder="Nama bonus"
-                                            value={newBonus.name}
-                                            onChange={(e) => setNewBonus({ ...newBonus, name: e.target.value })}
-                                            data-testid={`input-bonus-name-${record.id}`}
-                                          />
-                                          <Input
-                                            type="number"
-                                            placeholder="Jumlah"
-                                            value={newBonus.amount || ""}
-                                            onChange={(e) => setNewBonus({ ...newBonus, amount: Number(e.target.value) })}
-                                            data-testid={`input-bonus-amount-${record.id}`}
-                                          />
-                                          <Button onClick={() => addBonus(record)} data-testid={`button-add-bonus-${record.id}`}>
-                                            <Plus className="h-4 w-4" />
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    <div>
-                                      <div className="flex items-center justify-between mb-2">
-                                        <Label>Potongan</Label>
-                                      </div>
-                                      <div className="space-y-2">
-                                        {record.deductionList?.map((deduction, index) => (
-                                          <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
                                             <div>
-                                              <p className="font-medium">{deduction.name}</p>
-                                              <p className="text-sm text-muted-foreground">{formatRupiah(deduction.amount)}</p>
+                                              <Label>Lembur</Label>
+                                              <p className="text-lg font-semibold">{formatRupiah(record.overtimePay || "0")}</p>
                                             </div>
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={() => confirmDelete('deduction', record.id, index)}
-                                              data-testid={`button-delete-deduction-${record.id}-${index}`}
-                                            >
-                                              <Trash2 className="h-4 w-4 text-destructive" />
-                                            </Button>
                                           </div>
-                                        ))}
-                                        <div className="flex gap-2">
-                                          <Input
-                                            placeholder="Nama potongan"
-                                            value={newDeduction.name}
-                                            onChange={(e) => setNewDeduction({ ...newDeduction, name: e.target.value })}
-                                            data-testid={`input-deduction-name-${record.id}`}
-                                          />
-                                          <Input
-                                            type="number"
-                                            placeholder="Jumlah"
-                                            value={newDeduction.amount || ""}
-                                            onChange={(e) => setNewDeduction({ ...newDeduction, amount: Number(e.target.value) })}
-                                            data-testid={`input-deduction-amount-${record.id}`}
-                                          />
-                                          <Button onClick={() => addDeduction(record)} data-testid={`button-add-deduction-${record.id}`}>
-                                            <Plus className="h-4 w-4" />
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    </div>
 
-                                    <div className="pt-4 border-t">
-                                      <div className="flex items-center justify-between">
-                                        <Label className="text-lg">Total Gaji</Label>
-                                        <p className="text-2xl font-bold">{formatRupiah(record.totalAmount)}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </ScrollArea>
+                                          <div>
+                                            <div className="flex items-center justify-between mb-2">
+                                              <Label>Bonus</Label>
+                                            </div>
+                                            <div className="space-y-2">
+                                              {record.bonusList?.map((bonus, index) => (
+                                                <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
+                                                  <div>
+                                                    <p className="font-medium">{bonus.name}</p>
+                                                    <p className="text-sm text-muted-foreground">{formatRupiah(bonus.amount)}</p>
+                                                  </div>
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => confirmDelete('bonus', record.id, index)}
+                                                    data-testid={`button-delete-bonus-${record.id}-${index}`}
+                                                  >
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                  </Button>
+                                                </div>
+                                              ))}
+                                              <div className="flex gap-2">
+                                                <Input
+                                                  placeholder="Nama bonus"
+                                                  value={newBonus.name}
+                                                  onChange={(e) => setNewBonus({ ...newBonus, name: e.target.value })}
+                                                  data-testid={`input-bonus-name-${record.id}`}
+                                                />
+                                                <Input
+                                                  type="number"
+                                                  placeholder="Jumlah"
+                                                  value={newBonus.amount || ""}
+                                                  onChange={(e) => setNewBonus({ ...newBonus, amount: Number(e.target.value) })}
+                                                  data-testid={`input-bonus-amount-${record.id}`}
+                                                />
+                                                <Button onClick={() => addBonus(record)} data-testid={`button-add-bonus-${record.id}`}>
+                                                  <Plus className="h-4 w-4" />
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          <div>
+                                            <div className="flex items-center justify-between mb-2">
+                                              <Label>Potongan</Label>
+                                            </div>
+                                            <div className="space-y-2">
+                                              {record.deductionList?.map((deduction, index) => (
+                                                <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
+                                                  <div>
+                                                    <p className="font-medium">{deduction.name}</p>
+                                                    <p className="text-sm text-muted-foreground">{formatRupiah(deduction.amount)}</p>
+                                                  </div>
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => confirmDelete('deduction', record.id, index)}
+                                                    data-testid={`button-delete-deduction-${record.id}-${index}`}
+                                                  >
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                  </Button>
+                                                </div>
+                                              ))}
+                                              <div className="flex gap-2">
+                                                <Input
+                                                  placeholder="Nama potongan"
+                                                  value={newDeduction.name}
+                                                  onChange={(e) => setNewDeduction({ ...newDeduction, name: e.target.value })}
+                                                  data-testid={`input-deduction-name-${record.id}`}
+                                                />
+                                                <Input
+                                                  type="number"
+                                                  placeholder="Jumlah"
+                                                  value={newDeduction.amount || ""}
+                                                  onChange={(e) => setNewDeduction({ ...newDeduction, amount: Number(e.target.value) })}
+                                                  data-testid={`input-deduction-amount-${record.id}`}
+                                                />
+                                                <Button onClick={() => addDeduction(record)} data-testid={`button-add-deduction-${record.id}`}>
+                                                  <Plus className="h-4 w-4" />
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          <div className="pt-4 border-t">
+                                            <div className="flex items-center justify-between">
+                                              <Label className="text-lg">Total Gaji</Label>
+                                              <p className="text-2xl font-bold">{formatRupiah(record.totalAmount)}</p>
+                                            </div>
+                                          </div>
+
+                                          {/* Simple Attendance Table */}
+                                          <AttendanceTable 
+                                            employeeId={selectedPayroll?.userId}
+                                            month={selectedPayroll?.month}
+                                          />
+                                        </div>
+                                      </ScrollArea>
+                                </div>
                               </DialogContent>
                             </Dialog>
                           </div>
