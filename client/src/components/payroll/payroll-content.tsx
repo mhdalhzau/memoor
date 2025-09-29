@@ -1811,6 +1811,7 @@ export default function PayrollContent() {
           <SalarySlip 
             ref={salarySlipRef}
             payroll={selectedPayroll}
+            attendanceData={attendanceData}
           />
         </div>
       )}
