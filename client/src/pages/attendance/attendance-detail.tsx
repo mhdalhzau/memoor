@@ -20,7 +20,7 @@ import {
   ClockIcon,
   UserIcon 
 } from "lucide-react";
-import { calculateLateness, calculateOvertime, calculateEarlyArrival, SHIFT_SCHEDULES } from "@shared/attendance-utils";
+import { calculateLateness, calculateOvertime, calculateEarlyArrival, SHIFT_SCHEDULES, getStoreShifts } from "@shared/attendance-utils";
 
 interface AttendanceRecord {
   id?: string;
@@ -91,22 +91,23 @@ export default function AttendanceDetailPage() {
     }
   });
 
-  // Generate shift options using SHIFT_SCHEDULES from shared utilities
+  // Get custom store shifts or default shifts
+  const getCurrentStoreShifts = () => {
+    if (!monthlyData?.employee?.stores?.[0]) {
+      return SHIFT_SCHEDULES;
+    }
+    
+    const store = monthlyData.employee.stores.find(s => s.id === selectedStoreId) || monthlyData.employee.stores[0];
+    return getStoreShifts(store);
+  };
+
+  // Generate shift options from current store's custom shifts
   const generateShiftOptions = () => {
-    return [
-      { 
-        value: "pagi", 
-        label: `Pagi (${SHIFT_SCHEDULES.pagi.start}-${SHIFT_SCHEDULES.pagi.end})` 
-      },
-      { 
-        value: "siang", 
-        label: `Siang (${SHIFT_SCHEDULES.siang.start}-${SHIFT_SCHEDULES.siang.end})` 
-      },
-      { 
-        value: "malam", 
-        label: `Malam (${SHIFT_SCHEDULES.malam.start}-${SHIFT_SCHEDULES.malam.end})` 
-      },
-    ];
+    const storeShifts = getCurrentStoreShifts();
+    return Object.entries(storeShifts).map(([key, schedule]) => ({
+      value: key,
+      label: `${key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')} (${schedule.start}-${schedule.end})`
+    }));
   };
 
   // Update local state when data loads
@@ -125,11 +126,12 @@ export default function AttendanceDetailPage() {
   // Recalculate time metrics when attendance data loads using shared utilities
   useEffect(() => {
     if (attendanceData.length > 0) {
+      const storeShifts = getCurrentStoreShifts();
       const updatedData = attendanceData.map(record => {
         if (record.checkIn && record.shift) {
-          const latenessMinutes = calculateLateness(record.checkIn, record.shift);
-          const earlyArrivalMinutes = calculateEarlyArrival(record.checkIn, record.shift);
-          const overtimeMinutes = record.checkOut ? calculateOvertime(record.checkOut, record.shift) : 0;
+          const latenessMinutes = calculateLateness(record.checkIn, record.shift, storeShifts);
+          const earlyArrivalMinutes = calculateEarlyArrival(record.checkIn, record.shift, storeShifts);
+          const overtimeMinutes = record.checkOut ? calculateOvertime(record.checkOut, record.shift, storeShifts) : 0;
           
           return {
             ...record,
@@ -143,7 +145,7 @@ export default function AttendanceDetailPage() {
       
       setAttendanceData(updatedData);
     }
-  }, [monthlyData?.attendanceData]);
+  }, [monthlyData?.attendanceData, selectedStoreId]);
 
   // Save changes mutation - using bulk update API
   const saveMutation = useMutation({
@@ -206,17 +208,20 @@ export default function AttendanceDetailPage() {
       
       updatedData[index].shift = shift;
       
-      // Calculate metrics using shared utilities
+      // Get current store's custom shifts
+      const storeShifts = getCurrentStoreShifts();
+      
+      // Calculate metrics using shared utilities with custom shifts
       if (checkIn) {
-        updatedData[index].latenessMinutes = calculateLateness(checkIn, shift);
-        updatedData[index].earlyArrivalMinutes = calculateEarlyArrival(checkIn, shift);
+        updatedData[index].latenessMinutes = calculateLateness(checkIn, shift, storeShifts);
+        updatedData[index].earlyArrivalMinutes = calculateEarlyArrival(checkIn, shift, storeShifts);
       } else {
         updatedData[index].latenessMinutes = 0;
         updatedData[index].earlyArrivalMinutes = 0;
       }
       
       if (checkOut) {
-        updatedData[index].overtimeMinutes = calculateOvertime(checkOut, shift);
+        updatedData[index].overtimeMinutes = calculateOvertime(checkOut, shift, storeShifts);
       } else {
         updatedData[index].overtimeMinutes = 0;
       }

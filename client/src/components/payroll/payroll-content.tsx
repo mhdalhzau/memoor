@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +97,7 @@ interface DateRange {
 }
 
 export default function PayrollContent() {
+  const { user } = useAuth();
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
   const [selectedPayrollId, setSelectedPayrollId] = useState<string | null>(null);
@@ -141,19 +143,27 @@ export default function PayrollContent() {
     payrollRecords?.map((record) => {
       const user = users?.find((u) => u.id === record.userId);
       const store = stores?.find((s) => s.id === record.storeId);
-      let bonusList = [];
-      let deductionList = [];
+      let bonusList: Array<{ name: string; amount: number }> = [];
+      let deductionList: Array<{ name: string; amount: number }> = [];
 
       try {
-        bonusList = record.bonuses ? JSON.parse(record.bonuses) : [];
+        if (record.bonuses && typeof record.bonuses === 'string' && record.bonuses.trim()) {
+          const parsed = JSON.parse(record.bonuses);
+          bonusList = Array.isArray(parsed) ? parsed : [];
+        }
       } catch (e) {
-        console.warn("Failed to parse bonuses:", e);
+        console.warn("Failed to parse bonuses for record", record.id, ":", e);
+        bonusList = [];
       }
 
       try {
-        deductionList = record.deductions ? JSON.parse(record.deductions) : [];
+        if (record.deductions && typeof record.deductions === 'string' && record.deductions.trim()) {
+          const parsed = JSON.parse(record.deductions);
+          deductionList = Array.isArray(parsed) ? parsed : [];
+        }
       } catch (e) {
-        console.warn("Failed to parse deductions:", e);
+        console.warn("Failed to parse deductions for record", record.id, ":", e);
+        deductionList = [];
       }
 
       return {
@@ -199,7 +209,10 @@ export default function PayrollContent() {
   }, [processedRecords, selectedMonth, selectedStore, selectedEmployee, searchQuery, dateRange]);
 
   const summaryStats = useMemo(() => {
-    const total = filteredRecords.reduce((sum, record) => sum + Number(record.totalAmount), 0);
+    const total = filteredRecords.reduce((sum, record) => {
+      const amount = Number(record.totalAmount);
+      return sum + (isNaN(amount) ? 0 : amount);
+    }, 0);
     const average = filteredRecords.length > 0 ? total / filteredRecords.length : 0;
     const paid = filteredRecords.filter(r => r.status === 'paid').length;
     const pending = filteredRecords.filter(r => r.status === 'pending').length;
@@ -234,14 +247,15 @@ export default function PayrollContent() {
   }, [processedRecords, selectedPayrollId]);
 
   const { data: allAttendanceRecords } = useQuery<Array<any>>({
-    queryKey: [`/api/attendance/user/${selectedPayroll?.userId}`],
-    enabled: !!selectedPayroll && (attendanceDialogOpen || detailDialogOpen),
+    queryKey: ["/api/attendance/user", selectedPayroll?.userId],
+    enabled: !!selectedPayroll?.userId && (attendanceDialogOpen || detailDialogOpen),
   });
 
-  const attendanceRecords = useMemo(() =>
-    allAttendanceRecords?.filter((record) => {
+  const attendanceRecords = useMemo(() => {
+    if (!allAttendanceRecords || !selectedPayroll?.month) return [];
+    
+    return allAttendanceRecords.filter((record) => {
       if (!record?.date && !record?.createdAt) return false;
-      if (!selectedPayroll?.month) return false;
       
       try {
         const recordDate = new Date(record.date || record.createdAt);
@@ -252,7 +266,8 @@ export default function PayrollContent() {
         console.warn('Error processing attendance record date:', error);
         return false;
       }
-    }) || [], [allAttendanceRecords, selectedPayroll]);
+    });
+  }, [allAttendanceRecords, selectedPayroll]);
 
   const generatePayrollMutation = useMutation({
     mutationFn: async (month?: string) => {
@@ -359,17 +374,21 @@ export default function PayrollContent() {
     doc.text(`Total: ${formatRupiah(summaryStats.total)}`, 14, 37);
     
     const tableData = filteredRecords.map(record => {
-      const totalBonus = record.bonusList?.reduce((sum, b) => sum + b.amount, 0) || 0;
-      const totalDeduction = record.deductionList?.reduce((sum, d) => sum + d.amount, 0) || 0;
+      const totalBonus = Array.isArray(record.bonusList) 
+        ? record.bonusList.reduce((sum, b) => sum + (Number(b.amount) || 0), 0) 
+        : 0;
+      const totalDeduction = Array.isArray(record.deductionList) 
+        ? record.deductionList.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) 
+        : 0;
       
       return [
-        record.user?.name || record.userId,
-        record.store?.name || '',
-        formatRupiah(record.baseSalary),
+        record.user?.name || record.userId || '-',
+        record.store?.name || '-',
+        formatRupiah(record.baseSalary || "0"),
         formatRupiah(record.overtimePay || "0"),
         formatRupiah(totalBonus),
         formatRupiah(totalDeduction),
-        formatRupiah(record.totalAmount),
+        formatRupiah(record.totalAmount || "0"),
         record.status === 'paid' ? 'Dibayar' : 'Pending',
       ];
     });
@@ -393,17 +412,21 @@ export default function PayrollContent() {
   const exportToExcel = () => {
     const headers = ['Karyawan', 'Toko', 'Gaji Pokok', 'Lembur', 'Bonus', 'Potongan', 'Total', 'Status'];
     const data = filteredRecords.map(record => {
-      const totalBonus = record.bonusList?.reduce((sum, b) => sum + b.amount, 0) || 0;
-      const totalDeduction = record.deductionList?.reduce((sum, d) => sum + d.amount, 0) || 0;
+      const totalBonus = Array.isArray(record.bonusList) 
+        ? record.bonusList.reduce((sum, b) => sum + (Number(b.amount) || 0), 0) 
+        : 0;
+      const totalDeduction = Array.isArray(record.deductionList) 
+        ? record.deductionList.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) 
+        : 0;
       
       return {
-        'Karyawan': record.user?.name || record.userId,
-        'Toko': record.store?.name || '',
-        'Gaji Pokok': Number(record.baseSalary),
-        'Lembur': Number(record.overtimePay || 0),
+        'Karyawan': record.user?.name || record.userId || '-',
+        'Toko': record.store?.name || '-',
+        'Gaji Pokok': Number(record.baseSalary) || 0,
+        'Lembur': Number(record.overtimePay) || 0,
         'Bonus': totalBonus,
         'Potongan': totalDeduction,
-        'Total': Number(record.totalAmount),
+        'Total': Number(record.totalAmount) || 0,
         'Status': record.status === 'paid' ? 'Dibayar' : 'Pending',
       };
     });
@@ -454,7 +477,7 @@ export default function PayrollContent() {
   };
 
   const addBonus = (record: PayrollWithUser) => {
-    if (!newBonus.name || newBonus.amount <= 0) {
+    if (!newBonus.name?.trim() || newBonus.amount <= 0) {
       toast({
         title: "Perhatian",
         description: "Nama bonus dan jumlah harus diisi dengan benar",
@@ -462,8 +485,8 @@ export default function PayrollContent() {
       });
       return;
     }
-    const bonuses = record.bonusList || [];
-    const updatedBonuses = [...bonuses, newBonus];
+    const bonuses = Array.isArray(record.bonusList) ? record.bonusList : [];
+    const updatedBonuses = [...bonuses, { name: newBonus.name.trim(), amount: Number(newBonus.amount) }];
     updatePayrollMutation.mutate({
       id: record.id,
       bonuses: JSON.stringify(updatedBonuses),
@@ -472,7 +495,7 @@ export default function PayrollContent() {
   };
 
   const addDeduction = (record: PayrollWithUser) => {
-    if (!newDeduction.name || newDeduction.amount <= 0) {
+    if (!newDeduction.name?.trim() || newDeduction.amount <= 0) {
       toast({
         title: "Perhatian",
         description: "Nama potongan dan jumlah harus diisi dengan benar",
@@ -480,8 +503,8 @@ export default function PayrollContent() {
       });
       return;
     }
-    const deductions = record.deductionList || [];
-    const updatedDeductions = [...deductions, newDeduction];
+    const deductions = Array.isArray(record.deductionList) ? record.deductionList : [];
+    const updatedDeductions = [...deductions, { name: newDeduction.name.trim(), amount: Number(newDeduction.amount) }];
     updatePayrollMutation.mutate({
       id: record.id,
       deductions: JSON.stringify(updatedDeductions),
@@ -498,17 +521,24 @@ export default function PayrollContent() {
     if (!itemToDelete) return;
     
     const record = processedRecords.find(r => r.id === itemToDelete.recordId);
-    if (!record) return;
+    if (!record) {
+      toast({
+        title: "Error",
+        description: "Record tidak ditemukan",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (itemToDelete.type === 'bonus') {
-      const bonuses = record.bonusList || [];
+      const bonuses = Array.isArray(record.bonusList) ? record.bonusList : [];
       const updatedBonuses = bonuses.filter((_, index) => index !== itemToDelete.index);
       updatePayrollMutation.mutate({
         id: record.id,
         bonuses: JSON.stringify(updatedBonuses),
       });
     } else {
-      const deductions = record.deductionList || [];
+      const deductions = Array.isArray(record.deductionList) ? record.deductionList : [];
       const updatedDeductions = deductions.filter((_, index) => index !== itemToDelete.index);
       updatePayrollMutation.mutate({
         id: record.id,
@@ -576,59 +606,67 @@ export default function PayrollContent() {
           </div>
           
           {/* Summary Statistics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-            <Card>
-              <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
+            <Card className="stat-card shadow-card border-l-4 border-l-blue-500 overflow-hidden stagger-item">
+              <CardContent className="p-6">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total Payroll</p>
-                    <p className="text-2xl font-bold" data-testid="text-total-payroll">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Total Payroll</p>
+                    <p className="text-2xl font-bold count-up" data-testid="text-total-payroll">
                       {formatRupiah(summaryStats.total)}
                     </p>
                   </div>
-                  <DollarSign className="h-8 w-8 text-muted-foreground" />
+                  <div className="stat-icon bg-gradient-to-br from-blue-400 to-blue-600 p-3 rounded-xl shadow-md">
+                    <DollarSign className="h-6 w-6 text-white" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
             
-            <Card>
-              <CardContent className="pt-6">
+            <Card className="stat-card shadow-card border-l-4 border-l-purple-500 overflow-hidden stagger-item">
+              <CardContent className="p-6">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Rata-rata Gaji</p>
-                    <p className="text-2xl font-bold" data-testid="text-average-salary">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Rata-rata Gaji</p>
+                    <p className="text-2xl font-bold count-up" data-testid="text-average-salary">
                       {formatRupiah(summaryStats.average)}
                     </p>
                   </div>
-                  <TrendingUp className="h-8 w-8 text-muted-foreground" />
+                  <div className="stat-icon bg-gradient-to-br from-purple-400 to-purple-600 p-3 rounded-xl shadow-md">
+                    <TrendingUp className="h-6 w-6 text-white" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
             
-            <Card>
-              <CardContent className="pt-6">
+            <Card className="stat-card shadow-card border-l-4 border-l-green-500 overflow-hidden stagger-item">
+              <CardContent className="p-6">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Sudah Dibayar</p>
-                    <p className="text-2xl font-bold text-green-600" data-testid="text-paid-count">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Sudah Dibayar</p>
+                    <p className="text-2xl font-bold text-green-600 dark:text-green-400 count-up" data-testid="text-paid-count">
                       {summaryStats.paid}
                     </p>
                   </div>
-                  <CheckCircle2 className="h-8 w-8 text-green-600" />
+                  <div className="stat-icon bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-xl shadow-md">
+                    <CheckCircle2 className="h-6 w-6 text-white" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
             
-            <Card>
-              <CardContent className="pt-6">
+            <Card className="stat-card shadow-card border-l-4 border-l-orange-500 overflow-hidden stagger-item">
+              <CardContent className="p-6">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Pending</p>
-                    <p className="text-2xl font-bold text-orange-600" data-testid="text-pending-count">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Pending</p>
+                    <p className="text-2xl font-bold text-orange-600 dark:text-orange-400 count-up" data-testid="text-pending-count">
                       {summaryStats.pending}
                     </p>
                   </div>
-                  <FileText className="h-8 w-8 text-orange-600" />
+                  <div className="stat-icon bg-gradient-to-br from-orange-400 to-orange-600 p-3 rounded-xl shadow-md">
+                    <FileText className="h-6 w-6 text-white" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -752,7 +790,6 @@ export default function PayrollContent() {
                     <SelectValue placeholder="Semua toko" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Semua toko</SelectItem>
                     {stores?.map((store) => (
                       <SelectItem key={store.id} value={store.id.toString()}>
                         {store.name}
@@ -776,7 +813,6 @@ export default function PayrollContent() {
                     <SelectValue placeholder="Semua karyawan" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Semua karyawan</SelectItem>
                     {users?.map((user) => (
                       <SelectItem key={user.id} value={user.id}>
                         {user.name}

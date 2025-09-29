@@ -1254,8 +1254,17 @@ export default function CashflowContent() {
                 </CardHeader>
                 <CardContent>
                   {isLoading ? (
-                    <div className="text-center py-8">
-                      Loading cashflow records...
+                    <div className="space-y-4 py-8 slide-up">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-center gap-4 p-4 border border-border rounded-lg stagger-item">
+                          <div className="skeleton w-12 h-12 rounded-full" />
+                          <div className="flex-1 space-y-2">
+                            <div className="skeleton-text w-2/3" />
+                            <div className="skeleton-text h-3 w-1/3" />
+                          </div>
+                          <div className="skeleton w-20 h-6 rounded-md" />
+                        </div>
+                      ))}
                     </div>
                   ) : cashflowRecords &&
                     cashflowRecords.filter((record) => record.storeId === store.id)

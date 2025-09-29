@@ -506,6 +506,7 @@ export class DatabaseStorage implements IStorage {
           exitTimeStart: stores.exitTimeStart,
           exitTimeEnd: stores.exitTimeEnd,
           timezone: stores.timezone,
+          shifts: stores.shifts,
           createdAt: stores.createdAt,
         })
         .from(stores)

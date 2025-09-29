@@ -180,7 +180,7 @@ export default function PiutangPage() {
     resolver: zodResolver(insertPiutangSchema),
     defaultValues: {
       customerId: "",
-      storeId: stores.length > 0 ? stores[0].id : 1,
+      storeId: stores.length > 0 ? stores[0].id : undefined,
       amount: "0",
       description: "",
       dueDate: undefined,
@@ -378,11 +378,31 @@ export default function PiutangPage() {
       return;
     }
 
-    // Validate that the selected customer belongs to the selected store
+    // Validate that storeId is set
+    if (!data.storeId) {
+      toast({
+        title: "Error",
+        description: "Please select a store before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate that the selected customer exists
     const selectedCustomer = unifiedCustomers.find(
       (c) => c.id === data.customerId,
     );
-    if (selectedCustomer && selectedCustomer.storeId !== data.storeId) {
+    if (!selectedCustomer) {
+      toast({
+        title: "Error",
+        description: "Selected customer not found. Please select a valid customer.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate that the selected customer belongs to the selected store
+    if (selectedCustomer.storeId !== data.storeId) {
       toast({
         title: "Error",
         description: "Selected customer does not belong to the selected store.",
@@ -526,15 +546,53 @@ export default function PiutangPage() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto py-8">
-        <div className="space-y-6">
-          <div className="h-8 bg-gray-200 rounded animate-pulse"></div>
-          <div className="grid gap-4">
+      <div className="container mx-auto py-8 slide-up">
+        <div className="space-y-8">
+          {/* Header Skeleton */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <div className="skeleton-text h-8 w-48" />
+              <div className="skeleton-text h-4 w-64" />
+            </div>
+            <div className="skeleton w-32 h-10 rounded-lg" />
+          </div>
+          
+          {/* Summary Cards Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {[1, 2].map((i) => (
+              <Card key={i} className="shadow-card overflow-hidden">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="skeleton w-14 h-14 rounded-xl" />
+                    <div className="space-y-3 flex-1">
+                      <div className="skeleton-text w-32" />
+                      <div className="skeleton-text h-6 w-24" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          
+          {/* Data Cards Skeleton */}
+          <div className="grid gap-6">
             {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-32 bg-gray-200 rounded animate-pulse"
-              ></div>
+              <Card key={i} className="shadow-card">
+                <CardContent className="p-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="skeleton-text h-5 w-40" />
+                      <div className="skeleton w-20 h-6 rounded-full" />
+                    </div>
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="skeleton-text h-4 w-full" />
+                      <div className="skeleton-text h-4 w-full" />
+                      <div className="skeleton-text h-4 w-full" />
+                      <div className="skeleton-text h-4 w-full" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         </div>
@@ -543,12 +601,12 @@ export default function PiutangPage() {
   }
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto py-8 page-enter">
       {/* Store Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {storeSummaries.map((summary) => (
-          <Card key={summary.store.id} className="border-l-4 border-l-blue-500">
-            <CardContent className="p-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        {storeSummaries.map((summary, index) => (
+          <Card key={summary.store.id} className={`shadow-card border-l-4 border-l-blue-500 overflow-hidden stagger-item hover:shadow-md transition-shadow`}>
+            <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <h3
@@ -722,10 +780,11 @@ export default function PiutangPage() {
                             <SelectContent>
                               {unifiedCustomers
                                 .filter((customer) =>
-                                  piutangForm.watch("storeId")
+                                  customer.id && // Ensure customer has a valid ID
+                                  (piutangForm.watch("storeId")
                                     ? customer.storeId ===
                                       piutangForm.watch("storeId")
-                                    : true,
+                                    : true),
                                 )
                                 .map((customer) => (
                                   <SelectItem
@@ -737,18 +796,16 @@ export default function PiutangPage() {
                                       <Badge
                                         variant="outline"
                                         className={
-                                          customer.type === "staff_member"
+                                          customer.type === "user_based"
                                             ? "bg-blue-50 text-blue-700 border-blue-300"
-                                            : customer.type ===
-                                                "internal_employee"
+                                            : customer.type === "employee"
                                               ? "bg-orange-50 text-orange-700 border-orange-300"
                                               : "bg-gray-50 text-gray-700"
                                         }
                                       >
-                                        {customer.type === "staff_member"
-                                          ? "Staff"
-                                          : customer.type ===
-                                              "internal_employee"
+                                        {customer.type === "user_based"
+                                          ? "User Account"
+                                          : customer.type === "employee"
                                             ? "Employee"
                                             : "Customer"}
                                       </Badge>
@@ -873,9 +930,9 @@ export default function PiutangPage() {
               })
               .map((item) => (
                 <Card
-                  key={item.customer.id}
+                  key={`${item.store.id}-${item.customer.id}`}
                   className="overflow-hidden"
-                  data-testid={`card-customer-${item.customer.id}`}
+                  data-testid={`card-customer-${item.store.id}-${item.customer.id}`}
                 >
                   <Collapsible
                     open={expandedCustomers.has(item.customer.id)}
@@ -1075,7 +1132,12 @@ export default function PiutangPage() {
       {/* Payment Modal */}
       <Dialog
         open={!!paymentModalData}
-        onOpenChange={(open) => !open && setPaymentModalData(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPaymentModalData(null);
+            paymentForm.reset({ amount: "" });
+          }
+        }}
       >
         <DialogContent className="max-w-md">
           <DialogHeader>

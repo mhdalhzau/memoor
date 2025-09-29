@@ -1206,11 +1206,25 @@ function SalesRecordsTable({
 
   if (isLoading) {
     return (
-      <Card>
+      <Card className="shadow-card">
         <CardContent className="p-8">
-          <div className="text-center">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-            <p>Loading sales records...</p>
+          <div className="space-y-6 slide-up">
+            <div className="flex items-center justify-center gap-3 mb-6">
+              <div className="skeleton w-8 h-8 rounded-full animate-spin" />
+              <p className="text-muted-foreground">Loading sales records...</p>
+            </div>
+            <div className="space-y-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-center gap-4 p-4 border border-border rounded-lg stagger-item">
+                  <div className="skeleton w-16 h-16 rounded-lg" />
+                  <div className="flex-1 space-y-2">
+                    <div className="skeleton-text w-3/4" />
+                    <div className="skeleton-text h-3 w-1/2" />
+                  </div>
+                  <div className="skeleton w-24 h-8 rounded-md" />
+                </div>
+              ))}
+            </div>
           </div>
         </CardContent>
       </Card>

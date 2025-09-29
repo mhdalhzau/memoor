@@ -543,15 +543,15 @@ export default function AttendanceContent() {
           </CardHeader>
           <CardContent>
             {isLoadingEmployees ? (
-              <div className="space-y-3">
+              <div className="space-y-3 slide-up">
                 {[1, 2, 3, 4, 5].map(i => (
-                  <div key={i} className="flex items-center gap-4">
-                    <Skeleton className="h-12 w-12 rounded-full" />
+                  <div key={i} className="flex items-center gap-4 p-3 rounded-lg stagger-item">
+                    <div className="skeleton-avatar" />
                     <div className="space-y-2 flex-1">
-                      <Skeleton className="h-4 w-[200px]" />
-                      <Skeleton className="h-3 w-[150px]" />
+                      <div className="skeleton-text w-[200px]" />
+                      <div className="skeleton-text h-3 w-[150px]" />
                     </div>
-                    <Skeleton className="h-9 w-[120px]" />
+                    <div className="skeleton w-[120px] h-9 rounded-md" />
                   </div>
                 ))}
               </div>

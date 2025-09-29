@@ -84,17 +84,17 @@ export default function DashboardContent() {
     });
 
     return (
-      <div className="space-y-8">
+      <div className="space-y-8 slide-up">
         {/* Main Stats Skeleton */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i}>
+            <Card key={i} className="shadow-card overflow-hidden">
               <CardContent className="p-6">
                 <div className="flex items-center gap-4">
-                  <Skeleton className="w-12 h-12 rounded-lg" />
-                  <div className="space-y-2">
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-6 w-16" />
+                  <div className="skeleton w-14 h-14 rounded-xl" />
+                  <div className="space-y-3 flex-1">
+                    <div className="skeleton-text w-28" />
+                    <div className="skeleton-text h-7 w-32" />
                   </div>
                 </div>
               </CardContent>
@@ -104,16 +104,16 @@ export default function DashboardContent() {
 
         {/* Store Wallets Skeleton */}
         <div>
-          <Skeleton className="h-6 w-48 mb-4" />
+          <div className="skeleton-text h-6 w-48 mb-6" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Card key={i}>
+              <Card key={i} className="shadow-card overflow-hidden">
                 <CardContent className="p-6">
                   <div className="flex items-center gap-4">
-                    <Skeleton className="w-12 h-12 rounded-lg" />
-                    <div className="space-y-2">
-                      <Skeleton className="h-4 w-24" />
-                      <Skeleton className="h-6 w-20" />
+                    <div className="skeleton w-14 h-14 rounded-xl" />
+                    <div className="space-y-3 flex-1">
+                      <div className="skeleton-text w-32" />
+                      <div className="skeleton-text h-6 w-24" />
                     </div>
                   </div>
                 </CardContent>
@@ -130,9 +130,9 @@ export default function DashboardContent() {
   console.log("🏪 Final Store Wallets:", storeWallets);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 page-enter">
       {/* Dashboard Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between slide-up">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
             Dashboard
@@ -144,21 +144,22 @@ export default function DashboardContent() {
         <SyncButton
           dataType="dashboard"
           variant="outline"
-          className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+          className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-all"
         />
       </div>
+      
       {/* Bank Balance (Wallet Simulator) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
+        <Card className="stat-card shadow-card border-l-4 border-l-green-500 overflow-hidden stagger-item">
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
-              <div className="bg-green-100 p-3 rounded-lg">
-                <TrendingUp className="h-6 w-6 text-green-600" />
+              <div className="stat-icon bg-gradient-to-br from-green-400 to-green-600 p-3 rounded-xl shadow-md">
+                <TrendingUp className="h-6 w-6 text-white" />
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Pemasukan</p>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-muted-foreground mb-1">Total Pemasukan</p>
                 <p
-                  className="text-2xl font-bold text-foreground"
+                  className="text-2xl font-bold text-foreground count-up"
                   data-testid="text-total-income"
                 >
                   {stats?.totalIncome || "Rp 0"}
@@ -168,18 +169,18 @@ export default function DashboardContent() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="stat-card shadow-card border-l-4 border-l-red-500 overflow-hidden stagger-item">
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
-              <div className="bg-red-100 p-3 rounded-lg">
-                <TrendingDown className="h-6 w-6 text-red-600" />
+              <div className="stat-icon bg-gradient-to-br from-red-400 to-red-600 p-3 rounded-xl shadow-md">
+                <TrendingDown className="h-6 w-6 text-white" />
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-muted-foreground mb-1">
                   Total Pengeluaran
                 </p>
                 <p
-                  className="text-2xl font-bold text-foreground"
+                  className="text-2xl font-bold text-foreground count-up"
                   data-testid="text-total-expenses"
                 >
                   {stats?.totalExpenses || "Rp 0"}
@@ -189,31 +190,25 @@ export default function DashboardContent() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={`stat-card shadow-card border-l-4 ${stats?.profit && stats.profit.includes("-") ? "border-l-red-500" : "border-l-green-500"} overflow-hidden stagger-item`}>
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
               <div
-                className={`p-3 rounded-lg ${
+                className={`stat-icon p-3 rounded-xl shadow-md ${
                   stats?.profit && stats.profit.includes("-")
-                    ? "bg-red-100"
-                    : "bg-green-100"
+                    ? "bg-gradient-to-br from-red-400 to-red-600"
+                    : "bg-gradient-to-br from-green-400 to-green-600"
                 }`}
               >
-                <DollarSign
-                  className={`h-6 w-6 ${
-                    stats?.profit && stats.profit.includes("-")
-                      ? "text-red-600"
-                      : "text-green-600"
-                  }`}
-                />
+                <DollarSign className="h-6 w-6 text-white" />
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Keuntungan</p>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-muted-foreground mb-1">Keuntungan</p>
                 <p
-                  className={`text-2xl font-bold ${
+                  className={`text-2xl font-bold count-up ${
                     stats?.profit && stats.profit.includes("-")
-                      ? "text-red-600"
-                      : "text-green-600"
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-green-600 dark:text-green-400"
                   }`}
                   data-testid="text-profit"
                 >
@@ -224,18 +219,18 @@ export default function DashboardContent() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="stat-card shadow-card border-l-4 border-l-blue-500 overflow-hidden stagger-item">
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
-              <div className="bg-blue-100 p-3 rounded-lg">
-                <Wallet className="h-6 w-6 text-blue-600" />
+              <div className="stat-icon bg-gradient-to-br from-blue-400 to-blue-600 p-3 rounded-xl shadow-md">
+                <Wallet className="h-6 w-6 text-white" />
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-muted-foreground mb-1">
                   Saldo Total Semua Store
                 </p>
                 <p
-                  className="text-2xl font-bold text-foreground"
+                  className="text-2xl font-bold text-foreground count-up"
                   data-testid="text-wallet-balance"
                 >
                   {stats?.totalWalletBalance || "Rp 0"}
@@ -247,7 +242,9 @@ export default function DashboardContent() {
       </div>
 
       {/* Mobile Banking Style Wallet */}
-      <MobileBankingWallet />
+      <div className="slide-up">
+        <MobileBankingWallet />
+      </div>
     </div>
   );
 }
