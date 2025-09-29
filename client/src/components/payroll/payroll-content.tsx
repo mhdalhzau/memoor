@@ -100,6 +100,7 @@ export default function PayrollContent() {
   const { user } = useAuth();
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
+  const detailPrintRef = useRef<HTMLDivElement>(null);
   const [selectedPayrollId, setSelectedPayrollId] = useState<string | null>(null);
   const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
@@ -362,6 +363,47 @@ export default function PayrollContent() {
     documentTitle: selectedPayroll
       ? `Payroll-${selectedPayroll.month}-${selectedPayroll.user?.name}`
       : "Payroll",
+  });
+
+  const handlePrintDetail = useReactToPrint({
+    content: () => detailPrintRef.current,
+    documentTitle: selectedPayroll
+      ? `Detail-Payroll-${selectedPayroll.month}-${selectedPayroll.user?.name}`
+      : "Detail-Payroll",
+  });
+
+  const syncToGSheetsMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedPayroll) throw new Error('No payroll selected');
+      const response = await apiRequest('POST', '/api/google-sheets/sync-payroll', {
+        payrollId: selectedPayroll.id,
+        employeeId: selectedPayroll.userId,
+        employeeName: selectedPayroll.user?.name,
+        month: selectedPayroll.month,
+        baseSalary: selectedPayroll.baseSalary,
+        overtimePay: selectedPayroll.overtimePay,
+        bonuses: selectedPayroll.bonusList,
+        deductions: selectedPayroll.deductionList,
+        totalAmount: selectedPayroll.totalAmount,
+        status: selectedPayroll.status,
+      });
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Berhasil Sync ke Google Sheets",
+        description: data.message || "Data payroll berhasil disinkronkan",
+        variant: "default"
+      });
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || "Gagal sync ke Google Sheets";
+      toast({
+        title: "Error Sync",
+        description: errorMessage,
+        variant: "destructive"
+      });
+    }
   });
 
   const exportToPDF = () => {
@@ -1049,12 +1091,37 @@ export default function PayrollContent() {
                               </DialogTrigger>
                               <DialogContent className="max-w-4xl max-h-[90vh]">
                                 <DialogHeader>
-                                  <DialogTitle>Detail Payroll - {record.user?.name}</DialogTitle>
-                                  <DialogDescription>
-                                    Periode: {formatIndonesianMonth(record.month)}
-                                  </DialogDescription>
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <DialogTitle>Detail Payroll - {record.user?.name}</DialogTitle>
+                                      <DialogDescription>
+                                        Periode: {formatIndonesianMonth(record.month)}
+                                      </DialogDescription>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handlePrintDetail}
+                                        data-testid={`button-print-detail-${record.id}`}
+                                      >
+                                        <Printer className="h-4 w-4 mr-1" />
+                                        Print
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => syncToGSheetsMutation.mutate()}
+                                        disabled={syncToGSheetsMutation.isPending}
+                                        data-testid={`button-sync-gsheets-${record.id}`}
+                                      >
+                                        <FileSpreadsheet className="h-4 w-4 mr-1" />
+                                        {syncToGSheetsMutation.isPending ? 'Syncing...' : 'Sync GSheet'}
+                                      </Button>
+                                    </div>
+                                  </div>
                                 </DialogHeader>
-                                <ScrollArea className="h-[600px] pr-4">
+                                <ScrollArea className="h-[600px] pr-4" ref={detailPrintRef}>
                                   <div className="space-y-6">
                                     <div className="grid grid-cols-2 gap-4">
                                       <div>

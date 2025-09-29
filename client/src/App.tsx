@@ -10,6 +10,7 @@ import HomePage from "@/pages/home-page";
 import AuthPage from "@/pages/auth-page";
 import StaffPage from "@/pages/staff-page";
 import PiutangPage from "@/pages/piutang-page";
+import PayrollPage from "@/pages/payroll-page";
 import EmployeeListPage from "@/pages/attendance/employee-list";
 import AttendanceDetailPage from "@/pages/attendance/attendance-detail";
 import NotFound from "@/pages/not-found";
@@ -21,6 +22,7 @@ function Router() {
       <Route path="/auth" component={AuthPage} />
       <Route path="/staff" component={StaffPage} />
       <ProtectedRoute path="/piutang" component={PiutangPage} />
+      <ProtectedRoute path="/payroll" component={PayrollPage} />
       <ProtectedRoute path="/attendance" component={EmployeeListPage} />
       <ProtectedRoute path="/attendance/employee/:employeeId" component={AttendanceDetailPage} />
       <Route component={NotFound} />
