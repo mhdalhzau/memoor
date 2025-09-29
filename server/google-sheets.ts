@@ -349,9 +349,9 @@ export class GoogleSheetsService {
       this.sanitizeText(sales.shift || ""),
       this.sanitizeText(sales.checkIn || ""),
       this.sanitizeText(sales.checkOut || ""),
-      this.formatNumber(sales.meterStart, 3), // Meter readings with 3 decimal places
-      this.formatNumber(sales.meterEnd, 3),
-      this.formatNumber(sales.totalLiters, 3),
+      this.formatNumber(sales.meterStart, 2), // Meter readings with 2 decimal places
+      this.formatNumber(sales.meterEnd, 2),
+      this.formatNumber(sales.totalLiters, 2),
       this.formatCurrency(sales.totalSales), // Proper Rupiah formatting
       this.formatCurrency(sales.totalQris),
       this.formatCurrency(sales.totalCash),

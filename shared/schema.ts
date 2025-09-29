@@ -48,6 +48,8 @@ export const stores = mysqlTable("stores", {
   exitTimeStart: text("exit_time_start").default("17:00"), // Start of allowed exit time  
   exitTimeEnd: text("exit_time_end").default("19:00"), // End of allowed exit time
   timezone: text("timezone").default("Asia/Jakarta"), // Store timezone
+  // Custom shifts configuration (JSON array of {name, start, end})
+  shifts: text("shifts"), // JSON: [{name: "Pagi", start: "07:00", end: "15:00"}, ...]
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -84,9 +86,9 @@ export const sales = mysqlTable("sales", {
   totalQris: decimal("total_qris", { precision: 12, scale: 2 }).default("0"),
   totalCash: decimal("total_cash", { precision: 12, scale: 2 }).default("0"),
   // Meter readings
-  meterStart: decimal("meter_start", { precision: 10, scale: 3 }),
-  meterEnd: decimal("meter_end", { precision: 10, scale: 3 }),
-  totalLiters: decimal("total_liters", { precision: 10, scale: 3 }),
+  meterStart: decimal("meter_start", { precision: 10, scale: 2 }),
+  meterEnd: decimal("meter_end", { precision: 10, scale: 2 }),
+  totalLiters: decimal("total_liters", { precision: 10, scale: 2 }),
   // PU (Income/Expenses)
   totalIncome: decimal("total_income", { precision: 12, scale: 2 }).default("0"),
   totalExpenses: decimal("total_expenses", { precision: 12, scale: 2 }).default("0"),
@@ -179,9 +181,9 @@ export const setoran = mysqlTable("setoran", {
   employeeId: varchar("employee_id", { length: 36 }), // Add employee ID reference
   jamMasuk: text("jam_masuk").notNull(),
   jamKeluar: text("jam_keluar").notNull(),
-  nomorAwal: decimal("nomor_awal", { precision: 10, scale: 3 }).notNull(),
-  nomorAkhir: decimal("nomor_akhir", { precision: 10, scale: 3 }).notNull(),
-  totalLiter: decimal("total_liter", { precision: 10, scale: 3 }).notNull(),
+  nomorAwal: decimal("nomor_awal", { precision: 10, scale: 2 }).notNull(),
+  nomorAkhir: decimal("nomor_akhir", { precision: 10, scale: 2 }).notNull(),
+  totalLiter: decimal("total_liter", { precision: 10, scale: 2 }).notNull(),
   totalSetoran: decimal("total_setoran", { precision: 12, scale: 2 }).notNull(),
   qrisSetoran: decimal("qris_setoran", { precision: 12, scale: 2 }).notNull(),
   cashSetoran: decimal("cash_setoran", { precision: 12, scale: 2 }).notNull(),
@@ -256,9 +258,9 @@ export const inventory = mysqlTable("inventory", {
   id: varchar("inventory_id", { length: 36 }).primaryKey().default(sql`(uuid())`),
   productId: varchar("product_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
-  currentStock: decimal("current_stock", { precision: 10, scale: 3 }).default("0"),
-  minimumStock: decimal("minimum_stock", { precision: 10, scale: 3 }).default("0"),
-  maximumStock: decimal("maximum_stock", { precision: 10, scale: 3 }),
+  currentStock: decimal("current_stock", { precision: 10, scale: 2 }).default("0"),
+  minimumStock: decimal("minimum_stock", { precision: 10, scale: 2 }).default("0"),
+  maximumStock: decimal("maximum_stock", { precision: 10, scale: 2 }),
   lastUpdated: timestamp("last_updated").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -269,7 +271,7 @@ export const inventoryTransactions = mysqlTable("inventory_transactions", {
   productId: varchar("product_id", { length: 36 }).notNull(),
   storeId: int("store_id").notNull(),
   type: text("type").notNull(), // 'in', 'out', 'adjustment'
-  quantity: decimal("quantity", { precision: 10, scale: 3 }).notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
   referenceType: text("reference_type"), // 'sale', 'purchase', 'adjustment', etc.
   referenceId: varchar("reference_id", { length: 36 }),
   notes: text("notes"),

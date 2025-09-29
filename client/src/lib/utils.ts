@@ -20,15 +20,15 @@ export function formatRupiah(amount: string | number | null | undefined): string
   }).format(numAmount);
 }
 
-// Format liters with proper decimal handling
+// Format liters with proper decimal handling (always show 2 decimal places)
 export function formatLiters(amount: string | number | null | undefined): string {
-  if (!amount && amount !== 0) return "0";
+  if (!amount && amount !== 0) return "0,00";
   
   const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-  if (isNaN(numAmount)) return "0";
+  if (isNaN(numAmount)) return "0,00";
   
   return new Intl.NumberFormat('id-ID', {
-    minimumFractionDigits: 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(numAmount);
 }
