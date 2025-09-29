@@ -422,6 +422,38 @@ export const updatePayrollBonusDeductionSchema = z.object({
   }, "Invalid deductions format"),
   baseSalary: z.string().optional(),
   overtimePay: z.string().optional(),
+}).transform((data) => {
+  // Parse JSON strings to get bonus and deduction arrays
+  let bonusArray: Array<{ name: string; amount: number }> = [];
+  let deductionArray: Array<{ name: string; amount: number }> = [];
+  
+  if (data.bonuses) {
+    try {
+      bonusArray = JSON.parse(data.bonuses);
+    } catch {
+      bonusArray = [];
+    }
+  }
+  
+  if (data.deductions) {
+    try {
+      deductionArray = JSON.parse(data.deductions);
+    } catch {
+      deductionArray = [];
+    }
+  }
+  
+  // Calculate totals for bonuses and deductions
+  const totalBonuses = bonusArray.reduce((sum, bonus) => sum + Number(bonus.amount), 0);
+  const totalDeductions = deductionArray.reduce((sum, deduction) => sum + Number(deduction.amount), 0);
+  
+  return {
+    ...data,
+    totalBonuses,
+    totalDeductions,
+    // Note: totalAmount calculation will be handled by storage layer
+    // since it needs access to existing payroll data for partial updates
+  };
 });
 
 export const insertProposalSchema = createInsertSchema(proposals).omit({

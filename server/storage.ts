@@ -1012,27 +1012,81 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async updatePayrollBonusDeduction(id: string, data: { bonuses?: string, deductions?: string, baseSalary?: string, overtimePay?: string }): Promise<Payroll | undefined> {
+  async updatePayrollBonusDeduction(id: string, data: { bonuses?: string, deductions?: string, baseSalary?: string, overtimePay?: string, totalBonuses?: number, totalDeductions?: number }): Promise<Payroll | undefined> {
     try {
-      // Recalculate total if baseSalary or overtimePay changed
-      let updateData: any = { ...data };
+      // Always recalculate totalAmount when any field is updated
+      const currentPayroll = await db.select().from(payroll).where(eq(payroll.id, id)).limit(1);
+      if (!currentPayroll[0]) {
+        console.error('Payroll not found:', id);
+        return undefined;
+      }
       
-      if (data.baseSalary || data.overtimePay) {
-        const currentPayroll = await db.select().from(payroll).where(eq(payroll.id, id)).limit(1);
-        if (currentPayroll[0]) {
-          const baseSalary = Number(data.baseSalary || currentPayroll[0].baseSalary);
-          const overtimePay = Number(data.overtimePay || currentPayroll[0].overtimePay || 0);
-          
-          // Parse bonuses and deductions
-          const bonuses = data.bonuses ? JSON.parse(data.bonuses) : (currentPayroll[0].bonuses ? JSON.parse(currentPayroll[0].bonuses) : []);
-          const deductions = data.deductions ? JSON.parse(data.deductions) : (currentPayroll[0].deductions ? JSON.parse(currentPayroll[0].deductions) : []);
-          
-          const totalBonus = bonuses.reduce((sum: number, b: any) => sum + Number(b.amount), 0);
-          const totalDeduction = deductions.reduce((sum: number, d: any) => sum + Number(d.amount), 0);
-          
-          updateData.totalAmount = String(baseSalary + overtimePay + totalBonus - totalDeduction);
+      // Use provided values or existing values
+      const baseSalary = Number(data.baseSalary !== undefined ? data.baseSalary : currentPayroll[0].baseSalary);
+      const overtimePay = Number(data.overtimePay !== undefined ? data.overtimePay : (currentPayroll[0].overtimePay || 0));
+      
+      // Use precalculated totals from schema transform, or calculate from existing data
+      let totalBonuses = 0;
+      let totalDeductions = 0;
+      
+      if (data.totalBonuses !== undefined) {
+        totalBonuses = data.totalBonuses;
+      } else if (data.bonuses) {
+        // If bonuses were updated but totals weren't provided (shouldn't happen with new schema)
+        try {
+          const bonusArray = JSON.parse(data.bonuses);
+          totalBonuses = bonusArray.reduce((sum: number, b: any) => sum + Number(b.amount), 0);
+        } catch {
+          totalBonuses = 0;
+        }
+      } else {
+        // Use existing bonuses
+        try {
+          const existingBonuses = currentPayroll[0].bonuses ? JSON.parse(currentPayroll[0].bonuses) : [];
+          totalBonuses = existingBonuses.reduce((sum: number, b: any) => sum + Number(b.amount), 0);
+        } catch {
+          totalBonuses = 0;
         }
       }
+      
+      if (data.totalDeductions !== undefined) {
+        totalDeductions = data.totalDeductions;
+      } else if (data.deductions) {
+        // If deductions were updated but totals weren't provided (shouldn't happen with new schema)
+        try {
+          const deductionArray = JSON.parse(data.deductions);
+          totalDeductions = deductionArray.reduce((sum: number, d: any) => sum + Number(d.amount), 0);
+        } catch {
+          totalDeductions = 0;
+        }
+      } else {
+        // Use existing deductions
+        try {
+          const existingDeductions = currentPayroll[0].deductions ? JSON.parse(currentPayroll[0].deductions) : [];
+          totalDeductions = existingDeductions.reduce((sum: number, d: any) => sum + Number(d.amount), 0);
+        } catch {
+          totalDeductions = 0;
+        }
+      }
+      
+      // Calculate final totalAmount
+      const calculatedTotalAmount = baseSalary + overtimePay + totalBonuses - totalDeductions;
+      
+      // Prepare update data (exclude the helper fields)
+      const updateData: any = {
+        bonuses: data.bonuses,
+        deductions: data.deductions,
+        baseSalary: data.baseSalary,
+        overtimePay: data.overtimePay,
+        totalAmount: String(calculatedTotalAmount)
+      };
+      
+      // Remove undefined fields to allow partial updates
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined) {
+          delete updateData[key];
+        }
+      });
       
       await db.update(payroll).set(updateData).where(eq(payroll.id, id));
       // MySQL doesn't support .returning(), so fetch the updated payroll

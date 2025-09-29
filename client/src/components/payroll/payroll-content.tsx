@@ -90,6 +90,7 @@ import { useRef } from "react";
 import { format, startOfMonth, endOfMonth, addDays, subDays, isWithinInterval, addMonths, subMonths } from "date-fns";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { SalarySlip } from "./salary-slip";
 
 interface PayrollWithUser extends Payroll {
   user?: User;
@@ -339,6 +340,7 @@ export default function PayrollContent() {
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
   const detailPrintRef = useRef<HTMLDivElement>(null);
+  const salarySlipRef = useRef<HTMLDivElement>(null);
   const [selectedPayrollId, setSelectedPayrollId] = useState<string | null>(null);
   const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
@@ -663,6 +665,15 @@ export default function PayrollContent() {
       : null;
   }, [processedRecords, selectedPayrollId]);
 
+  // Query attendance data for selected payroll
+  const { data: attendanceData } = useQuery<{
+    employee: any;
+    attendanceData: AttendanceRecord[];
+  }>({
+    queryKey: [`/api/employees/${selectedPayroll?.userId}/attendance/${selectedPayroll?.month ? selectedPayroll.month.split('-')[0] : ''}/${selectedPayroll?.month ? selectedPayroll.month.split('-')[1] : ''}`],
+    enabled: !!selectedPayroll?.userId && !!selectedPayroll?.month,
+  });
+
 
   const generatePayrollMutation = useMutation({
     mutationFn: async (month?: string) => {
@@ -764,6 +775,13 @@ export default function PayrollContent() {
     documentTitle: selectedPayroll
       ? `Detail-Payroll-${selectedPayroll.month}-${selectedPayroll.user?.name}`
       : "Detail-Payroll",
+  });
+
+  const handlePrintSalarySlip = useReactToPrint({
+    content: () => salarySlipRef.current,
+    documentTitle: selectedPayroll
+      ? `Slip-Gaji-${selectedPayroll.month}-${selectedPayroll.user?.name}`
+      : "Slip-Gaji",
   });
 
   const syncToGSheetsMutation = useMutation({
@@ -1611,7 +1629,16 @@ export default function PayrollContent() {
                                         data-testid={`button-print-detail-${record.id}`}
                                       >
                                         <Printer className="h-4 w-4 mr-1" />
-                                        Print
+                                        Print Detail
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handlePrintSalarySlip}
+                                        data-testid={`button-print-salary-slip-${record.id}`}
+                                      >
+                                        <FileText className="h-4 w-4 mr-1" />
+                                        Slip Gaji
                                       </Button>
                                       <Button
                                         variant="outline"

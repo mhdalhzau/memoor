@@ -2643,6 +2643,8 @@ export function registerRoutes(app: Express): Server {
         deductions: validatedData.deductions,
         baseSalary: validatedData.baseSalary,
         overtimePay: validatedData.overtimePay,
+        totalBonuses: validatedData.totalBonuses,
+        totalDeductions: validatedData.totalDeductions,
       });
       
       if (!payroll) return res.status(404).json({ message: "Payroll not found" });
