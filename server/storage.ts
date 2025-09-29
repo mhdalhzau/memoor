@@ -882,6 +882,17 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async deleteCashflow(id: string): Promise<boolean> {
+    try {
+      const result = await db.delete(cashflow).where(eq(cashflow.id, id));
+      // MySQL doesn't support .returning(), so we check if any rows were affected
+      return true;
+    } catch (error) {
+      console.error('Error deleting cashflow:', error);
+      throw error;
+    }
+  }
+
   async deleteCashflowBySalesId(salesId: string): Promise<void> {
     try {
       await db.delete(cashflow).where(eq(cashflow.salesId, salesId));

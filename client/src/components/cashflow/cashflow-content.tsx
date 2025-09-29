@@ -36,6 +36,7 @@ import { Label } from "@/components/ui/label";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatRupiah, formatNumber } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import {
   type Cashflow,
   type Customer,
@@ -147,11 +148,14 @@ type CashflowData = z.infer<typeof cashflowSchema>;
 
 export default function CashflowContent() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [selectedEntry, setSelectedEntry] = useState<Cashflow | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
   const [customerSearchTerm, setCustomerSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [deleteConfirmEntry, setDeleteConfirmEntry] = useState<Cashflow | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   // Fetch stores to get actual store names and data
   const { data: stores = [] } = useQuery({
@@ -226,6 +230,9 @@ export default function CashflowContent() {
   const watchKonter = form.watch("konter");
   const watchAmount = form.watch("amount");
   const watchPaymentStatus = form.watch("paymentStatus");
+
+  // Check if current user can delete cashflow records
+  const canDeleteCashflow = user && (user.role === 'manager' || user.role === 'administrasi');
 
   // Helper functions to identify special transaction types (with legacy compatibility)
   const isPembelianMinyak = (type: string) => {
@@ -492,6 +499,48 @@ export default function CashflowContent() {
       });
     },
   });
+
+  // Delete cashflow mutation
+  const deleteCashflowMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/cashflow/${id}`);
+      return await res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Cashflow record deleted successfully!",
+      });
+      setIsDeleteDialogOpen(false);
+      setDeleteConfirmEntry(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/cashflow"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete cashflow record",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete confirmation handlers
+  const handleDeleteClick = (entry: Cashflow, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent triggering the row click
+    setDeleteConfirmEntry(entry);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (deleteConfirmEntry) {
+      deleteCashflowMutation.mutate(deleteConfirmEntry.id);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setIsDeleteDialogOpen(false);
+    setDeleteConfirmEntry(null);
+  };
 
   const onSubmit = (data: CashflowData) => {
     console.log("🎯 FORM SUBMISSION TRIGGERED");
@@ -1275,7 +1324,21 @@ export default function CashflowContent() {
                                     : entry.amount,
                                 )}
                               </span>
-                              <Eye className="h-4 w-4 text-muted-foreground" />
+                              <div className="flex items-center gap-1">
+                                <Eye className="h-4 w-4 text-muted-foreground" />
+                                {canDeleteCashflow && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => handleDeleteClick(entry, e)}
+                                    disabled={deleteCashflowMutation.isPending}
+                                    className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
+                                    data-testid={`button-delete-cashflow-${entry.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -1361,6 +1424,101 @@ export default function CashflowContent() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Delete Cashflow Record
+            </DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. Are you sure you want to delete this cashflow record?
+            </DialogDescription>
+          </DialogHeader>
+          
+          {deleteConfirmEntry && (
+            <div className="space-y-4">
+              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <label className="font-medium text-gray-700 dark:text-gray-300">Date</label>
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {new Date(deleteConfirmEntry.date).toLocaleDateString('id-ID', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric'
+                      })}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="font-medium text-gray-700 dark:text-gray-300">Category</label>
+                    <p className="text-gray-900 dark:text-gray-100">{deleteConfirmEntry.category}</p>
+                  </div>
+                  <div>
+                    <label className="font-medium text-gray-700 dark:text-gray-300">Type</label>
+                    <p className="text-gray-900 dark:text-gray-100">{deleteConfirmEntry.type}</p>
+                  </div>
+                  <div>
+                    <label className="font-medium text-gray-700 dark:text-gray-300">Amount</label>
+                    <p className="text-gray-900 dark:text-gray-100 font-semibold">
+                      {formatRupiah(
+                        deleteConfirmEntry.category === "Expense" && deleteConfirmEntry.totalPengeluaran
+                          ? deleteConfirmEntry.totalPengeluaran
+                          : deleteConfirmEntry.amount
+                      )}
+                    </p>
+                  </div>
+                </div>
+                
+                {deleteConfirmEntry.description && (
+                  <div className="mt-3">
+                    <label className="font-medium text-gray-700 dark:text-gray-300">Description</label>
+                    <p className="text-gray-900 dark:text-gray-100">{deleteConfirmEntry.description}</p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                <p className="text-sm text-red-800 dark:text-red-200">
+                  <strong>Warning:</strong> Deleting this record will permanently remove it from your cashflow history 
+                  and may affect your financial reports and calculations.
+                </p>
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={handleDeleteCancel}
+                  disabled={deleteCashflowMutation.isPending}
+                  data-testid="button-cancel-delete"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteConfirm}
+                  disabled={deleteCashflowMutation.isPending}
+                  data-testid="button-confirm-delete"
+                >
+                  {deleteCashflowMutation.isPending ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Record
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>

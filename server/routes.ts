@@ -2363,6 +2363,38 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.delete("/api/cashflow/:id", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Only managers and administrators can delete cashflow records" });
+      }
+      
+      const { id } = req.params;
+      
+      // First get the cashflow record to verify store access
+      const existingCashflow = await storage.getCashflow(id);
+      if (!existingCashflow) {
+        return res.status(404).json({ message: "Cashflow record not found" });
+      }
+      
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, existingCashflow.storeId))) {
+        return res.status(403).json({ message: "You don't have access to delete records from this store" });
+      }
+      
+      // Delete the cashflow record
+      await storage.deleteCashflow(id);
+      
+      res.status(200).json({ 
+        success: true, 
+        message: "Cashflow record deleted successfully" 
+      });
+    } catch (error: any) {
+      console.error("Error deleting cashflow:", error);
+      res.status(500).json({ message: error.message || "Failed to delete cashflow record" });
+    }
+  });
+
   // Payroll routes
   app.post("/api/payroll/generate", async (req, res) => {
     try {
