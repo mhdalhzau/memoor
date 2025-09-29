@@ -96,14 +96,13 @@ export const SalarySlip = forwardRef<HTMLDivElement, SalarySlipProps>(
 
     return (
       <div ref={ref} className={cn("print-content hidden", className)}>
-        {/* Page 1: Salary Slip */}
-        <div className="salary-page bg-white text-black p-6 min-h-screen">
-          {/* Header */}
-          <div className="text-center mb-6 border-b-2 border-black pb-4">
-            <h1 className="text-xl font-bold mb-2">SETORAN HARIAN</h1>
-            <h2 className="text-lg font-semibold mb-2">SLIP GAJI KARYAWAN</h2>
+        {/* Single Page: Complete Salary Slip with Attendance */}
+        <div className="salary-page bg-white text-black p-6 max-w-[210mm] mx-auto">
+          {/* Header - Compact */}
+          <div className="text-center mb-3 border-b-2 border-black pb-2">
+            <h1 className="text-lg font-bold mb-1">SETORAN HARIAN - SLIP GAJI KARYAWAN</h1>
             {payroll.store && (
-              <div className="text-sm space-y-1">
+              <div className="text-xs space-y-0.5">
                 <p className="font-medium">{payroll.store.name}</p>
                 {payroll.store.address && <p>{payroll.store.address}</p>}
                 {payroll.store.phone && <p>Telp: {payroll.store.phone}</p>}
@@ -111,281 +110,182 @@ export const SalarySlip = forwardRef<HTMLDivElement, SalarySlipProps>(
             )}
           </div>
 
-          {/* Employee Information */}
-          <div className="grid grid-cols-2 gap-6 mb-6">
-            <div>
-              <h3 className="font-semibold mb-3 text-sm border-b border-gray-300 pb-1">INFORMASI KARYAWAN</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex">
-                  <span className="w-24 font-medium">Nama</span>
-                  <span className="mr-2">:</span>
-                  <span>{payroll.user?.name || '-'}</span>
-                </div>
-                <div className="flex">
-                  <span className="w-24 font-medium">ID Karyawan</span>
-                  <span className="mr-2">:</span>
-                  <span className="font-mono text-xs">{payroll.userId}</span>
-                </div>
-                <div className="flex">
-                  <span className="w-24 font-medium">Jabatan</span>
-                  <span className="mr-2">:</span>
-                  <span className="capitalize">{payroll.user?.role || '-'}</span>
-                </div>
-                <div className="flex">
-                  <span className="w-24 font-medium">Toko</span>
-                  <span className="mr-2">:</span>
-                  <span>{payroll.store?.name || '-'}</span>
-                </div>
+          {/* Employee Information - Compact Grid */}
+          <div className="grid grid-cols-3 gap-3 mb-3 text-xs">
+            <div className="border rounded p-2">
+              <h3 className="font-semibold mb-1 text-xs border-b pb-0.5">KARYAWAN</h3>
+              <div className="space-y-0.5">
+                <div><span className="font-medium">Nama:</span> {payroll.user?.name || '-'}</div>
+                <div><span className="font-medium">Jabatan:</span> {payroll.user?.role || '-'}</div>
               </div>
             </div>
             
-            <div>
-              <h3 className="font-semibold mb-3 text-sm border-b border-gray-300 pb-1">PERIODE GAJI</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex">
-                  <span className="w-24 font-medium">Bulan</span>
-                  <span className="mr-2">:</span>
-                  <span>{formatIndonesianMonth(payroll.month)}</span>
+            <div className="border rounded p-2">
+              <h3 className="font-semibold mb-1 text-xs border-b pb-0.5">PERIODE</h3>
+              <div className="space-y-0.5">
+                <div><span className="font-medium">Bulan:</span> {formatIndonesianMonth(payroll.month)}</div>
+                <div><span className="font-medium">Status:</span> <span className={`px-1.5 py-0.5 rounded text-xs ${
+                  payroll.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                }`}>{payroll.status === 'paid' ? 'Lunas' : 'Pending'}</span></div>
+              </div>
+            </div>
+
+            <div className="border rounded p-2">
+              <h3 className="font-semibold mb-1 text-xs border-b pb-0.5">RINGKASAN</h3>
+              <div className="flex gap-2 justify-around">
+                <div className="text-center">
+                  <div className="text-sm font-bold text-green-700">{attendanceSummary.totalHadir}</div>
+                  <div className="text-xs">Hadir</div>
                 </div>
-                <div className="flex">
-                  <span className="w-24 font-medium">Status</span>
-                  <span className="mr-2">:</span>
-                  <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                    payroll.status === 'paid' 
-                      ? 'bg-green-100 text-green-800 print:bg-green-200' 
-                      : 'bg-yellow-100 text-yellow-800 print:bg-yellow-200'
-                  }`}>
-                    {payroll.status === 'paid' ? 'Lunas' : 'Pending'}
-                  </span>
+                <div className="text-center">
+                  <div className="text-sm font-bold text-yellow-700">{attendanceSummary.totalTerlambat}</div>
+                  <div className="text-xs">Telat</div>
                 </div>
-                <div className="flex">
-                  <span className="w-24 font-medium">Tanggal Cetak</span>
-                  <span className="mr-2">:</span>
-                  <span>{formatIndonesianDate(new Date())}</span>
+                <div className="text-center">
+                  <div className="text-sm font-bold text-red-700">{attendanceSummary.totalAlpha}</div>
+                  <div className="text-xs">Alpha</div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Salary Details */}
-          <div className="mb-6">
-            <h3 className="font-semibold mb-3 text-sm border-b border-gray-300 pb-1">RINCIAN GAJI</h3>
-            
-            {/* Base Salary and Overtime */}
-            <div className="grid grid-cols-2 gap-6 mb-4">
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
+          {/* Salary Details - Two Column Layout */}
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            {/* Left Column - Salary Breakdown */}
+            <div className="border rounded p-2">
+              <h3 className="font-semibold mb-2 text-xs border-b pb-1">RINCIAN GAJI</h3>
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between">
                   <span>Gaji Pokok</span>
                   <span className="font-medium">{formatRupiah(baseSalary)}</span>
                 </div>
-                <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
+                <div className="flex justify-between">
                   <span>Lembur</span>
                   <span className="font-medium">{formatRupiah(overtimePay)}</span>
                 </div>
+                
+                {/* Bonus Items */}
+                {payroll.bonusList && payroll.bonusList.length > 0 && (
+                  <>
+                    <div className="border-t pt-1 mt-1">
+                      <div className="font-medium text-green-700 mb-1">BONUS:</div>
+                      {payroll.bonusList.map((bonus, index) => (
+                        <div key={index} className="flex justify-between text-green-700">
+                          <span className="text-xs">{bonus.name}</span>
+                          <span className="font-medium">{formatRupiah(bonus.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Deduction Items */}
+                {payroll.deductionList && payroll.deductionList.length > 0 && (
+                  <>
+                    <div className="border-t pt-1 mt-1">
+                      <div className="font-medium text-red-700 mb-1">POTONGAN:</div>
+                      {payroll.deductionList.map((deduction, index) => (
+                        <div key={index} className="flex justify-between text-red-700">
+                          <span className="text-xs">{deduction.name}</span>
+                          <span className="font-medium">{formatRupiah(deduction.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Total */}
+                <div className="border-t-2 border-blue-600 pt-2 mt-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-blue-900">TOTAL BERSIH</span>
+                    <span className="text-base font-bold text-blue-900">{formatRupiah(netSalary)}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Bonus Section */}
-            {payroll.bonusList && payroll.bonusList.length > 0 && (
-              <div className="mb-4">
-                <h4 className="font-medium mb-2 text-sm text-green-700">BONUS</h4>
-                <div className="bg-green-50 p-3 rounded border">
-                  <div className="space-y-1 text-sm">
-                    {payroll.bonusList.map((bonus, index) => (
-                      <div key={index} className="flex justify-between">
-                        <span className="text-green-700">{bonus.name}</span>
-                        <span className="font-medium text-green-800">{formatRupiah(bonus.amount)}</span>
-                      </div>
-                    ))}
-                    <div className="border-t border-green-200 pt-1 mt-2">
-                      <div className="flex justify-between font-semibold">
-                        <span>Total Bonus</span>
-                        <span className="text-green-800">{formatRupiah(totalBonus)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            {/* Right Column - Attendance Table */}
+            <div className="border rounded p-2">
+              <h3 className="font-semibold mb-2 text-xs border-b pb-1">DETAIL ABSENSI</h3>
+              <div className="max-h-[280px] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-100 sticky top-0">
+                    <tr>
+                      <th className="border border-gray-300 p-1 text-center w-12">Tgl</th>
+                      <th className="border border-gray-300 p-1 text-center w-14">Masuk</th>
+                      <th className="border border-gray-300 p-1 text-center w-14">Keluar</th>
+                      <th className="border border-gray-300 p-1 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attendanceData?.attendanceData?.length ? (
+                      attendanceData.attendanceData.map((record, index) => {
+                        const date = new Date(record.date);
+                        const day = date.getDate();
+                        return (
+                          <tr key={index}>
+                            <td className="border border-gray-300 p-1 text-center">{day}</td>
+                            <td className="border border-gray-300 p-1 text-center">
+                              {record.checkIn ? formatTime(record.checkIn) : '-'}
+                            </td>
+                            <td className="border border-gray-300 p-1 text-center">
+                              {record.checkOut ? formatTime(record.checkOut) : '-'}
+                            </td>
+                            <td className="border border-gray-300 p-1 text-center">
+                              <span className={cn(
+                                "px-1.5 py-0.5 rounded text-xs",
+                                getStatusBadgeColor(record.attendanceStatus || record.status || '')
+                              )}>
+                                {formatAttendanceStatus(record.attendanceStatus || record.status || '')}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="border border-gray-300 p-2 text-center text-gray-500">
+                          Belum ada data
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-            )}
-
-            {/* Deduction Section */}
-            {payroll.deductionList && payroll.deductionList.length > 0 && (
-              <div className="mb-4">
-                <h4 className="font-medium mb-2 text-sm text-red-700">POTONGAN</h4>
-                <div className="bg-red-50 p-3 rounded border">
-                  <div className="space-y-1 text-sm">
-                    {payroll.deductionList.map((deduction, index) => (
-                      <div key={index} className="flex justify-between">
-                        <span className="text-red-700">{deduction.name}</span>
-                        <span className="font-medium text-red-800">{formatRupiah(deduction.amount)}</span>
-                      </div>
-                    ))}
-                    <div className="border-t border-red-200 pt-1 mt-2">
-                      <div className="flex justify-between font-semibold">
-                        <span>Total Potongan</span>
-                        <span className="text-red-800">{formatRupiah(totalDeduction)}</span>
-                      </div>
-                    </div>
-                  </div>
+              <div className="mt-1 text-xs text-gray-600">
+                <div className="flex gap-2 flex-wrap">
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-200 rounded"></span>Hadir</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-200 rounded"></span>Alpha</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 bg-blue-200 rounded"></span>Cuti</span>
                 </div>
-              </div>
-            )}
-
-            {/* Net Salary */}
-            <div className="bg-blue-50 p-4 rounded border border-blue-200">
-              <div className="flex justify-between items-center">
-                <span className="text-lg font-semibold text-blue-900">TOTAL GAJI BERSIH</span>
-                <span className="text-xl font-bold text-blue-900">{formatRupiah(netSalary)}</span>
               </div>
             </div>
           </div>
 
-          {/* Attendance Summary */}
-          <div className="mb-6">
-            <h3 className="font-semibold mb-3 text-sm border-b border-gray-300 pb-1">RINGKASAN ABSENSI</h3>
-            <div className="grid grid-cols-4 gap-4 text-center text-sm">
-              <div className="bg-green-50 p-2 rounded border">
-                <div className="text-lg font-bold text-green-800">{attendanceSummary.totalHadir}</div>
-                <div className="text-xs text-green-600">Hadir</div>
-              </div>
-              <div className="bg-yellow-50 p-2 rounded border">
-                <div className="text-lg font-bold text-yellow-800">{attendanceSummary.totalTerlambat}</div>
-                <div className="text-xs text-yellow-600">Terlambat</div>
-              </div>
-              <div className="bg-red-50 p-2 rounded border">
-                <div className="text-lg font-bold text-red-800">{attendanceSummary.totalAlpha}</div>
-                <div className="text-xs text-red-600">Alpha</div>
-              </div>
-              <div className="bg-blue-50 p-2 rounded border">
-                <div className="text-lg font-bold text-blue-800">{attendanceSummary.totalCuti}</div>
-                <div className="text-xs text-blue-600">Cuti</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Signatures */}
-          <div className="mt-8 pt-6 border-t border-gray-300">
-            <div className="grid grid-cols-2 gap-8 text-center text-sm">
+          {/* Signatures - Compact */}
+          <div className="mt-4 pt-3 border-t border-gray-300">
+            <div className="grid grid-cols-2 gap-8 text-center text-xs">
               <div>
-                <p className="mb-16">Karyawan</p>
+                <p className="mb-12">Karyawan</p>
                 <div className="border-t border-black pt-1">
                   <p className="font-medium">{payroll.user?.name}</p>
                 </div>
               </div>
               <div>
-                <p className="mb-16">HRD / Manager</p>
+                <p className="mb-12">HRD / Manager</p>
                 <div className="border-t border-black pt-1">
                   <p className="font-medium">{payroll.store?.manager || '________________'}</p>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Page Break */}
-        <div className="page-break"></div>
-
-        {/* Page 2: Detailed Attendance */}
-        <div className="attendance-page bg-white text-black p-6 min-h-screen">
-          <div className="text-center mb-6 border-b-2 border-black pb-4">
-            <h1 className="text-lg font-bold">RINCIAN ABSENSI KARYAWAN</h1>
-            <p className="text-sm mt-2">{formatIndonesianMonth(payroll.month)} - {payroll.user?.name}</p>
-          </div>
-
-          {/* Attendance Table */}
-          <div className="mb-6">
-            <table className="w-full border-collapse border border-gray-400 text-xs">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border border-gray-400 p-2 text-center w-16">No</th>
-                  <th className="border border-gray-400 p-2 text-center w-20">Tanggal</th>
-                  <th className="border border-gray-400 p-2 text-center w-16">Masuk</th>
-                  <th className="border border-gray-400 p-2 text-center w-16">Keluar</th>
-                  <th className="border border-gray-400 p-2 text-center w-20">Status</th>
-                  <th className="border border-gray-400 p-2 text-center">Keterangan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {attendanceData?.attendanceData?.length ? (
-                  attendanceData.attendanceData.map((record, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="border border-gray-400 p-2 text-center">{index + 1}</td>
-                      <td className="border border-gray-400 p-2 text-center">
-                        {formatIndonesianDate(record.date)}
-                      </td>
-                      <td className="border border-gray-400 p-2 text-center">
-                        {record.checkIn ? formatTime(record.checkIn) : '-'}
-                      </td>
-                      <td className="border border-gray-400 p-2 text-center">
-                        {record.checkOut ? formatTime(record.checkOut) : '-'}
-                      </td>
-                      <td className="border border-gray-400 p-2 text-center">
-                        <span className={cn(
-                          "inline-block px-2 py-1 rounded text-xs font-medium",
-                          getStatusBadgeColor(record.attendanceStatus || record.status || '')
-                        )}>
-                          {formatAttendanceStatus(record.attendanceStatus || record.status || '')}
-                        </span>
-                      </td>
-                      <td className="border border-gray-400 p-2 text-center">
-                        {record.latenessMinutes && record.latenessMinutes > 0 
-                          ? `Terlambat ${record.latenessMinutes} menit` 
-                          : record.notes || '-'}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="border border-gray-400 p-4 text-center text-gray-500">
-                      Belum ada data absensi untuk bulan ini
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Attendance Legend */}
-          <div className="grid grid-cols-2 gap-6 mb-6 text-xs">
-            <div>
-              <h4 className="font-semibold mb-2">Keterangan Status:</h4>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-green-200 rounded border"></div>
-                  <span>Hadir: Karyawan masuk kerja</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-blue-200 rounded border"></div>
-                  <span>Cuti: Karyawan mengambil cuti</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-red-200 rounded border"></div>
-                  <span>Alpha: Karyawan tidak masuk tanpa keterangan</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-gray-200 rounded border"></div>
-                  <span>Belum Diatur: Status belum ditentukan</span>
-                </div>
-              </div>
-            </div>
-            
-            <div>
-              <h4 className="font-semibold mb-2">Ringkasan Bulan {formatIndonesianMonth(payroll.month)}:</h4>
-              <div className="space-y-1">
-                <div>Total Hari Hadir: <span className="font-semibold">{attendanceSummary.totalHadir} hari</span></div>
-                <div>Total Hari Terlambat: <span className="font-semibold">{attendanceSummary.totalTerlambat} hari</span></div>
-                <div>Total Hari Alpha: <span className="font-semibold">{attendanceSummary.totalAlpha} hari</span></div>
-                <div>Total Hari Cuti: <span className="font-semibold">{attendanceSummary.totalCuti} hari</span></div>
-              </div>
-            </div>
-          </div>
 
           {/* Footer */}
-          <div className="mt-8 pt-4 border-t border-gray-300 text-center text-xs text-gray-600">
-            <p>Dokumen ini dicetak secara otomatis pada {formatIndonesianDate(new Date())} pukul {formatTime(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }))}</p>
-            <p className="mt-1">Setoran Harian - Sistem Manajemen Karyawan</p>
+          <div className="mt-2 text-center text-xs text-gray-500">
+            <p>Dicetak: {formatIndonesianDate(new Date())} - Setoran Harian</p>
           </div>
         </div>
+
       </div>
     );
   }
