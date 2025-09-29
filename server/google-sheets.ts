@@ -25,6 +25,121 @@ export class GoogleSheetsService {
     this.initializeSheets();
   }
 
+  // Helper functions for proper Indonesian formatting
+  private formatCurrency(value: string | number | null | undefined): string {
+    if (!value) return "Rp 0";
+    const numValue = typeof value === "string" ? parseFloat(value) : value;
+    if (isNaN(numValue)) return "Rp 0";
+    
+    // Format as Indonesian Rupiah with proper thousands separator
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(numValue);
+  }
+
+  private formatNumber(value: string | number | null | undefined, decimals: number = 2): string {
+    if (!value) return "0";
+    const numValue = typeof value === "string" ? parseFloat(value) : value;
+    if (isNaN(numValue)) return "0";
+    
+    // Format as Indonesian locale with proper decimal separator
+    return new Intl.NumberFormat("id-ID", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(numValue);
+  }
+
+  private formatDate(date: string | Date | null | undefined): string {
+    if (!date) return "";
+    
+    try {
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) return "";
+      
+      // Format as Indonesian business date: DD/MM/YYYY
+      return new Intl.DateTimeFormat("id-ID", {
+        day: "2-digit",
+        month: "2-digit", 
+        year: "numeric",
+      }).format(dateObj);
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return "";
+    }
+  }
+
+  private formatDateTime(date: string | Date | null | undefined): string {
+    if (!date) return "";
+    
+    try {
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) return "";
+      
+      // Format as Indonesian business datetime: DD/MM/YYYY HH:mm
+      return new Intl.DateTimeFormat("id-ID", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(dateObj);
+    } catch (error) {
+      console.error("Error formatting datetime:", error);
+      return "";
+    }
+  }
+
+  private sanitizeText(text: string | null | undefined): string {
+    if (!text) return "";
+    
+    // Remove or replace problematic characters that could break CSV/spreadsheet import
+    return text
+      .replace(/"/g, '""') // Escape double quotes
+      .replace(/\n/g, " ") // Replace newlines with spaces
+      .replace(/\r/g, " ") // Replace carriage returns with spaces
+      .replace(/\t/g, " ") // Replace tabs with spaces
+      .replace(/[^\x20-\x7E\u00A0-\u024F\u1E00-\u1EFF]/g, "") // Remove non-printable characters but keep accented chars
+      .trim();
+  }
+
+  private formatJsonDetails(jsonString: string | null | undefined): string {
+    if (!jsonString) return "";
+    
+    try {
+      // Try to parse and reformat JSON to ensure it's valid
+      const parsed = JSON.parse(jsonString);
+      
+      // Convert to a safe string format for spreadsheet display
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map(item => {
+            if (typeof item === "object" && item !== null) {
+              // Format object as key: value pairs
+              return Object.entries(item)
+                .map(([key, value]) => `${key}: ${value}`)
+                .join("; ");
+            }
+            return String(item);
+          })
+          .join(" | ");
+      } else if (typeof parsed === "object" && parsed !== null) {
+        // Format object as key: value pairs
+        return Object.entries(parsed)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join("; ");
+      } else {
+        return String(parsed);
+      }
+    } catch (error) {
+      // If JSON parsing fails, sanitize the string and return it
+      return this.sanitizeText(jsonString);
+    }
+  }
+
   private async initializeSheets() {
     try {
       const credentials = JSON.parse(this.config.credentialsJson);
@@ -227,27 +342,25 @@ export class GoogleSheetsService {
     sales: Sales & { storeName?: string; userName?: string },
   ): (string | number)[] {
     return [
-      sales.id || "", // Show ID for tracking
-      sales.storeName || "", // Store name
-      sales.date ? new Date(sales.date).toLocaleDateString("id-ID") : "",
-      sales.userName || "", // Staff name
-      sales.shift || "",
-      sales.checkIn || "",
-      sales.checkOut || "",
-      parseFloat(sales.meterStart || "0"),
-      parseFloat(sales.meterEnd || "0"),
-      parseFloat(sales.totalLiters || "0"),
-      parseFloat(sales.totalSales || "0"),
-      parseFloat(sales.totalQris || "0"),
-      parseFloat(sales.totalCash || "0"),
-      parseFloat(sales.totalIncome || "0"),
-      parseFloat(sales.totalExpenses || "0"),
-      sales.incomeDetails || "",
-      sales.expenseDetails || "",
-      sales.userId || "", // Show user ID for reference
-      sales.createdAt
-        ? new Date(sales.createdAt).toLocaleDateString("id-ID")
-        : "",
+      this.sanitizeText(sales.id || ""), // Show ID for tracking
+      this.sanitizeText(sales.storeName || ""), // Store name
+      this.formatDate(sales.date), // Consistent Indonesian date format
+      this.sanitizeText(sales.userName || ""), // Staff name
+      this.sanitizeText(sales.shift || ""),
+      this.sanitizeText(sales.checkIn || ""),
+      this.sanitizeText(sales.checkOut || ""),
+      this.formatNumber(sales.meterStart, 3), // Meter readings with 3 decimal places
+      this.formatNumber(sales.meterEnd, 3),
+      this.formatNumber(sales.totalLiters, 3),
+      this.formatCurrency(sales.totalSales), // Proper Rupiah formatting
+      this.formatCurrency(sales.totalQris),
+      this.formatCurrency(sales.totalCash),
+      this.formatCurrency(sales.totalIncome),
+      this.formatCurrency(sales.totalExpenses),
+      this.formatJsonDetails(sales.incomeDetails), // Properly formatted JSON
+      this.formatJsonDetails(sales.expenseDetails), // Properly formatted JSON
+      this.sanitizeText(sales.userId || ""), // Show user ID for reference
+      this.formatDate(sales.createdAt), // Consistent date formatting
     ];
   }
 
@@ -257,26 +370,20 @@ export class GoogleSheetsService {
     return [
       "", // Hide ID for cleaner view
       "", // Hide User ID for cleaner view
-      attendance.userName || "",
+      this.sanitizeText(attendance.userName || ""),
       "", // Hide Store ID for cleaner view
-      attendance.storeName || "",
-      attendance.date
-        ? new Date(attendance.date).toLocaleDateString("id-ID") +
-          " " +
-          new Date(attendance.date).toLocaleTimeString("id-ID")
-        : "",
-      attendance.checkIn || "",
-      attendance.checkOut || "",
-      attendance.shift || "",
-      attendance.latenessMinutes || 0,
-      attendance.overtimeMinutes || 0,
-      attendance.breakDuration || 0,
-      attendance.notes || "",
-      attendance.attendanceStatus || "",
-      attendance.status || "",
-      attendance.createdAt
-        ? new Date(attendance.createdAt).toLocaleDateString("id-ID")
-        : "",
+      this.sanitizeText(attendance.storeName || ""),
+      this.formatDateTime(attendance.date), // Consistent Indonesian datetime format
+      this.sanitizeText(attendance.checkIn || ""),
+      this.sanitizeText(attendance.checkOut || ""),
+      this.sanitizeText(attendance.shift || ""),
+      attendance.latenessMinutes || 0, // Keep as number for calculations
+      attendance.overtimeMinutes || 0, // Keep as number for calculations
+      attendance.breakDuration || 0, // Keep as number for calculations
+      this.sanitizeText(attendance.notes || ""), // Sanitize notes to prevent CSV issues
+      this.sanitizeText(attendance.attendanceStatus || ""),
+      this.sanitizeText(attendance.status || ""),
+      this.formatDate(attendance.createdAt), // Consistent date formatting
     ];
   }
 
@@ -284,25 +391,23 @@ export class GoogleSheetsService {
     cashflow: Cashflow & { storeName?: string; userName?: string },
   ): (string | number)[] {
     return [
-      cashflow.id || "", // Show ID for tracking
-      cashflow.userName || "", // Staff name
-      cashflow.storeName || "", // Store name
-      cashflow.category || "",
-      cashflow.type || "",
-      parseFloat(cashflow.amount || "0"),
-      cashflow.description || "",
-      cashflow.customerId || "", // Show Customer ID for reference
-      cashflow.paymentStatus || "",
-      parseFloat(cashflow.jumlahGalon || "0"),
-      parseFloat(cashflow.pajakOngkos || "0"),
-      parseFloat(cashflow.pajakTransfer || "0"),
-      parseFloat(cashflow.totalPengeluaran || "0"),
-      cashflow.konter || "",
-      parseFloat(cashflow.hasil || "0"),
-      cashflow.date ? new Date(cashflow.date).toLocaleDateString("id-ID") : "",
-      cashflow.createdAt
-        ? new Date(cashflow.createdAt).toLocaleDateString("id-ID")
-        : "",
+      this.sanitizeText(cashflow.id || ""), // Show ID for tracking
+      this.sanitizeText(cashflow.userName || ""), // Staff name
+      this.sanitizeText(cashflow.storeName || ""), // Store name
+      this.sanitizeText(cashflow.category || ""),
+      this.sanitizeText(cashflow.type || ""),
+      this.formatCurrency(cashflow.amount), // Proper Rupiah formatting
+      this.sanitizeText(cashflow.description || ""),
+      this.sanitizeText(cashflow.customerId || ""), // Show Customer ID for reference
+      this.sanitizeText(cashflow.paymentStatus || ""),
+      this.formatNumber(cashflow.jumlahGalon, 2), // Gallon count with 2 decimals
+      this.formatCurrency(cashflow.pajakOngkos), // Proper Rupiah formatting
+      this.formatCurrency(cashflow.pajakTransfer), // Proper Rupiah formatting
+      this.formatCurrency(cashflow.totalPengeluaran), // Proper Rupiah formatting
+      this.sanitizeText(cashflow.konter || ""),
+      this.formatCurrency(cashflow.hasil), // Proper Rupiah formatting
+      this.formatDate(cashflow.date), // Consistent Indonesian date format
+      this.formatDate(cashflow.createdAt), // Consistent date formatting
     ];
   }
 
@@ -312,42 +417,36 @@ export class GoogleSheetsService {
     return [
       "", // Hide ID for cleaner view
       "", // Hide Customer ID for cleaner view
-      piutang.customerName || "",
+      this.sanitizeText(piutang.customerName || ""),
       "", // Hide Store ID for cleaner view
-      piutang.storeName || "",
-      parseFloat(piutang.amount || "0"),
-      piutang.description || "",
-      piutang.dueDate
-        ? new Date(piutang.dueDate).toLocaleDateString("id-ID")
-        : "",
-      piutang.status || "",
-      parseFloat(piutang.paidAmount || "0"),
-      piutang.paidAt
-        ? new Date(piutang.paidAt).toLocaleDateString("id-ID")
-        : "",
+      this.sanitizeText(piutang.storeName || ""),
+      this.formatCurrency(piutang.amount), // Proper Rupiah formatting
+      this.sanitizeText(piutang.description || ""),
+      this.formatDate(piutang.dueDate), // Consistent Indonesian date format
+      this.sanitizeText(piutang.status || ""),
+      this.formatCurrency(piutang.paidAmount), // Proper Rupiah formatting
+      this.formatDate(piutang.paidAt), // Consistent date formatting
       "", // Hide Created By ID for cleaner view
-      piutang.createdAt
-        ? new Date(piutang.createdAt).toLocaleDateString("id-ID")
-        : "",
+      this.formatDate(piutang.createdAt), // Consistent date formatting
     ];
   }
 
   private formatDashboardDataForSheets(dashboard: any): (string | number)[] {
     return [
       "", // Hide Store ID for cleaner view
-      dashboard.storeName || "",
-      parseFloat(dashboard.totalSales || "0"),
-      parseFloat(dashboard.totalIncome || "0"),
-      parseFloat(dashboard.totalExpenses || "0"),
-      parseFloat(dashboard.totalCashflow || "0"),
-      parseFloat(dashboard.totalPiutang || "0"),
-      parseFloat(dashboard.paidPiutang || "0"),
-      parseFloat(dashboard.outstandingPiutang || "0"),
-      dashboard.activeUsers || 0,
-      dashboard.presentToday || 0,
-      dashboard.lateToday || 0,
-      dashboard.month || "",
-      new Date().toLocaleDateString("id-ID"),
+      this.sanitizeText(dashboard.storeName || ""),
+      this.formatCurrency(dashboard.totalSales), // Proper Rupiah formatting
+      this.formatCurrency(dashboard.totalIncome), // Proper Rupiah formatting
+      this.formatCurrency(dashboard.totalExpenses), // Proper Rupiah formatting
+      this.formatCurrency(dashboard.totalCashflow), // Proper Rupiah formatting
+      this.formatCurrency(dashboard.totalPiutang), // Proper Rupiah formatting
+      this.formatCurrency(dashboard.paidPiutang), // Proper Rupiah formatting
+      this.formatCurrency(dashboard.outstandingPiutang), // Proper Rupiah formatting
+      dashboard.activeUsers || 0, // Keep as number for count
+      dashboard.presentToday || 0, // Keep as number for count
+      dashboard.lateToday || 0, // Keep as number for count
+      this.sanitizeText(dashboard.month || ""),
+      this.formatDate(new Date()), // Consistent Indonesian date format
     ];
   }
 
