@@ -771,14 +771,14 @@ export default function PayrollContent() {
   });
 
   const handlePrintDetail = useReactToPrint({
-    content: () => detailPrintRef.current,
+    contentRef: detailPrintRef,
     documentTitle: selectedPayroll
       ? `Detail-Payroll-${selectedPayroll.month}-${selectedPayroll.user?.name}`
       : "Detail-Payroll",
   });
 
   const handlePrintSalarySlip = useReactToPrint({
-    content: () => salarySlipRef.current,
+    contentRef: salarySlipRef,
     documentTitle: selectedPayroll
       ? `Slip-Gaji-${selectedPayroll.month}-${selectedPayroll.user?.name}`
       : "Slip-Gaji",
@@ -1653,9 +1653,8 @@ export default function PayrollContent() {
                                     </div>
                                   </div>
                                 </DialogHeader>
-                                <div className="h-[600px]" ref={detailPrintRef}>
-                                  <ScrollArea className="h-[580px] pr-4">
-                                        <div className="space-y-6">
+                                <ScrollArea className="h-[600px] pr-4">
+                                  <div ref={detailPrintRef} className="space-y-6">
                                           <div className="grid grid-cols-2 gap-4">
                                             <div>
                                               <Label>Gaji Pokok</Label>
@@ -1764,8 +1763,7 @@ export default function PayrollContent() {
                                             month={selectedPayroll?.month}
                                           />
                                         </div>
-                                      </ScrollArea>
-                                </div>
+                                </ScrollArea>
                               </DialogContent>
                             </Dialog>
                           </div>
@@ -1806,6 +1804,16 @@ export default function PayrollContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Hidden Salary Slip for Printing */}
+      {selectedPayroll && (
+        <div style={{ display: 'none' }}>
+          <SalarySlip 
+            ref={salarySlipRef}
+            payroll={selectedPayroll}
+          />
+        </div>
+      )}
     </>
   );
 }

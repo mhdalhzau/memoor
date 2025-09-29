@@ -2,6 +2,13 @@
 
 This is a multi-role employee management system built with React, TypeScript, Express, and MySQL. The application serves staff, managers, and administrators with different access levels for attendance tracking, sales reporting, cashflow management, payroll processing, and proposal submissions. The system supports multiple stores and includes role-based authentication and authorization.
 
+## Recent Fixes (September 29, 2025)
+✅ **Payroll Detail Buttons Fixed**: Resolved button errors in Detail Payroll staff dialog
+  - Fixed `handlePrintDetail` function to use `contentRef` instead of deprecated `content` prop
+  - Fixed `handlePrintSalarySlip` function to use `contentRef` instead of deprecated `content` prop
+  - Updated to latest `react-to-print` v3 API specification
+  - All buttons now working: Print Detail, Slip Gaji, and Sync GSheet
+
 ## Setup Status
 - ✅ **Replit Environment**: Configured for development and deployment
 - ✅ **MySQL Database**: Connected to Aiven MySQL database with SSL
