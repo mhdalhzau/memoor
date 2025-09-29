@@ -1,7 +1,7 @@
 // Attendance calculation utilities
 
 // Shift time definitions (Indonesian SPBU shift standards)
-const SHIFT_SCHEDULES = {
+export const SHIFT_SCHEDULES = {
   pagi: { start: '07:00', end: '15:00' },
   siang: { start: '15:00', end: '23:00' },
   malam: { start: '23:00', end: '07:00' }

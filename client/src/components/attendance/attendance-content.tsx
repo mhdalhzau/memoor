@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { type User, type Attendance } from "@shared/schema";
 import { UserCheck, ChevronLeft, ChevronRight, Save, Download, RotateCcw, Edit2 } from "lucide-react";
 import { SyncButton } from "@/components/ui/sync-button";
-import { detectShift, calculateLateness, calculateOvertime } from "@shared/attendance-utils";
+import { detectShift, calculateLateness, calculateOvertime, calculateEarlyArrival, SHIFT_SCHEDULES } from "@shared/attendance-utils";
 
 // Types untuk attendance record
 interface AttendanceRecord {
@@ -24,6 +24,7 @@ interface AttendanceRecord {
   checkOut: string;
   latenessMinutes: number;
   overtimeMinutes: number;
+  earlyArrivalMinutes: number;
   attendanceStatus: string;
   notes: string;
   status: string;
@@ -65,6 +66,7 @@ export default function AttendanceContent() {
             shift: record.shift,
             latenessMinutes: record.latenessMinutes,
             overtimeMinutes: record.overtimeMinutes,
+            earlyArrivalMinutes: record.earlyArrivalMinutes,
             attendanceStatus: record.attendanceStatus,
             notes: record.notes,
           });
@@ -79,6 +81,7 @@ export default function AttendanceContent() {
             shift: record.shift,
             latenessMinutes: record.latenessMinutes,
             overtimeMinutes: record.overtimeMinutes,
+            earlyArrivalMinutes: record.earlyArrivalMinutes,
             attendanceStatus: record.attendanceStatus,
             notes: record.notes,
           });
@@ -141,6 +144,7 @@ export default function AttendanceContent() {
         checkOut: existingAttendance?.checkOut || "",
         latenessMinutes: existingAttendance?.latenessMinutes || 0,
         overtimeMinutes: existingAttendance?.overtimeMinutes || 0,
+        earlyArrivalMinutes: existingAttendance?.earlyArrivalMinutes || 0,
         attendanceStatus: existingAttendance?.attendanceStatus || "",
         notes: existingAttendance?.notes || "",
         status: existingAttendance?.status || "pending",
@@ -192,7 +196,7 @@ export default function AttendanceContent() {
     setYear(parseInt(y));
   };
 
-  // Update row data
+  // Update row data with reactive calculations
   const updateRow = (i: number, field: keyof AttendanceRecord, value: string | number) => {
     if (!canEdit) {
       toast({
@@ -206,16 +210,27 @@ export default function AttendanceContent() {
     const newRows = [...rows];
     newRows[i] = { ...newRows[i], [field]: value };
 
-    // Auto-calculate lateness and overtime when times are updated
+    // Auto-calculate all time metrics when shift, check-in, or check-out changes
     if (field === "checkIn" || field === "checkOut" || field === "shift") {
-      if (newRows[i].checkIn && newRows[i].checkOut) {
-        const shift = field === "shift" ? value as string : newRows[i].shift;
-        const checkIn = field === "checkIn" ? value as string : newRows[i].checkIn;
-        const checkOut = field === "checkOut" ? value as string : newRows[i].checkOut;
-        
-        newRows[i].shift = shift;
+      const shift = field === "shift" ? value as string : newRows[i].shift;
+      const checkIn = field === "checkIn" ? value as string : newRows[i].checkIn;
+      const checkOut = field === "checkOut" ? value as string : newRows[i].checkOut;
+      
+      newRows[i].shift = shift;
+      
+      // Calculate metrics based on available data
+      if (checkIn) {
         newRows[i].latenessMinutes = calculateLateness(checkIn, shift);
+        newRows[i].earlyArrivalMinutes = calculateEarlyArrival(checkIn, shift);
+      } else {
+        newRows[i].latenessMinutes = 0;
+        newRows[i].earlyArrivalMinutes = 0;
+      }
+      
+      if (checkOut) {
         newRows[i].overtimeMinutes = calculateOvertime(checkOut, shift);
+      } else {
+        newRows[i].overtimeMinutes = 0;
       }
     }
 
@@ -252,9 +267,9 @@ export default function AttendanceContent() {
   // Export CSV
   const exportCSV = () => {
     if (!currentEmp) return;
-    let csv = "Tanggal,Hari,Shift,Jam Masuk,Jam Keluar,Telat (menit),Lembur (menit),Status,Keterangan\n";
+    let csv = "Tanggal,Hari,Shift,Jam Masuk,Jam Keluar,Telat (menit),Datang Awal (menit),Lembur (menit),Status,Keterangan\n";
     rows.forEach((r) => {
-      csv += `${r.date},${r.day},${r.shift},${r.checkIn},${r.checkOut},${r.latenessMinutes},${r.overtimeMinutes},${r.attendanceStatus},${r.notes}\n`;
+      csv += `${r.date},${r.day},${r.shift},${r.checkIn},${r.checkOut},${r.latenessMinutes},${r.earlyArrivalMinutes},${r.overtimeMinutes},${r.attendanceStatus},${r.notes}\n`;
     });
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -431,6 +446,7 @@ Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
                   <TableHead>Jam Masuk</TableHead>
                   <TableHead>Jam Keluar</TableHead>
                   <TableHead>Telat (mnt)</TableHead>
+                  <TableHead>Datang Awal (mnt)</TableHead>
                   <TableHead>Lembur (mnt)</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Keterangan</TableHead>
@@ -453,9 +469,9 @@ Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="pagi">Pagi</SelectItem>
-                          <SelectItem value="siang">Siang</SelectItem>
-                          <SelectItem value="malam">Malam</SelectItem>
+                          <SelectItem value="pagi">Pagi ({SHIFT_SCHEDULES.pagi.start}-{SHIFT_SCHEDULES.pagi.end})</SelectItem>
+                          <SelectItem value="siang">Siang ({SHIFT_SCHEDULES.siang.start}-{SHIFT_SCHEDULES.siang.end})</SelectItem>
+                          <SelectItem value="malam">Malam ({SHIFT_SCHEDULES.malam.start}-{SHIFT_SCHEDULES.malam.end})</SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>
@@ -480,12 +496,26 @@ Total: Hadir ${hadir}, Cuti ${cuti}, Alpha ${alpha}`;
                       />
                     </TableCell>
                     <TableCell>
-                      <span className={row.latenessMinutes > 0 ? "text-red-600 font-medium" : ""}>
+                      <span 
+                        className={row.latenessMinutes > 0 ? "text-red-600 font-medium" : "text-gray-600"}
+                        title={row.latenessMinutes > 0 ? `Terlambat ${row.latenessMinutes} menit dari shift ${row.shift}` : "Tepat waktu"}
+                      >
                         {row.latenessMinutes}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <span className={row.overtimeMinutes > 0 ? "text-blue-600 font-medium" : ""}>
+                      <span 
+                        className={row.earlyArrivalMinutes > 0 ? "text-green-600 font-medium" : "text-gray-600"}
+                        title={row.earlyArrivalMinutes > 0 ? `Datang lebih awal ${row.earlyArrivalMinutes} menit sebelum shift ${row.shift}` : "Datang tepat waktu"}
+                      >
+                        {row.earlyArrivalMinutes}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span 
+                        className={row.overtimeMinutes > 0 ? "text-blue-600 font-medium" : "text-gray-600"}
+                        title={row.overtimeMinutes > 0 ? `Lembur ${row.overtimeMinutes} menit setelah shift ${row.shift}` : "Selesai tepat waktu"}
+                      >
                         {row.overtimeMinutes}
                       </span>
                     </TableCell>
