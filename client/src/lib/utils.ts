@@ -131,3 +131,106 @@ export function formatDateRange(startMonth: string, endMonth: string): string {
   
   return `${formatIndonesianMonth(startMonth)} - ${formatIndonesianMonth(endMonth)}`;
 }
+
+// Format date in Indonesian business format (DD/MM/YYYY)
+export function formatIndonesianDate(date: string | Date | null | undefined): string {
+  if (!date) return "—";
+  
+  try {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    if (isNaN(dateObj.getTime())) return "—";
+    
+    return dateObj.toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  } catch (error) {
+    console.warn('Error formatting Indonesian date:', error);
+    return "—";
+  }
+}
+
+// Format time in HH:MM format
+export function formatTime(time: string | null | undefined): string {
+  if (!time) return "—";
+  
+  // If time is already in HH:MM format
+  if (time.match(/^\d{2}:\d{2}$/)) {
+    return time;
+  }
+  
+  try {
+    const timeObj = new Date(`2000-01-01T${time}:00`);
+    if (isNaN(timeObj.getTime())) return "—";
+    
+    return timeObj.toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+  } catch (error) {
+    console.warn('Error formatting time:', error);
+    return time;
+  }
+}
+
+// Calculate percentage
+export function formatPercentage(value: number, total: number): string {
+  if (!total || total === 0) return "0%";
+  const percentage = (value / total) * 100;
+  return `${percentage.toFixed(1)}%`;
+}
+
+// Format profit/loss with color indication
+export function formatProfitLoss(income: number, expenses: number): { value: string; isProfit: boolean; amount: number } {
+  const profit = income - expenses;
+  return {
+    value: formatRupiah(Math.abs(profit)),
+    isProfit: profit >= 0,
+    amount: profit
+  };
+}
+
+// Format compact currency (e.g., 1.2M, 500K)
+export function formatCompactRupiah(amount: string | number | null | undefined): string {
+  if (!amount && amount !== 0) return "Rp 0";
+  
+  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(numAmount)) return "Rp 0";
+  
+  if (numAmount >= 1000000) {
+    return `Rp ${(numAmount / 1000000).toFixed(1)}M`;
+  } else if (numAmount >= 1000) {
+    return `Rp ${(numAmount / 1000).toFixed(0)}K`;
+  } else {
+    return formatRupiah(numAmount);
+  }
+}
+
+// Parse income/expense details from JSON string
+export function parseDetailsJson(jsonString: string | null | undefined): Array<{description: string, amount: number}> {
+  if (!jsonString) return [];
+  
+  try {
+    const parsed = JSON.parse(jsonString);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn('Error parsing details JSON:', error);
+    return [];
+  }
+}
+
+// Format details summary (first 2 items + count)
+export function formatDetailsSummary(jsonString: string | null | undefined): string {
+  const details = parseDetailsJson(jsonString);
+  if (details.length === 0) return "—";
+  
+  const first = details[0]?.description || "";
+  if (details.length === 1) return first;
+  
+  const second = details[1]?.description || "";
+  if (details.length === 2) return `${first}, ${second}`;
+  
+  return `${first}, ${second} (+${details.length - 2} lainnya)`;
+}

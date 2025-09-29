@@ -11,11 +11,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { FileDown, FileSpreadsheet, TrendingUp, Upload, Loader2, Eye, Clock, Gauge, CreditCard, Calculator, Trash2, User, Calendar, Filter } from "lucide-react";
+import { FileDown, FileSpreadsheet, TrendingUp, Upload, Loader2, Eye, Clock, Gauge, CreditCard, Calculator, Trash2, User, Calendar, Filter, Settings2, ArrowUpDown, ArrowUp, ArrowDown, MoreHorizontal, ChevronDown, Columns3, BarChart3, TrendingDown, CheckSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
-import { formatRupiah, formatLiters } from "@/lib/utils";
+import { formatRupiah, formatLiters, formatIndonesianDate, formatTime, formatPercentage, formatProfitLoss, formatCompactRupiah, formatDetailsSummary, parseDetailsJson } from "@/lib/utils";
 import { type Sales } from "@shared/schema";
 import { SyncButton } from "@/components/ui/sync-button";
 import { z } from "zod";
@@ -25,6 +25,86 @@ function getUserNameFromId(userId: string | null, allUsers: any[] = []): string 
   if (!userId) return 'Staff Tidak Diketahui';
   const user = allUsers.find(u => u.id === userId);
   return user?.name || 'Staff Tidak Diketahui';
+}
+
+// Table density type
+type TableDensity = 'compact' | 'comfortable' | 'expanded';
+
+// Column visibility state interface
+interface ColumnVisibility {
+  date: boolean;
+  staff: boolean;
+  shift: boolean;
+  times: boolean;
+  meterReadings: boolean;
+  liters: boolean;
+  transactions: boolean;
+  totalSales: boolean;
+  paymentBreakdown: boolean;
+  incomeExpenses: boolean;
+  profitLoss: boolean;
+  averageTicket: boolean;
+  details: boolean;
+  performance: boolean;
+  actions: boolean;
+}
+
+// Default column visibility
+const DEFAULT_COLUMNS: ColumnVisibility = {
+  date: true,
+  staff: true,
+  shift: true,
+  times: false,
+  meterReadings: true,
+  liters: true,
+  transactions: true,
+  totalSales: true,
+  paymentBreakdown: true,
+  incomeExpenses: true,
+  profitLoss: true,
+  averageTicket: false,
+  details: false,
+  performance: false,
+  actions: true,
+};
+
+// Sorting state interface
+interface SortState {
+  column: keyof Sales | null;
+  direction: 'asc' | 'desc' | null;
+}
+
+// Sort sales records
+function sortSalesRecords(records: Sales[], sortState: SortState): Sales[] {
+  if (!sortState.column || !sortState.direction) {
+    return records;
+  }
+
+  return [...records].sort((a, b) => {
+    let aValue: any = a[sortState.column!];
+    let bValue: any = b[sortState.column!];
+
+    // Handle special cases
+    if (sortState.column === 'date' || sortState.column === 'createdAt') {
+      aValue = new Date(aValue || 0).getTime();
+      bValue = new Date(bValue || 0).getTime();
+    } else if (typeof aValue === 'string' && typeof bValue === 'string') {
+      aValue = aValue.toLowerCase();
+      bValue = bValue.toLowerCase();
+    } else if (aValue === null || aValue === undefined) {
+      aValue = 0;
+    } else if (bValue === null || bValue === undefined) {
+      bValue = 0;
+    }
+
+    if (aValue < bValue) {
+      return sortState.direction === 'asc' ? -1 : 1;
+    }
+    if (aValue > bValue) {
+      return sortState.direction === 'asc' ? 1 : -1;
+    }
+    return 0;
+  });
 }
 
 // Text Import Modal Component
@@ -1118,6 +1198,12 @@ function SalesRecordsTable({
   allUsers: any[]; 
   storeLabel: string;
 }) {
+  const [density, setDensity] = useState<TableDensity>('comfortable');
+  const [columns, setColumns] = useState<ColumnVisibility>(DEFAULT_COLUMNS);
+  const [sortState, setSortState] = useState<SortState>({ column: null, direction: null });
+  const [selectedRecords, setSelectedRecords] = useState<Set<string>>(new Set());
+  const [showControls, setShowControls] = useState(false);
+
   if (isLoading) {
     return (
       <Card>
@@ -1144,63 +1230,683 @@ function SalesRecordsTable({
     );
   }
 
+  // Sort records
+  const sortedRecords = sortSalesRecords(records, sortState);
+
+  // Handle column sorting
+  const handleSort = (column: keyof Sales) => {
+    setSortState(current => {
+      if (current.column === column) {
+        if (current.direction === 'asc') {
+          return { column, direction: 'desc' };
+        } else if (current.direction === 'desc') {
+          return { column: null, direction: null };
+        }
+      }
+      return { column, direction: 'asc' };
+    });
+  };
+
+  // Handle record selection
+  const toggleRecord = (id: string) => {
+    const newSelected = new Set(selectedRecords);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedRecords(newSelected);
+  };
+
+  const toggleAll = () => {
+    if (selectedRecords.size === records.length) {
+      setSelectedRecords(new Set());
+    } else {
+      setSelectedRecords(new Set(records.map(r => r.id)));
+    }
+  };
+
+  // Get cell size classes based on density
+  const getCellClasses = () => {
+    switch (density) {
+      case 'compact': return 'px-2 py-1 text-sm';
+      case 'expanded': return 'px-4 py-4';
+      default: return 'px-3 py-2';
+    }
+  };
+
+  // Render sort icon
+  const renderSortIcon = (column: keyof Sales) => {
+    if (sortState.column !== column) {
+      return <ArrowUpDown className="h-4 w-4 opacity-30" />;
+    }
+    return sortState.direction === 'asc' ? 
+      <ArrowUp className="h-4 w-4" /> : 
+      <ArrowDown className="h-4 w-4" />;
+  };
+
+  // Calculate business metrics for display
+  const getBusinessMetrics = (record: Sales) => {
+    const totalPayments = (Number(record.totalCash) || 0) + (Number(record.totalQris) || 0);
+    const cashPercentage = totalPayments > 0 ? ((Number(record.totalCash) || 0) / totalPayments) * 100 : 0;
+    const qrisPercentage = totalPayments > 0 ? ((Number(record.totalQris) || 0) / totalPayments) * 100 : 0;
+    
+    const income = Number(record.totalIncome) || 0;
+    const expenses = Number(record.totalExpenses) || 0;
+    const profitLoss = formatProfitLoss(income, expenses);
+    
+    const avgTicket = (Number(record.transactions) || 0) > 0 ? 
+      (Number(record.totalSales) || 0) / (Number(record.transactions) || 1) : 0;
+    
+    return {
+      cashPercentage,
+      qrisPercentage,
+      profitLoss,
+      avgTicket,
+      hasIncompleteData: !record.checkIn || !record.checkOut || !record.meterStart || !record.meterEnd
+    };
+  };
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5" />
-          Sales Records - {storeLabel}
-        </CardTitle>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            Sales Records - {storeLabel}
+          </CardTitle>
+          
+          {/* Table Controls */}
+          <div className="flex items-center gap-2">
+            {selectedRecords.size > 0 && (
+              <Badge variant="secondary" className="mr-2">
+                {selectedRecords.size} selected
+              </Badge>
+            )}
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowControls(!showControls)}
+              data-testid="button-table-controls"
+            >
+              <Settings2 className="h-4 w-4 mr-1" />
+              {showControls ? 'Hide' : 'Show'} Controls
+            </Button>
+          </div>
+        </div>
+        
+        {/* Table Controls Panel */}
+        {showControls && (
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg mt-4">
+            {/* Density Control */}
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium">Density:</Label>
+              <Select value={density} onValueChange={(value: TableDensity) => setDensity(value)}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="compact">Compact</SelectItem>
+                  <SelectItem value="comfortable">Comfortable</SelectItem>
+                  <SelectItem value="expanded">Expanded</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Column Visibility */}
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium">Columns:</Label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setColumns(DEFAULT_COLUMNS)}
+                data-testid="button-reset-columns"
+              >
+                <Columns3 className="h-4 w-4 mr-1" />
+                Reset
+              </Button>
+            </div>
+          </div>
+        )}
       </CardHeader>
-      <CardContent>
+      
+      <CardContent className="p-0">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Staff</TableHead>
-                <TableHead>Shift</TableHead>
-                <TableHead>Total Sales</TableHead>
-                <TableHead>Cash</TableHead>
-                <TableHead>QRIS</TableHead>
-                <TableHead>Liters</TableHead>
-                <TableHead>Actions</TableHead>
+              <TableRow className="hover:bg-transparent">
+                {/* Selection Column */}
+                <TableHead className={getCellClasses()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedRecords.size === records.length && records.length > 0}
+                    onChange={toggleAll}
+                    className="rounded"
+                    data-testid="checkbox-select-all"
+                  />
+                </TableHead>
+                
+                {/* Date Column */}
+                {columns.date && (
+                  <TableHead 
+                    className={`${getCellClasses()} cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800`}
+                    onClick={() => handleSort('date')}
+                    data-testid="header-date"
+                  >
+                    <div className="flex items-center gap-1">
+                      Date
+                      {renderSortIcon('date')}
+                    </div>
+                  </TableHead>
+                )}
+                
+                {/* Staff Column */}
+                {columns.staff && (
+                  <TableHead 
+                    className={`${getCellClasses()} cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800`}
+                    onClick={() => handleSort('userId')}
+                    data-testid="header-staff"
+                  >
+                    <div className="flex items-center gap-1">
+                      <User className="h-4 w-4" />
+                      Staff
+                      {renderSortIcon('userId')}
+                    </div>
+                  </TableHead>
+                )}
+                
+                {/* Shift Column */}
+                {columns.shift && (
+                  <TableHead 
+                    className={`${getCellClasses()} cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800`}
+                    onClick={() => handleSort('shift')}
+                    data-testid="header-shift"
+                  >
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      Shift
+                      {renderSortIcon('shift')}
+                    </div>
+                  </TableHead>
+                )}
+                
+                {/* Check-in/Out Times */}
+                {columns.times && (
+                  <TableHead className={getCellClasses()} data-testid="header-times">
+                    <div className="flex items-center gap-1">
+                      <Calendar className="h-4 w-4" />
+                      Times
+                    </div>
+                  </TableHead>
+                )}
+                
+                {/* Meter Readings */}
+                {columns.meterReadings && (
+                  <TableHead className={getCellClasses()} data-testid="header-meter-readings">
+                    <div className="flex items-center gap-1">
+                      <Gauge className="h-4 w-4" />
+                      Meter Readings
+                    </div>
+                  </TableHead>
+                )}
+                
+                {/* Liters Column */}
+                {columns.liters && (
+                  <TableHead 
+                    className={`${getCellClasses()} cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800`}
+                    onClick={() => handleSort('totalLiters')}
+                    data-testid="header-liters"
+                  >
+                    <div className="flex items-center gap-1">
+                      Liters
+                      {renderSortIcon('totalLiters')}
+                    </div>
+                  </TableHead>
+                )}
+                
+                {/* Transactions Column */}
+                {columns.transactions && (
+                  <TableHead 
+                    className={`${getCellClasses()} cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800`}
+                    onClick={() => handleSort('transactions')}
+                    data-testid="header-transactions"
+                  >
+                    <div className="flex items-center gap-1">
+                      <BarChart3 className="h-4 w-4" />
+                      Transactions
+                      {renderSortIcon('transactions')}
+                    </div>
+                  </TableHead>
+                )}
+                
+                {/* Total Sales Column */}
+                {columns.totalSales && (
+                  <TableHead 
+                    className={`${getCellClasses()} cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800`}
+                    onClick={() => handleSort('totalSales')}
+                    data-testid="header-total-sales"
+                  >
+                    <div className="flex items-center gap-1">
+                      <TrendingUp className="h-4 w-4" />
+                      Total Sales
+                      {renderSortIcon('totalSales')}
+                    </div>
+                  </TableHead>
+                )}
+                
+                {/* Payment Breakdown */}
+                {columns.paymentBreakdown && (
+                  <TableHead className={getCellClasses()} data-testid="header-payment-breakdown">
+                    <div className="flex items-center gap-1">
+                      <CreditCard className="h-4 w-4" />
+                      Payment Breakdown
+                    </div>
+                  </TableHead>
+                )}
+                
+                {/* Income & Expenses */}
+                {columns.incomeExpenses && (
+                  <TableHead className={getCellClasses()} data-testid="header-income-expenses">
+                    <div className="flex items-center gap-1">
+                      <Calculator className="h-4 w-4" />
+                      Income / Expenses
+                    </div>
+                  </TableHead>
+                )}
+                
+                {/* Profit/Loss */}
+                {columns.profitLoss && (
+                  <TableHead className={getCellClasses()} data-testid="header-profit-loss">
+                    <div className="flex items-center gap-1">
+                      <TrendingUp className="h-4 w-4" />
+                      Profit/Loss
+                    </div>
+                  </TableHead>
+                )}
+                
+                {/* Average Ticket */}
+                {columns.averageTicket && (
+                  <TableHead 
+                    className={`${getCellClasses()} cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800`}
+                    onClick={() => handleSort('averageTicket')}
+                    data-testid="header-average-ticket"
+                  >
+                    <div className="flex items-center gap-1">
+                      Avg Ticket
+                      {renderSortIcon('averageTicket')}
+                    </div>
+                  </TableHead>
+                )}
+                
+                {/* Details Summary */}
+                {columns.details && (
+                  <TableHead className={getCellClasses()} data-testid="header-details">
+                    Details Summary
+                  </TableHead>
+                )}
+                
+                {/* Performance Indicators */}
+                {columns.performance && (
+                  <TableHead className={getCellClasses()} data-testid="header-performance">
+                    Performance
+                  </TableHead>
+                )}
+                
+                {/* Actions Column */}
+                {columns.actions && (
+                  <TableHead className={getCellClasses()} data-testid="header-actions">
+                    Actions
+                  </TableHead>
+                )}
               </TableRow>
             </TableHeader>
+            
             <TableBody>
-              {records.map((record) => (
-                <TableRow key={record.id}>
-                  <TableCell>
-                    {new Date(record.date || record.createdAt || '').toLocaleDateString('id-ID')}
-                  </TableCell>
-                  <TableCell>
-                    {getUserNameFromId(record.userId, allUsers)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="capitalize">
-                      {record.shift || "—"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-semibold text-green-700">
-                    {formatRupiah(record.totalSales)}
-                  </TableCell>
-                  <TableCell className="text-orange-600">
-                    {formatRupiah(record.totalCash || 0)}
-                  </TableCell>
-                  <TableCell className="text-blue-600">
-                    {formatRupiah(record.totalQris || 0)}
-                  </TableCell>
-                  <TableCell className="text-purple-600">
-                    {formatLiters(record.totalLiters)} L
-                  </TableCell>
-                  <TableCell>
-                    <SalesDetailModal record={record} />
-                  </TableCell>
-                </TableRow>
-              ))}
+              {sortedRecords.map((record) => {
+                const metrics = getBusinessMetrics(record);
+                const isSelected = selectedRecords.has(record.id);
+                
+                return (
+                  <TableRow 
+                    key={record.id} 
+                    className={`
+                      ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : ''}
+                      ${metrics.hasIncompleteData ? 'border-l-4 border-yellow-400' : ''}
+                      hover:bg-gray-50 dark:hover:bg-gray-800
+                    `}
+                    data-testid={`row-sales-${record.id}`}
+                  >
+                    {/* Selection Cell */}
+                    <TableCell className={getCellClasses()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleRecord(record.id)}
+                        className="rounded"
+                        data-testid={`checkbox-select-${record.id}`}
+                      />
+                    </TableCell>
+                    
+                    {/* Date Cell */}
+                    {columns.date && (
+                      <TableCell className={getCellClasses()} data-testid={`cell-date-${record.id}`}>
+                        <div className="font-medium">
+                          {formatIndonesianDate(record.date || record.createdAt)}
+                        </div>
+                        {density === 'expanded' && (
+                          <div className="text-xs text-gray-500">
+                            Created: {formatTime(new Date(record.createdAt || '').toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }))}
+                          </div>
+                        )}
+                      </TableCell>
+                    )}
+                    
+                    {/* Staff Cell */}
+                    {columns.staff && (
+                      <TableCell className={getCellClasses()} data-testid={`cell-staff-${record.id}`}>
+                        <div className="font-medium">
+                          {getUserNameFromId(record.userId, allUsers)}
+                        </div>
+                        {density === 'expanded' && record.userId && (
+                          <div className="text-xs text-gray-500">
+                            ID: {record.userId.slice(0, 8)}...
+                          </div>
+                        )}
+                      </TableCell>
+                    )}
+                    
+                    {/* Shift Cell */}
+                    {columns.shift && (
+                      <TableCell className={getCellClasses()} data-testid={`cell-shift-${record.id}`}>
+                        <Badge 
+                          variant="outline" 
+                          className={`capitalize ${
+                            record.shift === 'pagi' ? 'border-orange-300 text-orange-700 bg-orange-50' :
+                            record.shift === 'siang' ? 'border-blue-300 text-blue-700 bg-blue-50' :
+                            record.shift === 'malam' ? 'border-purple-300 text-purple-700 bg-purple-50' :
+                            ''
+                          }`}
+                        >
+                          {record.shift || "—"}
+                        </Badge>
+                      </TableCell>
+                    )}
+                    
+                    {/* Times Cell */}
+                    {columns.times && (
+                      <TableCell className={getCellClasses()} data-testid={`cell-times-${record.id}`}>
+                        <div className="text-sm space-y-1">
+                          <div className="flex items-center gap-1">
+                            <span className="text-green-600">▶</span>
+                            {formatTime(record.checkIn)}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-red-600">■</span>
+                            {formatTime(record.checkOut)}
+                          </div>
+                        </div>
+                      </TableCell>
+                    )}
+                    
+                    {/* Meter Readings Cell */}
+                    {columns.meterReadings && (
+                      <TableCell className={getCellClasses()} data-testid={`cell-meter-readings-${record.id}`}>
+                        <div className="text-sm space-y-1">
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Start:</span>
+                            <span className="font-mono">{record.meterStart || "—"}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">End:</span>
+                            <span className="font-mono">{record.meterEnd || "—"}</span>
+                          </div>
+                          {record.meterStart && record.meterEnd && density === 'expanded' && (
+                            <div className="text-xs text-blue-600 border-t pt-1">
+                              Diff: {(Number(record.meterEnd) - Number(record.meterStart)).toFixed(3)}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
+                    
+                    {/* Liters Cell */}
+                    {columns.liters && (
+                      <TableCell className={`${getCellClasses()} text-right`} data-testid={`cell-liters-${record.id}`}>
+                        <div className="font-semibold text-purple-700">
+                          {formatLiters(record.totalLiters)} L
+                        </div>
+                        {density === 'expanded' && record.totalLiters && (
+                          <div className="text-xs text-gray-500">
+                            ≈ {(Number(record.totalLiters) * 0.264172).toFixed(2)} gallons
+                          </div>
+                        )}
+                      </TableCell>
+                    )}
+                    
+                    {/* Transactions Cell */}
+                    {columns.transactions && (
+                      <TableCell className={`${getCellClasses()} text-center`} data-testid={`cell-transactions-${record.id}`}>
+                        <div className="font-semibold text-indigo-700">
+                          {record.transactions || 0}
+                        </div>
+                        {density === 'expanded' && (
+                          <div className="text-xs text-gray-500">
+                            transactions
+                          </div>
+                        )}
+                      </TableCell>
+                    )}
+                    
+                    {/* Total Sales Cell */}
+                    {columns.totalSales && (
+                      <TableCell className={`${getCellClasses()} text-right`} data-testid={`cell-total-sales-${record.id}`}>
+                        <div className="font-bold text-green-700">
+                          {density === 'compact' ? formatCompactRupiah(record.totalSales) : formatRupiah(record.totalSales)}
+                        </div>
+                      </TableCell>
+                    )}
+                    
+                    {/* Payment Breakdown Cell */}
+                    {columns.paymentBreakdown && (
+                      <TableCell className={getCellClasses()} data-testid={`cell-payment-breakdown-${record.id}`}>
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="text-orange-600 font-medium">
+                              {density === 'compact' ? 'Cash' : 'Cash:'}
+                            </span>
+                            <span className="font-semibold">
+                              {density === 'compact' ? formatCompactRupiah(record.totalCash || 0) : formatRupiah(record.totalCash || 0)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-blue-600 font-medium">
+                              {density === 'compact' ? 'QRIS' : 'QRIS:'}
+                            </span>
+                            <span className="font-semibold">
+                              {density === 'compact' ? formatCompactRupiah(record.totalQris || 0) : formatRupiah(record.totalQris || 0)}
+                            </span>
+                          </div>
+                          {density !== 'compact' && (
+                            <div className="text-xs text-gray-500 pt-1 border-t flex justify-between">
+                              <span>Cash: {metrics.cashPercentage.toFixed(0)}%</span>
+                              <span>QRIS: {metrics.qrisPercentage.toFixed(0)}%</span>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
+                    
+                    {/* Income & Expenses Cell */}
+                    {columns.incomeExpenses && (
+                      <TableCell className={getCellClasses()} data-testid={`cell-income-expenses-${record.id}`}>
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="text-green-600 text-sm">
+                              Income:
+                            </span>
+                            <span className="font-medium text-green-700">
+                              {density === 'compact' ? formatCompactRupiah(record.totalIncome || 0) : formatRupiah(record.totalIncome || 0)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-red-600 text-sm">
+                              Expenses:
+                            </span>
+                            <span className="font-medium text-red-700">
+                              {density === 'compact' ? formatCompactRupiah(record.totalExpenses || 0) : formatRupiah(record.totalExpenses || 0)}
+                            </span>
+                          </div>
+                        </div>
+                      </TableCell>
+                    )}
+                    
+                    {/* Profit/Loss Cell */}
+                    {columns.profitLoss && (
+                      <TableCell className={`${getCellClasses()} text-right`} data-testid={`cell-profit-loss-${record.id}`}>
+                        <div className={`font-bold ${
+                          metrics.profitLoss.isProfit ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {metrics.profitLoss.isProfit ? '+' : '-'}
+                          {density === 'compact' ? formatCompactRupiah(metrics.profitLoss.value) : metrics.profitLoss.value}
+                        </div>
+                        {density === 'expanded' && (
+                          <div className={`text-xs ${
+                            metrics.profitLoss.isProfit ? 'text-green-500' : 'text-red-500'
+                          }`}>
+                            {metrics.profitLoss.isProfit ? 'Profit' : 'Loss'}
+                          </div>
+                        )}
+                      </TableCell>
+                    )}
+                    
+                    {/* Average Ticket Cell */}
+                    {columns.averageTicket && (
+                      <TableCell className={`${getCellClasses()} text-right`} data-testid={`cell-average-ticket-${record.id}`}>
+                        <div className="font-medium text-indigo-700">
+                          {density === 'compact' ? formatCompactRupiah(metrics.avgTicket) : formatRupiah(metrics.avgTicket)}
+                        </div>
+                        {density === 'expanded' && (
+                          <div className="text-xs text-gray-500">
+                            per transaction
+                          </div>
+                        )}
+                      </TableCell>
+                    )}
+                    
+                    {/* Details Summary Cell */}
+                    {columns.details && (
+                      <TableCell className={getCellClasses()} data-testid={`cell-details-${record.id}`}>
+                        <div className="space-y-1 max-w-48">
+                          {record.expenseDetails && (
+                            <div className="text-xs">
+                              <span className="text-red-600 font-medium">Expenses:</span>
+                              <div className="text-gray-600 truncate">
+                                {formatDetailsSummary(record.expenseDetails)}
+                              </div>
+                            </div>
+                          )}
+                          {record.incomeDetails && (
+                            <div className="text-xs">
+                              <span className="text-green-600 font-medium">Income:</span>
+                              <div className="text-gray-600 truncate">
+                                {formatDetailsSummary(record.incomeDetails)}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
+                    
+                    {/* Performance Indicators Cell */}
+                    {columns.performance && (
+                      <TableCell className={getCellClasses()} data-testid={`cell-performance-${record.id}`}>
+                        <div className="flex flex-col gap-1">
+                          {/* Completeness Indicator */}
+                          <Badge 
+                            variant={metrics.hasIncompleteData ? "destructive" : "secondary"}
+                            className="text-xs"
+                          >
+                            {metrics.hasIncompleteData ? 'Incomplete' : 'Complete'}
+                          </Badge>
+                          
+                          {/* Performance Score (simple calculation) */}
+                          {density === 'expanded' && (
+                            <div className="text-xs space-y-1">
+                              <div className="flex items-center gap-1">
+                                <TrendingUp className="h-3 w-3 text-green-600" />
+                                <span className="text-green-600">Sales</span>
+                              </div>
+                              {metrics.profitLoss.isProfit && (
+                                <div className="flex items-center gap-1">
+                                  <TrendingUp className="h-3 w-3 text-blue-600" />
+                                  <span className="text-blue-600">Profitable</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
+                    
+                    {/* Actions Cell */}
+                    {columns.actions && (
+                      <TableCell className={getCellClasses()} data-testid={`cell-actions-${record.id}`}>
+                        <div className="flex items-center gap-1">
+                          <SalesDetailModal record={record} />
+                          
+                          {density !== 'compact' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              data-testid={`button-more-actions-${record.id}`}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
+        
+        {/* Table Summary */}
+        {density === 'expanded' && records.length > 0 && (
+          <div className="border-t p-4 bg-gray-50 dark:bg-gray-800">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <div className="font-medium text-gray-700 dark:text-gray-300">Total Records</div>
+                <div className="text-lg font-bold">{records.length}</div>
+              </div>
+              <div>
+                <div className="font-medium text-gray-700 dark:text-gray-300">Total Sales</div>
+                <div className="text-lg font-bold text-green-600">
+                  {formatRupiah(records.reduce((sum, r) => sum + (Number(r.totalSales) || 0), 0))}
+                </div>
+              </div>
+              <div>
+                <div className="font-medium text-gray-700 dark:text-gray-300">Total Liters</div>
+                <div className="text-lg font-bold text-purple-600">
+                  {formatLiters(records.reduce((sum, r) => sum + (Number(r.totalLiters) || 0), 0))} L
+                </div>
+              </div>
+              <div>
+                <div className="font-medium text-gray-700 dark:text-gray-300">Avg Ticket</div>
+                <div className="text-lg font-bold text-indigo-600">
+                  {formatRupiah(
+                    records.reduce((sum, r) => sum + (Number(r.totalSales) || 0), 0) / 
+                    Math.max(records.reduce((sum, r) => sum + (Number(r.transactions) || 0), 0), 1)
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
