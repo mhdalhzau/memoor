@@ -1668,6 +1668,51 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.put("/api/sales/:id", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi', 'staff'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Get the sales record first to check store access
+      const existingSales = await storage.getSales(req.params.id);
+      if (!existingSales) return res.status(404).json({ message: "Sales record not found" });
+      
+      // Check store authorization for non-admins
+      if (req.user.role !== 'administrasi') {
+        if (!(await hasStoreAccess(req.user, existingSales.storeId))) {
+          return res.status(403).json({ message: "Cannot update sales records from stores you don't have access to" });
+        }
+      }
+      
+      // Validate the update data using insertSalesSchema but make all fields optional
+      const updateSchema = insertSalesSchema.partial();
+      const validatedData = updateSchema.parse(req.body);
+      
+      // Update the sales record
+      const updatedSales = await storage.updateSales(req.params.id, validatedData);
+      
+      if (!updatedSales) {
+        return res.status(404).json({ message: "Sales record not found" });
+      }
+      
+      // Sync update to Google Sheets if configured
+      const sheetsService = getGoogleSheetsService();
+      if (sheetsService) {
+        try {
+          await sheetsService.updateSalesData(updatedSales);
+        } catch (error) {
+          console.error('Failed to update in Google Sheets:', error);
+          // Don't fail the main operation if sheets sync fails
+        }
+      }
+      
+      res.json(updatedSales);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   app.delete("/api/sales/:id", async (req, res) => {
     try {
       if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
