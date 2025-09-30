@@ -367,18 +367,31 @@ export default function CashflowContent() {
     ? parseInt(activeTab.replace("store-", ""))
     : undefined;
 
-  // Fetch sales records with status "diterima" for Transfer Rekening
+  // Fetch sales records with status "diterima" for Transfer Rekening (1 month)
   const { data: receivedSales = [] } = useQuery<Sales[]>({
-    queryKey: ["/api/sales/received", { storeId: currentStoreId, date: watchDate }],
+    queryKey: ["/api/sales/received", { storeId: currentStoreId }],
     queryFn: async () => {
-      if (!currentStoreId || !watchDate) return [];
+      if (!currentStoreId) return [];
+      // Get sales from last 30 days with status "diterima"
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+      
       const res = await apiRequest(
         "GET",
-        `/api/sales?storeId=${currentStoreId}&status=diterima&date=${watchDate}`
+        `/api/sales?storeId=${currentStoreId}`
       );
-      return await res.json();
+      const allSales = await res.json();
+      
+      // Filter for last 30 days and status "diterima" only (exclude "none")
+      return allSales.filter((sale: Sales) => {
+        const saleDate = new Date(sale.date);
+        const isWithinMonth = saleDate >= startDate && saleDate <= endDate;
+        const isReceived = sale.status === 'diterima';
+        return isWithinMonth && isReceived;
+      });
     },
-    enabled: !!currentStoreId && !!watchDate && isTransferRekening(watchType),
+    enabled: !!currentStoreId && isTransferRekening(watchType),
   });
 
   // Calculate total transfer amount from selected sales records
@@ -397,10 +410,10 @@ export default function CashflowContent() {
     }
   }, [selectedSalesIds, receivedSales, watchType, form]);
 
-  // Reset selected sales when date or type changes
+  // Reset selected sales when type changes
   useEffect(() => {
     setSelectedSalesIds([]);
-  }, [watchDate, watchType]);
+  }, [watchType]);
 
   const { data: cashflowRecords, isLoading } = useQuery<Cashflow[]>({
     queryKey: ["/api/cashflow", { storeId: currentStoreId }],
@@ -969,15 +982,17 @@ export default function CashflowContent() {
                             {receivedSales.length > 0 && (
                               <div className="p-3 border border-blue-200 rounded-lg bg-blue-50/50 space-y-3">
                                 <h5 className="font-medium text-blue-800 text-sm">
-                                  Pilih Sales Record yang Diterima ({new Date(watchDate).toLocaleDateString('id-ID')})
+                                  Pilih Sales Record yang Diterima (1 Bulan Terakhir - {receivedSales.length} record)
                                 </h5>
-                                <div className="space-y-2 max-h-40 overflow-y-auto">
-                                  {receivedSales.map((sales) => (
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                  {receivedSales
+                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                    .map((sales) => (
                                     <div
                                       key={sales.id}
                                       className="flex items-center justify-between p-2 bg-white rounded border border-blue-100"
                                     >
-                                      <div className="flex items-center space-x-3">
+                                      <div className="flex items-center space-x-3 flex-1">
                                         <Checkbox
                                           id={`sales-${sales.id}`}
                                           checked={selectedSalesIds.includes(sales.id)}
@@ -997,8 +1012,12 @@ export default function CashflowContent() {
                                           {sales.shift || 'N/A'} - {formatRupiah(sales.totalCash || 0)}
                                         </label>
                                       </div>
-                                      <span className="text-xs text-gray-500">
-                                        {new Date(sales.date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                      <span className="text-xs text-gray-500 ml-2">
+                                        {new Date(sales.date).toLocaleDateString('id-ID', { 
+                                          day: '2-digit', 
+                                          month: 'short',
+                                          year: 'numeric'
+                                        })}
                                       </span>
                                     </div>
                                   ))}
@@ -1019,7 +1038,7 @@ export default function CashflowContent() {
                             {receivedSales.length === 0 && (
                               <div className="p-3 border border-gray-200 rounded-lg bg-gray-50 text-center">
                                 <p className="text-sm text-gray-600">
-                                  Tidak ada sales record dengan status "diterima" pada tanggal {new Date(watchDate).toLocaleDateString('id-ID')}
+                                  Tidak ada sales record dengan status "diterima" dalam 1 bulan terakhir
                                 </p>
                               </div>
                             )}
