@@ -100,6 +100,7 @@ export const sales = mysqlTable("sales", {
   checkOut: text("check_out"),
   // One submission per day validation
   submissionDate: text("submission_date"), // Format: YYYY-MM-DD-userId-storeId for uniqueness
+  status: text("status").default("none"), // 'none', 'diterima', 'disetor'
   createdAt: timestamp("created_at").defaultNow(),
 });
 
