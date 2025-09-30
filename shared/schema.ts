@@ -559,6 +559,11 @@ export const insertInventoryTransactionSchema = createInsertSchema(inventoryTran
   createdAt: true,
 });
 
+// Bulk delete schema
+export const bulkIdsSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1, "At least one ID is required")
+});
+
 // Types for inventory management tables
 export type Supplier = typeof suppliers.$inferSelect;
 export type InsertSupplier = z.infer<typeof insertSupplierSchema>;

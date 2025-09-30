@@ -26,7 +26,8 @@ import {
   insertSupplierSchema,
   insertProductSchema,
   insertInventorySchema,
-  insertInventoryTransactionSchema
+  insertInventoryTransactionSchema,
+  bulkIdsSchema
 } from "@shared/schema";
 import { calculateShiftOvertime, formatOvertimeDuration, detectShiftFromTime } from "@shared/overtime-utils";
 import { z } from "zod";
@@ -1749,6 +1750,61 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Bulk delete sales endpoint
+  app.post("/api/sales/bulk-delete", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Only managers and administrators can bulk delete sales records" });
+      }
+      
+      // Validate request body
+      const validation = bulkIdsSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: validation.error.errors });
+      }
+      
+      const { ids } = validation.data;
+      
+      // Get user's accessible stores
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      
+      if (accessibleStoreIds.length === 0) {
+        return res.status(403).json({ message: "You don't have access to any stores" });
+      }
+      
+      // Verify all sales records belong to user's accessible stores
+      const salesRecords = await Promise.all(ids.map(id => storage.getSales(id)));
+      
+      // Check if any records don't exist
+      const missingIds = ids.filter((id, index) => !salesRecords[index]);
+      if (missingIds.length > 0) {
+        return res.status(404).json({ message: "Some sales records not found", missingIds });
+      }
+      
+      // Check store access for non-admins
+      if (req.user.role !== 'administrasi') {
+        const unauthorizedRecords = salesRecords.filter(record => 
+          record && !accessibleStoreIds.includes(record.storeId)
+        );
+        
+        if (unauthorizedRecords.length > 0) {
+          return res.status(403).json({ 
+            message: "Cannot delete sales records from stores you don't have access to",
+            unauthorizedCount: unauthorizedRecords.length
+          });
+        }
+      }
+      
+      // Perform bulk delete
+      const deletedCount = await storage.deleteManySales(ids);
+      
+      res.json({ success: true, deletedCount });
+    } catch (error: any) {
+      console.error('Error bulk deleting sales:', error);
+      res.status(500).json({ message: "Failed to bulk delete sales records", error: error.message });
+    }
+  });
+
   // Text Import endpoint for Sales
   app.post("/api/sales/import-text", async (req, res) => {
     try {
@@ -2480,6 +2536,61 @@ export function registerRoutes(app: Express): Server {
     } catch (error: any) {
       console.error("Error deleting cashflow:", error);
       res.status(500).json({ message: error.message || "Failed to delete cashflow record" });
+    }
+  });
+
+  // Bulk delete cashflow endpoint
+  app.post("/api/cashflows/bulk-delete", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Only managers and administrators can bulk delete cashflow records" });
+      }
+      
+      // Validate request body
+      const validation = bulkIdsSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: validation.error.errors });
+      }
+      
+      const { ids } = validation.data;
+      
+      // Get user's accessible stores
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      
+      if (accessibleStoreIds.length === 0) {
+        return res.status(403).json({ message: "You don't have access to any stores" });
+      }
+      
+      // Verify all cashflow records belong to user's accessible stores
+      const cashflowRecords = await Promise.all(ids.map(id => storage.getCashflow(id)));
+      
+      // Check if any records don't exist
+      const missingIds = ids.filter((id, index) => !cashflowRecords[index]);
+      if (missingIds.length > 0) {
+        return res.status(404).json({ message: "Some cashflow records not found", missingIds });
+      }
+      
+      // Check store access for non-admins
+      if (req.user.role !== 'administrasi') {
+        const unauthorizedRecords = cashflowRecords.filter(record => 
+          record && !accessibleStoreIds.includes(record.storeId)
+        );
+        
+        if (unauthorizedRecords.length > 0) {
+          return res.status(403).json({ 
+            message: "Cannot delete cashflow records from stores you don't have access to",
+            unauthorizedCount: unauthorizedRecords.length
+          });
+        }
+      }
+      
+      // Perform bulk delete
+      const deletedCount = await storage.deleteManyCashflow(ids);
+      
+      res.json({ success: true, deletedCount });
+    } catch (error: any) {
+      console.error('Error bulk deleting cashflow:', error);
+      res.status(500).json({ message: "Failed to bulk delete cashflow records", error: error.message });
     }
   });
 
@@ -4471,6 +4582,61 @@ export function registerRoutes(app: Express): Server {
       res.status(204).send();
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Bulk delete piutang endpoint
+  app.post("/api/piutang/bulk-delete", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Only managers and administrators can bulk delete piutang records" });
+      }
+      
+      // Validate request body
+      const validation = bulkIdsSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: validation.error.errors });
+      }
+      
+      const { ids } = validation.data;
+      
+      // Get user's accessible stores
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      
+      if (accessibleStoreIds.length === 0) {
+        return res.status(403).json({ message: "You don't have access to any stores" });
+      }
+      
+      // Verify all piutang records belong to user's accessible stores
+      const piutangRecords = await Promise.all(ids.map(id => storage.getPiutang(id)));
+      
+      // Check if any records don't exist
+      const missingIds = ids.filter((id, index) => !piutangRecords[index]);
+      if (missingIds.length > 0) {
+        return res.status(404).json({ message: "Some piutang records not found", missingIds });
+      }
+      
+      // Check store access for non-admins
+      if (req.user.role !== 'administrasi') {
+        const unauthorizedRecords = piutangRecords.filter(record => 
+          record && !accessibleStoreIds.includes(record.storeId)
+        );
+        
+        if (unauthorizedRecords.length > 0) {
+          return res.status(403).json({ 
+            message: "Cannot delete piutang records from stores you don't have access to",
+            unauthorizedCount: unauthorizedRecords.length
+          });
+        }
+      }
+      
+      // Perform bulk delete
+      const deletedCount = await storage.deleteManyPiutang(ids);
+      
+      res.json({ success: true, deletedCount });
+    } catch (error: any) {
+      console.error('Error bulk deleting piutang:', error);
+      res.status(500).json({ message: "Failed to bulk delete piutang records", error: error.message });
     }
   });
 

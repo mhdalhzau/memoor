@@ -87,12 +87,14 @@ export interface IStorage {
   deleteSales(id: string): Promise<void>;
   updateSalesStatus(id: string, status: string): Promise<Sales | undefined>;
   checkDailySubmission(userId: string, storeId: number, date: string): Promise<boolean>;
+  deleteManySales(ids: string[]): Promise<number>;
   
   // Cashflow methods
   getCashflow(id: string): Promise<Cashflow | undefined>;
   getCashflowByStore(storeId: number): Promise<Cashflow[]>;
   createCashflow(cashflow: InsertCashflow): Promise<Cashflow>;
   deleteCashflowBySalesId(salesId: string): Promise<void>;
+  deleteManyCashflow(ids: string[]): Promise<number>;
   
   // Payroll methods
   getPayroll(id: string): Promise<Payroll | undefined>;
@@ -157,6 +159,7 @@ export interface IStorage {
   updatePiutangStatus(id: string, status: string, paidAmount?: string): Promise<Piutang | undefined>;
   deletePiutang(id: string): Promise<void>;
   addPiutangPayment(piutangId: string, amount: string, description: string, userId: string): Promise<{piutang: Piutang, cashflow: Cashflow}>;
+  deleteManyPiutang(ids: string[]): Promise<number>;
   
   // Wallet methods
   getWallet(id: string): Promise<Wallet | undefined>;
@@ -903,6 +906,47 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async deleteManySales(ids: string[]): Promise<number> {
+    try {
+      if (ids.length === 0) return 0;
+      
+      // Deduplicate ids array to avoid inflated counts
+      const uniqueIds = [...new Set(ids)];
+      
+      let deletedCount = 0;
+      
+      await db.transaction(async (tx) => {
+        // Count actual sales records before deletion
+        const salesRecords = await tx.select({ id: sales.id }).from(sales).where(inArray(sales.id, uniqueIds));
+        deletedCount = salesRecords.length;
+        
+        // Get piutang ids that are linked to these sales
+        const piutangRecords = await tx.select({ id: piutang.id }).from(piutang).where(inArray(piutang.salesId, uniqueIds));
+        const piutangIds = piutangRecords.map(p => p.id);
+        
+        // Delete cashflow linked to piutang (piutang payments)
+        if (piutangIds.length > 0) {
+          await tx.delete(cashflow).where(inArray(cashflow.piutangId, piutangIds));
+        }
+        
+        // Delete cashflow directly linked to sales
+        await tx.delete(cashflow).where(inArray(cashflow.salesId, uniqueIds));
+        
+        // Delete piutang entries linked to sales
+        await tx.delete(piutang).where(inArray(piutang.salesId, uniqueIds));
+        
+        // Finally delete the sales records
+        await tx.delete(sales).where(inArray(sales.id, uniqueIds));
+      });
+      
+      console.log(`✅ Successfully deleted ${deletedCount} sales records with cascading deletes`);
+      return deletedCount;
+    } catch (error) {
+      console.error('Error bulk deleting sales:', error);
+      throw error;
+    }
+  }
+
   // Cashflow methods
   async getCashflow(id: string): Promise<Cashflow | undefined> {
     try {
@@ -955,6 +999,44 @@ export class DatabaseStorage implements IStorage {
       await db.delete(cashflow).where(eq(cashflow.salesId, salesId));
     } catch (error) {
       console.error('Error deleting cashflow by salesId:', error);
+      throw error;
+    }
+  }
+
+  async deleteManyCashflow(ids: string[]): Promise<number> {
+    try {
+      if (ids.length === 0) return 0;
+      
+      // Deduplicate ids array to avoid inflated counts
+      const uniqueIds = [...new Set(ids)];
+      
+      let deletedCount = 0;
+      
+      await db.transaction(async (tx) => {
+        // Get cashflow records to check for piutang links
+        const cashflowRecords = await tx.select().from(cashflow).where(inArray(cashflow.id, uniqueIds));
+        
+        // Check if any cashflow records are linked to piutang (payment records)
+        const linkedToPiutang = cashflowRecords.filter(cf => cf.piutangId !== null);
+        
+        if (linkedToPiutang.length > 0) {
+          throw new Error(
+            `Cannot delete cashflow records linked to piutang payments. ` +
+            `${linkedToPiutang.length} record(s) are linked to piutang. ` +
+            `Please delete the piutang record first or remove the payment link.`
+          );
+        }
+        
+        deletedCount = cashflowRecords.length;
+        
+        // Delete cashflow records (only those not linked to piutang)
+        await tx.delete(cashflow).where(inArray(cashflow.id, uniqueIds));
+      });
+      
+      console.log(`✅ Successfully deleted ${deletedCount} cashflow records`);
+      return deletedCount;
+    } catch (error) {
+      console.error('Error bulk deleting cashflow:', error);
       throw error;
     }
   }
@@ -2008,6 +2090,35 @@ export class DatabaseStorage implements IStorage {
       await db.delete(piutang).where(eq(piutang.id, id));
     } catch (error) {
       console.error('Error deleting piutang:', error);
+      throw error;
+    }
+  }
+
+  async deleteManyPiutang(ids: string[]): Promise<number> {
+    try {
+      if (ids.length === 0) return 0;
+      
+      // Deduplicate ids array to avoid inflated counts
+      const uniqueIds = [...new Set(ids)];
+      
+      let deletedCount = 0;
+      
+      await db.transaction(async (tx) => {
+        // Count actual piutang records before deletion
+        const piutangRecords = await tx.select({ id: piutang.id }).from(piutang).where(inArray(piutang.id, uniqueIds));
+        deletedCount = piutangRecords.length;
+        
+        // First delete cashflow entries linked to these piutang records
+        await tx.delete(cashflow).where(inArray(cashflow.piutangId, uniqueIds));
+        
+        // Then delete the piutang records
+        await tx.delete(piutang).where(inArray(piutang.id, uniqueIds));
+      });
+      
+      console.log(`✅ Successfully deleted ${deletedCount} piutang records with cascading deletes`);
+      return deletedCount;
+    } catch (error) {
+      console.error('Error bulk deleting piutang:', error);
       throw error;
     }
   }
