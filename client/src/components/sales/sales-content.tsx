@@ -676,8 +676,10 @@ function SalesDetailModal({ record }: { record: Sales }) {
     totalLiters: record.totalLiters || "",
     totalCash: record.totalCash || "",
     totalQris: record.totalQris || "",
+    totalSetoran: (parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")).toString(),
     totalIncome: record.totalIncome || "",
     totalExpenses: record.totalExpenses || "",
+    totalSales: record.totalSales || "",
     incomeItems: incomeData,
     expenseItems: expenseData,
   });
@@ -693,8 +695,10 @@ function SalesDetailModal({ record }: { record: Sales }) {
       totalLiters: record.totalLiters || "",
       totalCash: record.totalCash || "",
       totalQris: record.totalQris || "",
+      totalSetoran: (parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")).toString(),
       totalIncome: record.totalIncome || "",
       totalExpenses: record.totalExpenses || "",
+      totalSales: record.totalSales || "",
       incomeItems: parseJsonData(record.incomeDetails || null),
       expenseItems: parseJsonData(record.expenseDetails || null),
     });
@@ -755,7 +759,7 @@ function SalesDetailModal({ record }: { record: Sales }) {
     // Calculate totals
     const totalIncomeCalc = editData.incomeItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0);
     const totalExpensesCalc = editData.expenseItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0);
-    const totalSalesCalc = parseFloat(editData.totalCash || "0") + parseFloat(editData.totalQris || "0") + totalIncomeCalc - totalExpensesCalc;
+    const totalSalesCalc = parseFloat(editData.totalSetoran || "0") + totalIncomeCalc - totalExpensesCalc;
     
     const updatePayload = {
       shift: editData.shift,
@@ -768,7 +772,7 @@ function SalesDetailModal({ record }: { record: Sales }) {
       totalQris: editData.totalQris,
       totalIncome: totalIncomeCalc.toString(),
       totalExpenses: totalExpensesCalc.toString(),
-      totalSales: totalSalesCalc.toString(),
+      totalSales: editData.totalSales || totalSalesCalc.toString(),
       incomeDetails: JSON.stringify(editData.incomeItems),
       expenseDetails: JSON.stringify(editData.expenseItems),
     };
@@ -1051,7 +1055,18 @@ function SalesDetailModal({ record }: { record: Sales }) {
                       )}
                     </TableCell>
                     <TableCell className="font-semibold text-green-700">
-                      {formatRupiah((parseFloat(editData.totalCash || "0") + parseFloat(editData.totalQris || "0")))}
+                      {isEditMode ? (
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={editData.totalSetoran}
+                          onChange={(e) => setEditData({ ...editData, totalSetoran: e.target.value })}
+                          placeholder="Total Setoran"
+                          data-testid="input-total-setoran"
+                        />
+                      ) : (
+                        formatRupiah((parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")))
+                      )}
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -1257,11 +1272,19 @@ function SalesDetailModal({ record }: { record: Sales }) {
             <CardContent>
               <div className="text-center">
                 <p className="text-3xl font-bold text-green-700 mb-2">
-                  {isEditMode ? formatRupiah(
-                    parseFloat(editData.totalCash || "0") + 
-                    parseFloat(editData.totalQris || "0") + 
-                    editData.incomeItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0) - 
-                    editData.expenseItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0)
+                  {isEditMode ? (
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={editData.totalSales || (
+                        parseFloat(editData.totalSetoran || "0") + 
+                        editData.incomeItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0) - 
+                        editData.expenseItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0)
+                      ).toString()}
+                      onChange={(e) => setEditData({ ...editData, totalSales: e.target.value })}
+                      className="text-3xl font-bold text-green-700 text-center"
+                      data-testid="input-total-sales"
+                    />
                   ) : formatRupiah(record.totalSales)}
                 </p>
                 <p className="text-sm text-muted-foreground">
@@ -1288,8 +1311,10 @@ function SalesDetailModal({ record }: { record: Sales }) {
                   totalLiters: record.totalLiters || "",
                   totalCash: record.totalCash || "",
                   totalQris: record.totalQris || "",
+                  totalSetoran: (parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")).toString(),
                   totalIncome: record.totalIncome || "",
                   totalExpenses: record.totalExpenses || "",
+                  totalSales: record.totalSales || "",
                   incomeItems: parseJsonData(record.incomeDetails || null),
                   expenseItems: parseJsonData(record.expenseDetails || null),
                 });

@@ -1,5 +1,5 @@
 # Overview
-This is a multi-role employee management system built with React, TypeScript, Express, and MySQL. It serves staff, managers, and administrators with different access levels for attendance tracking, sales reporting, cashflow management, payroll processing, and proposal submissions. The system supports multiple stores and includes robust role-based authentication and authorization. Key capabilities include comprehensive dashboards with interactive data visualizations, intelligent sales record shift auto-detection, and an enhanced UI/UX framework.
+This is a multi-role employee management system built with React, TypeScript, Express, and MySQL. It serves staff, managers, and administrators with different access levels for attendance tracking, sales reporting, cashflow management, payroll processing, and proposal submissions. The system supports multiple stores and includes robust role-based authentication and authorization. Key capabilities include comprehensive dashboards with interactive data visualizations, intelligent sales record shift auto-detection, editable sales details with full transaction data modification, and an enhanced UI/UX framework.
 
 # User Preferences
 I prefer detailed explanations.
@@ -25,6 +25,7 @@ The system employs a client-server architecture using React/Vite for the fronten
 - **Authentication**: Passport.js with session cookies.
 - **Role-Based Access Control**: Different access levels for staff, managers, and administrators.
 - **Sales Record Shift Auto-Detection**: Intelligent shift detection based on check-in time and store shifts configuration. Special handling for specific users (e.g., "Endang" always assigned "full-day").
+- **Editable Sales Details**: Fully editable "Detail Penjualan Per Shift" (Sales Details Per Shift) with the ability to modify all transaction fields including shift info (shift, check-in/out times), meter readings (start, end, total liters), payment breakdown (cash, QRIS), and dynamic income/expense items (add, edit, remove). Automatic total calculation and backend PUT endpoint for updates.
 - **Cashflow Management**: Manual cashflow control, with sales records no longer automatically creating cashflow entries.
 - **Attendance Status Enhancement**: Automatic clearing of time fields and disabling of inputs when status is "cuti" (leave) or "alpha" (absent). Backend fix for saving attendance status without time data.
 - **Cascading Deletes**: Implemented for sales, cashflow, and piutang records to ensure data integrity upon deletion.
