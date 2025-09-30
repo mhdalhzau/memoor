@@ -3555,6 +3555,367 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Dashboard Sales Trends API endpoint
+  app.get("/api/dashboard/sales-trends", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const { storeId, startDate, endDate, groupBy = 'daily' } = req.query;
+      
+      // Get accessible store IDs
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      
+      let targetStoreIds = accessibleStoreIds;
+      
+      // If specific store requested, verify access
+      if (storeId) {
+        const requestedStoreId = parseInt(storeId as string);
+        if (!accessibleStoreIds.includes(requestedStoreId)) {
+          return res.status(403).json({ message: "You don't have access to this store" });
+        }
+        targetStoreIds = [requestedStoreId];
+      }
+      
+      // Parse date range
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setDate(new Date().getDate() - 30));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const trends: any[] = [];
+      
+      for (const sId of targetStoreIds) {
+        const sales = await storage.getSalesByStore(sId, start.toISOString(), end.toISOString());
+        const store = await storage.getStore(sId);
+        
+        // Group sales by period
+        const groupedData: { [key: string]: { totalSales: number, count: number } } = {};
+        
+        sales.forEach(sale => {
+          const saleDate = new Date(sale.date || sale.createdAt);
+          let key = '';
+          
+          if (groupBy === 'daily') {
+            key = saleDate.toISOString().split('T')[0]; // YYYY-MM-DD
+          } else if (groupBy === 'weekly') {
+            const weekStart = new Date(saleDate);
+            weekStart.setDate(saleDate.getDate() - saleDate.getDay());
+            key = weekStart.toISOString().split('T')[0];
+          } else if (groupBy === 'monthly') {
+            key = `${saleDate.getFullYear()}-${String(saleDate.getMonth() + 1).padStart(2, '0')}`;
+          }
+          
+          if (!groupedData[key]) {
+            groupedData[key] = { totalSales: 0, count: 0 };
+          }
+          
+          groupedData[key].totalSales += parseFloat(sale.totalSales || '0');
+          groupedData[key].count += 1;
+        });
+        
+        // Convert to array and sort by date
+        const trendData = Object.keys(groupedData).sort().map(key => ({
+          date: key,
+          storeName: store?.name || `Store ${sId}`,
+          totalSales: groupedData[key].totalSales,
+          transactionCount: groupedData[key].count,
+          averageSales: groupedData[key].totalSales / groupedData[key].count
+        }));
+        
+        trends.push(...trendData);
+      }
+      
+      res.json(trends);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Dashboard Sales Comparison API endpoint
+  app.get("/api/dashboard/sales-comparison", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const { startDate, endDate } = req.query;
+      
+      // Get accessible store IDs
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      
+      // Parse date range
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setDate(new Date().getDate() - 30));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const comparison: any[] = [];
+      
+      for (const storeId of accessibleStoreIds) {
+        const sales = await storage.getSalesByStore(storeId, start.toISOString(), end.toISOString());
+        const store = await storage.getStore(storeId);
+        
+        const totalSales = sales.reduce((sum, sale) => sum + parseFloat(sale.totalSales || '0'), 0);
+        const totalTransactions = sales.reduce((sum, sale) => sum + (sale.transactions || 0), 0);
+        const totalQris = sales.reduce((sum, sale) => sum + parseFloat(sale.totalQris || '0'), 0);
+        const totalCash = sales.reduce((sum, sale) => sum + parseFloat(sale.totalCash || '0'), 0);
+        
+        comparison.push({
+          storeId,
+          storeName: store?.name || `Store ${storeId}`,
+          totalSales,
+          totalTransactions,
+          totalQris,
+          totalCash,
+          averageTicket: totalTransactions > 0 ? totalSales / totalTransactions : 0
+        });
+      }
+      
+      res.json(comparison);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Dashboard Payment Distribution API endpoint
+  app.get("/api/dashboard/payment-distribution", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const { storeId, startDate, endDate } = req.query;
+      
+      // Get accessible store IDs
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      
+      let targetStoreIds = accessibleStoreIds;
+      
+      // If specific store requested, verify access
+      if (storeId) {
+        const requestedStoreId = parseInt(storeId as string);
+        if (!accessibleStoreIds.includes(requestedStoreId)) {
+          return res.status(403).json({ message: "You don't have access to this store" });
+        }
+        targetStoreIds = [requestedStoreId];
+      }
+      
+      // Parse date range
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setDate(new Date().getDate() - 30));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      let totalQris = 0;
+      let totalCash = 0;
+      
+      for (const sId of targetStoreIds) {
+        const sales = await storage.getSalesByStore(sId, start.toISOString(), end.toISOString());
+        
+        sales.forEach(sale => {
+          totalQris += parseFloat(sale.totalQris || '0');
+          totalCash += parseFloat(sale.totalCash || '0');
+        });
+      }
+      
+      const distribution = [
+        { name: 'QRIS', value: totalQris, percentage: totalQris + totalCash > 0 ? (totalQris / (totalQris + totalCash) * 100).toFixed(2) : 0 },
+        { name: 'Cash', value: totalCash, percentage: totalQris + totalCash > 0 ? (totalCash / (totalQris + totalCash) * 100).toFixed(2) : 0 }
+      ];
+      
+      res.json(distribution);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Dashboard Attendance Summary API endpoint
+  app.get("/api/dashboard/attendance-summary", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const { storeId, startDate, endDate } = req.query;
+      
+      // Get accessible store IDs
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      
+      let targetStoreIds = accessibleStoreIds;
+      
+      // If specific store requested, verify access
+      if (storeId) {
+        const requestedStoreId = parseInt(storeId as string);
+        if (!accessibleStoreIds.includes(requestedStoreId)) {
+          return res.status(403).json({ message: "You don't have access to this store" });
+        }
+        targetStoreIds = [requestedStoreId];
+      }
+      
+      // Parse date range
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setDate(new Date().getDate() - 30));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      let presentCount = 0;
+      let leaveCount = 0;
+      let absentCount = 0;
+      
+      for (const sId of targetStoreIds) {
+        // Get all attendance records for this store in the date range
+        const allAttendance = await storage.getAttendanceByStore(sId);
+        
+        allAttendance.forEach(record => {
+          const recordDate = new Date(record.date || record.createdAt);
+          if (recordDate >= start && recordDate <= end) {
+            if (record.attendanceStatus === 'hadir') {
+              presentCount++;
+            } else if (record.attendanceStatus === 'cuti') {
+              leaveCount++;
+            } else if (record.attendanceStatus === 'alpha') {
+              absentCount++;
+            }
+          }
+        });
+      }
+      
+      const summary = [
+        { name: 'Hadir', value: presentCount, percentage: presentCount + leaveCount + absentCount > 0 ? ((presentCount / (presentCount + leaveCount + absentCount)) * 100).toFixed(2) : 0 },
+        { name: 'Cuti', value: leaveCount, percentage: presentCount + leaveCount + absentCount > 0 ? ((leaveCount / (presentCount + leaveCount + absentCount)) * 100).toFixed(2) : 0 },
+        { name: 'Alpha', value: absentCount, percentage: presentCount + leaveCount + absentCount > 0 ? ((absentCount / (presentCount + leaveCount + absentCount)) * 100).toFixed(2) : 0 }
+      ];
+      
+      res.json(summary);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Dashboard Cashflow Trends API endpoint
+  app.get("/api/dashboard/cashflow-trends", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const { storeId, startDate, endDate, groupBy = 'daily' } = req.query;
+      
+      // Get accessible store IDs
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      
+      let targetStoreIds = accessibleStoreIds;
+      
+      // If specific store requested, verify access
+      if (storeId) {
+        const requestedStoreId = parseInt(storeId as string);
+        if (!accessibleStoreIds.includes(requestedStoreId)) {
+          return res.status(403).json({ message: "You don't have access to this store" });
+        }
+        targetStoreIds = [requestedStoreId];
+      }
+      
+      // Parse date range
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setDate(new Date().getDate() - 30));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const groupedData: { [key: string]: { income: number, expenses: number } } = {};
+      
+      for (const sId of targetStoreIds) {
+        const cashflowRecords = await storage.getCashflowByStore(sId);
+        
+        cashflowRecords.forEach(record => {
+          const recordDate = new Date(record.date || record.createdAt);
+          if (recordDate >= start && recordDate <= end) {
+            let key = '';
+            
+            if (groupBy === 'daily') {
+              key = recordDate.toISOString().split('T')[0]; // YYYY-MM-DD
+            } else if (groupBy === 'weekly') {
+              const weekStart = new Date(recordDate);
+              weekStart.setDate(recordDate.getDate() - recordDate.getDay());
+              key = weekStart.toISOString().split('T')[0];
+            } else if (groupBy === 'monthly') {
+              key = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`;
+            }
+            
+            if (!groupedData[key]) {
+              groupedData[key] = { income: 0, expenses: 0 };
+            }
+            
+            const amount = parseFloat(record.amount || '0');
+            if (record.category === 'Income') {
+              groupedData[key].income += amount;
+            } else if (record.category === 'Expense') {
+              groupedData[key].expenses += amount;
+            }
+          }
+        });
+      }
+      
+      // Convert to array and sort by date
+      const trends = Object.keys(groupedData).sort().map(key => ({
+        date: key,
+        income: groupedData[key].income,
+        expenses: groupedData[key].expenses,
+        profit: groupedData[key].income - groupedData[key].expenses
+      }));
+      
+      res.json(trends);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Dashboard Product Performance API endpoint
+  app.get("/api/dashboard/product-performance", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const { storeId, startDate, endDate, limit = 10 } = req.query;
+      
+      // Get accessible store IDs
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      
+      let targetStoreIds = accessibleStoreIds;
+      
+      // If specific store requested, verify access
+      if (storeId) {
+        const requestedStoreId = parseInt(storeId as string);
+        if (!accessibleStoreIds.includes(requestedStoreId)) {
+          return res.status(403).json({ message: "You don't have access to this store" });
+        }
+        targetStoreIds = [requestedStoreId];
+      }
+      
+      // Parse date range
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setDate(new Date().getDate() - 30));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      // Aggregate product sales from inventory transactions
+      const productSales: { [key: string]: { name: string, quantity: number, revenue: number } } = {};
+      
+      for (const sId of targetStoreIds) {
+        const transactions = await storage.getInventoryTransactionsByStore(sId);
+        
+        for (const transaction of transactions) {
+          const transactionDate = new Date(transaction.createdAt);
+          if (transactionDate >= start && transactionDate <= end && transaction.type === 'out' && transaction.referenceType === 'sale') {
+            const product = await storage.getProduct(transaction.productId);
+            if (product) {
+              if (!productSales[product.id]) {
+                productSales[product.id] = {
+                  name: product.name,
+                  quantity: 0,
+                  revenue: 0
+                };
+              }
+              
+              const quantity = parseFloat(transaction.quantity || '0');
+              const price = parseFloat(product.sellingPrice || '0');
+              
+              productSales[product.id].quantity += quantity;
+              productSales[product.id].revenue += quantity * price;
+            }
+          }
+        }
+      }
+      
+      // Convert to array and sort by revenue
+      const performance = Object.values(productSales)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, parseInt(limit as string));
+      
+      res.json(performance);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   // Wallet transactions endpoint
   app.get("/api/wallet/transactions", async (req, res) => {
     try {

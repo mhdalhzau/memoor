@@ -510,19 +510,19 @@ html, body, #root {
 
 /* Badge Variants with Dark Mode Support */
 .badge-success {
-  @apply bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400;
+  @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-400;
 }
 
 .badge-warning {
-  @apply bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400;
+  @apply bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-400;
 }
 
 .badge-error {
-  @apply bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400;
+  @apply bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-400;
 }
 
 .badge-info {
-  @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400;
+  @apply bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-400;
 }
 
 /* Improved Table Styles */
@@ -646,3 +646,596 @@ table tbody tr {
 .stagger-item:nth-child(3) { animation-delay: 0.15s; }
 .stagger-item:nth-child(4) { animation-delay: 0.2s; }
 .stagger-item:nth-child(5) { animation-delay: 0.25s; }
+
+/* ============================ */
+/* ENHANCED FORM STYLES */
+/* ============================ */
+
+/* Form Container */
+.form-container {
+  @apply space-y-6;
+}
+
+/* Form Section */
+.form-section {
+  @apply space-y-4 p-6 rounded-lg bg-card border border-border;
+}
+
+/* Enhanced Input Styling */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="date"],
+input[type="time"],
+input[type="search"],
+textarea,
+select {
+  @apply transition-all duration-200 ease-in-out;
+}
+
+input[type="text"]::placeholder,
+input[type="email"]::placeholder,
+input[type="password"]::placeholder,
+input[type="number"]::placeholder,
+input[type="date"]::placeholder,
+input[type="time"]::placeholder,
+input[type="search"]::placeholder,
+textarea::placeholder {
+  @apply text-muted-foreground opacity-60;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+input[type="date"]:focus,
+input[type="time"]:focus,
+input[type="search"]:focus,
+textarea:focus,
+select:focus {
+  @apply ring-2 ring-primary border-primary shadow-sm;
+  --tw-ring-opacity: 0.2;
+}
+
+/* Input with Icon */
+.input-with-icon {
+  @apply relative;
+}
+
+.input-with-icon input {
+  @apply pl-10;
+}
+
+.input-with-icon .icon {
+  @apply absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground;
+}
+
+/* Form Group */
+.form-group {
+  @apply space-y-2;
+}
+
+.form-group label {
+  @apply text-sm font-medium text-foreground;
+}
+
+/* Form Grid */
+.form-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 gap-4;
+}
+
+.form-grid-3 {
+  @apply grid grid-cols-1 md:grid-cols-3 gap-4;
+}
+
+/* ============================ */
+/* ENHANCED TABLE STYLES */
+/* ============================ */
+
+/* Table Container with Better Scroll */
+.table-container {
+  @apply relative overflow-x-auto rounded-lg border border-border shadow-sm;
+  @apply custom-scroll;
+}
+
+/* Sticky Table Header */
+.table-sticky-header thead {
+  @apply sticky top-0 z-10 bg-muted backdrop-blur-sm;
+  background-color: hsl(var(--muted) / 0.95);
+}
+
+.table-sticky-header thead th {
+  @apply shadow-sm;
+}
+
+/* Zebra Striped Table */
+.table-zebra tbody tr:nth-child(even) {
+  @apply bg-muted;
+  background-color: hsl(var(--muted) / 0.3);
+}
+
+.table-zebra tbody tr:nth-child(odd) {
+  @apply bg-background;
+}
+
+/* Table Row Hover */
+.table-hover tbody tr {
+  @apply transition-colors duration-150 ease-in-out cursor-pointer;
+  @apply hover:bg-muted;
+}
+
+/* Table Cell Padding */
+.table-comfortable td,
+.table-comfortable th {
+  @apply px-6 py-4;
+}
+
+.table-compact td,
+.table-compact th {
+  @apply px-4 py-2;
+}
+
+.table-spacious td,
+.table-spacious th {
+  @apply px-8 py-6;
+}
+
+/* Mobile Responsive Table - Card View */
+@media (max-width: 768px) {
+  .table-mobile-cards {
+    @apply block;
+  }
+
+  .table-mobile-cards thead {
+    @apply hidden;
+  }
+
+  .table-mobile-cards tbody {
+    @apply block;
+  }
+
+  .table-mobile-cards tr {
+    @apply block mb-4 border border-border rounded-lg p-4 bg-card;
+  }
+
+  .table-mobile-cards td {
+    @apply block text-right py-2;
+  }
+
+  .table-mobile-cards td::before {
+    content: attr(data-label);
+    @apply float-left font-medium text-muted-foreground;
+  }
+}
+
+/* Table Action Buttons */
+.table-actions {
+  @apply flex items-center gap-2 justify-end;
+}
+
+/* ============================ */
+/* ENHANCED CARD STYLES */
+/* ============================ */
+
+/* Card Base Enhancement */
+.card-enhanced {
+  @apply rounded-xl border border-border bg-card shadow-sm;
+  @apply transition-all duration-300 ease-in-out;
+}
+
+/* Card Hover Effects */
+.card-hoverable {
+  @apply card-enhanced;
+  @apply hover:shadow-lg hover:-translate-y-0.5;
+}
+
+/* Card with Gradient Border */
+.card-gradient-border {
+  @apply relative overflow-hidden;
+}
+
+.card-gradient-border::before {
+  content: '';
+  @apply absolute inset-0 rounded-xl p-[1px] bg-gradient-to-r from-primary via-primary to-primary;
+  @apply -z-10;
+  opacity: 0.3;
+}
+
+/* Card Header Enhanced */
+.card-header-enhanced {
+  @apply border-b border-border pb-4 mb-4;
+}
+
+/* Interactive Card */
+.card-interactive {
+  @apply card-hoverable cursor-pointer;
+  @apply hover:border-primary;
+}
+
+/* Status Cards */
+.card-success {
+  @apply border-l-4 border-l-green-500;
+}
+
+.card-warning {
+  @apply border-l-4 border-l-amber-500;
+}
+
+.card-error {
+  @apply border-l-4 border-l-red-500;
+}
+
+.card-info {
+  @apply border-l-4 border-l-blue-500;
+}
+
+/* ============================ */
+/* ENHANCED MODAL/DIALOG STYLES */
+/* ============================ */
+
+/* Modal Backdrop Blur */
+.modal-backdrop {
+  @apply backdrop-blur-sm bg-black;
+  animation: fadeIn 0.2s ease-in-out;
+  opacity: 0.3;
+}
+
+/* Modal Content Enhanced */
+.modal-content-enhanced {
+  @apply rounded-xl shadow-2xl;
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Modal Sizes */
+.modal-sm {
+  @apply max-w-sm;
+}
+
+.modal-md {
+  @apply max-w-md;
+}
+
+.modal-lg {
+  @apply max-w-2xl;
+}
+
+.modal-xl {
+  @apply max-w-4xl;
+}
+
+.modal-full {
+  @apply max-w-7xl;
+}
+
+/* Modal Header */
+.modal-header {
+  @apply border-b border-border pb-4 mb-6;
+}
+
+/* Modal Footer */
+.modal-footer {
+  @apply border-t border-border pt-4 mt-6 flex items-center justify-end gap-3;
+}
+
+/* ============================ */
+/* ENHANCED BUTTON STYLES */
+/* ============================ */
+
+/* Button Loading State */
+.btn-loading {
+  @apply relative cursor-wait opacity-70;
+}
+
+.btn-loading::after {
+  content: '';
+  @apply absolute inset-0 flex items-center justify-center;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'%3E%3Cpath d='M21 12a9 9 0 1 1-6.219-8.56'/%3E%3C/svg%3E");
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Button Groups */
+.btn-group {
+  @apply inline-flex rounded-lg shadow-sm;
+}
+
+.btn-group > button {
+  @apply rounded-none first:rounded-l-lg last:rounded-r-lg;
+  @apply border-r-0 last:border-r;
+}
+
+/* Icon Button */
+.btn-icon {
+  @apply p-2 rounded-lg transition-all duration-200;
+  @apply hover:bg-accent hover:text-accent-foreground;
+  @apply active:scale-95;
+}
+
+/* ============================ */
+/* ENHANCED EMPTY STATES */
+/* ============================ */
+
+.empty-state {
+  @apply flex flex-col items-center justify-center py-12 px-4 text-center;
+}
+
+.empty-state-icon {
+  @apply w-16 h-16 mb-4 text-muted-foreground;
+  opacity: 0.5;
+}
+
+.empty-state-title {
+  @apply text-lg font-semibold text-foreground mb-2;
+}
+
+.empty-state-description {
+  @apply text-sm text-muted-foreground mb-6 max-w-md;
+}
+
+.empty-state-action {
+  @apply mt-4;
+}
+
+/* ============================ */
+/* SEARCH & FILTER BARS */
+/* ============================ */
+
+.search-bar {
+  @apply relative w-full max-w-md;
+}
+
+.search-bar input {
+  @apply pl-10 pr-4;
+}
+
+.search-bar .search-icon {
+  @apply absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground;
+}
+
+.filter-bar {
+  @apply flex items-center gap-3 flex-wrap;
+}
+
+.filter-chip {
+  @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-full;
+  @apply bg-primary text-primary text-sm font-medium;
+  @apply transition-all duration-200;
+  @apply hover:bg-primary;
+  background-color: hsl(var(--primary) / 0.1);
+}
+
+.filter-chip:hover {
+  background-color: hsl(var(--primary) / 0.2);
+}
+
+.filter-chip-removable {
+  @apply filter-chip cursor-pointer;
+}
+
+/* ============================ */
+/* PAGINATION STYLES */
+/* ============================ */
+
+.pagination {
+  @apply flex items-center justify-center gap-2 mt-6;
+}
+
+.pagination-item {
+  @apply px-3 py-2 rounded-lg border border-border;
+  @apply transition-all duration-200;
+  @apply hover:bg-accent hover:border-primary;
+}
+
+.pagination-item-active {
+  @apply pagination-item bg-primary text-primary-foreground border-primary;
+  @apply hover:bg-primary hover:opacity-90;
+}
+
+.pagination-item-disabled {
+  @apply pagination-item opacity-50 cursor-not-allowed;
+  @apply hover:bg-transparent hover:border-border;
+}
+
+/* ============================ */
+/* RESPONSIVE UTILITIES */
+/* ============================ */
+
+/* Show/Hide on Mobile */
+.mobile-only {
+  @apply block md:hidden;
+}
+
+.desktop-only {
+  @apply hidden md:block;
+}
+
+.tablet-and-up {
+  @apply hidden sm:block;
+}
+
+/* Responsive Grid */
+.responsive-grid {
+  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4;
+}
+
+.responsive-grid-2 {
+  @apply grid grid-cols-1 md:grid-cols-2 gap-6;
+}
+
+/* Touch Friendly Buttons */
+@media (max-width: 768px) {
+  .touch-friendly {
+    @apply min-h-[44px] min-w-[44px];
+  }
+}
+
+/* ============================ */
+/* STAT CARDS & METRICS */
+/* ============================ */
+
+.stat-card {
+  @apply p-6 rounded-xl border border-border bg-gradient-to-br from-card to-card;
+  @apply transition-all duration-300 ease-in-out;
+  @apply hover:shadow-md hover:border-primary;
+}
+
+.stat-card-value {
+  @apply text-3xl font-bold bg-gradient-to-r from-primary to-primary;
+  @apply bg-clip-text text-transparent;
+}
+
+.stat-card-label {
+  @apply text-sm font-medium text-muted-foreground uppercase tracking-wide;
+}
+
+.stat-card-icon {
+  @apply w-12 h-12 rounded-lg bg-primary text-primary;
+  @apply flex items-center justify-center;
+  @apply transition-transform duration-300;
+  background-color: hsl(var(--primary) / 0.1);
+}
+
+.stat-card:hover .stat-card-icon {
+  @apply scale-110;
+}
+
+/* ============================ */
+/* IMPROVED 404 / ERROR PAGES */
+/* ============================ */
+
+.error-page {
+  @apply min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted px-4;
+}
+
+.error-container {
+  @apply max-w-2xl w-full text-center;
+}
+
+.error-code {
+  @apply text-9xl font-bold bg-gradient-to-r from-primary via-purple-500 to-pink-500;
+  @apply bg-clip-text text-transparent;
+  @apply mb-4;
+}
+
+.error-title {
+  @apply text-3xl font-bold text-foreground mb-4;
+}
+
+.error-description {
+  @apply text-lg text-muted-foreground mb-8;
+}
+
+.error-actions {
+  @apply flex items-center justify-center gap-4 flex-wrap;
+}
+
+/* ============================ */
+/* BADGE ENHANCEMENTS */
+/* ============================ */
+
+.badge-dot {
+  @apply inline-flex items-center gap-2;
+}
+
+.badge-dot::before {
+  content: '';
+  @apply w-2 h-2 rounded-full bg-current;
+}
+
+.badge-pulse {
+  @apply relative;
+}
+
+.badge-pulse::before {
+  content: '';
+  @apply absolute inset-0 rounded-full bg-current opacity-75;
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-ring {
+  0%, 100% {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+/* ============================ */
+/* LOADING STATES */
+/* ============================ */
+
+.spinner {
+  @apply inline-block w-5 h-5 border-2 border-current border-t-transparent rounded-full;
+  animation: spin 1s linear infinite;
+}
+
+.spinner-lg {
+  @apply w-8 h-8 border-4;
+}
+
+.spinner-sm {
+  @apply w-4 h-4 border-2;
+}
+
+/* Pulsing Dots Loader */
+.loading-dots {
+  @apply inline-flex items-center gap-1;
+}
+
+.loading-dots span {
+  @apply w-2 h-2 rounded-full bg-current;
+  animation: dotFlashing 1.4s infinite;
+}
+
+.loading-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.loading-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* ============================ */
+/* ACCESSIBILITY IMPROVEMENTS */
+/* ============================ */
+
+/* Focus Visible Enhancement */
+:focus-visible {
+  @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+}
+
+/* Skip to Content Link */
+.skip-to-content {
+  @apply fixed top-0 left-0 z-50 p-4 bg-primary text-primary-foreground;
+  @apply -translate-y-full focus:translate-y-0;
+  @apply transition-transform duration-200;
+}
+
+/* Screen Reader Only */
+.sr-only {
+  @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+  clip: rect(0, 0, 0, 0);
+}
