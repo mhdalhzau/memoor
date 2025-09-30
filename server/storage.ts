@@ -45,6 +45,7 @@ import { randomUUID } from "crypto";
 import session from "express-session";
 import { Store as SessionStore } from "express-session";
 import { hashPassword } from "./auth";
+import { detectShift, getStoreShifts } from "@shared/attendance-utils";
 
 export interface IStorage {
   // User methods
@@ -779,10 +780,37 @@ export class DatabaseStorage implements IStorage {
         averageTicket = Math.min(avgTicket, 9999999999.99).toFixed(2);
       }
 
-      // Prepare sales data with calculated fields
+      // Auto-detect shift based on store configuration and checkIn time
+      let detectedShift = salesData.shift; // Use provided shift as fallback
+      
+      if (salesData.checkIn && salesData.storeId) {
+        // Fetch store details to get shifts configuration
+        const store = await this.getStore(salesData.storeId);
+        
+        if (store) {
+          // Get custom shifts from store or use default shifts
+          const storeShifts = getStoreShifts(store);
+          
+          // Auto-detect shift based on checkIn time
+          detectedShift = detectShift(salesData.checkIn, storeShifts);
+          
+          // Special case: If user is "endang", always use "full-day" shift
+          if (salesData.userId) {
+            const user = await this.getUser(salesData.userId);
+            
+            if (user && (user.name.toLowerCase() === 'endang' || user.email.toLowerCase().includes('endang'))) {
+              detectedShift = 'full-day';
+              console.log(`🎯 Special case: User "${user.name}" detected, setting shift to "full-day"`);
+            }
+          }
+        }
+      }
+
+      // Prepare sales data with calculated fields and detected shift
       const salesDataWithCalc = {
         ...salesData,
-        averageTicket: averageTicket
+        averageTicket: averageTicket,
+        shift: detectedShift
       };
 
       await db.insert(sales).values({
