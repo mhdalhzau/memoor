@@ -2,6 +2,20 @@
 
 This is a multi-role employee management system built with React, TypeScript, Express, and MySQL. The application serves staff, managers, and administrators with different access levels for attendance tracking, sales reporting, cashflow management, payroll processing, and proposal submissions. The system supports multiple stores and includes role-based authentication and authorization.
 
+## Test Credentials
+- **Manager**: manager@spbu.com / manager123
+- **Admin**: admin@spbu.com / admin123
+- **Staff (Putri)**: putri@spbu.com / putri123
+- **Staff (Hafiz)**: hafiz@spbu.com / hafiz123
+- **Staff (Endang)**: endang@spbu.com / endang123
+
+## Recent Fixes (September 30, 2025)
+✅ **Attendance Status Enhancement**: Modified daily attendance data behavior for "cuti" (leave) and "alpha" (absent) statuses
+  - When status is changed to "cuti" or "alpha", all data fields (shift, check-in, check-out) are automatically cleared
+  - Input fields for shift, check-in time, and check-out time are disabled when status is "cuti" or "alpha"
+  - Time metrics (lateness, early arrival, overtime) are reset to 0 for leave/absent entries
+  - Improves data accuracy by preventing invalid time entries for non-working statuses
+
 ## Recent Fixes (September 29, 2025)
 ✅ **Payroll Detail Buttons Fixed**: Resolved button errors in Detail Payroll staff dialog
   - Fixed `handlePrintDetail` function to use `contentRef` instead of deprecated `content` prop

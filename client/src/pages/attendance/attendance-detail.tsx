@@ -222,6 +222,16 @@ export default function AttendanceDetailPage({
     const updatedData = [...attendanceData];
     updatedData[index] = { ...updatedData[index], [field]: value };
     
+    // Clear data fields when status is changed to cuti or alpha
+    if (field === 'attendanceStatus' && (value === 'cuti' || value === 'alpha')) {
+      updatedData[index].checkIn = '';
+      updatedData[index].checkOut = '';
+      updatedData[index].shift = '';
+      updatedData[index].latenessMinutes = 0;
+      updatedData[index].overtimeMinutes = 0;
+      updatedData[index].earlyArrivalMinutes = 0;
+    }
+    
     // Auto-calculate all time metrics when shift, check-in, or check-out changes
     if (field === 'checkIn' || field === 'checkOut' || field === 'shift') {
       const shift = field === 'shift' ? value as string : updatedData[index].shift;
@@ -539,6 +549,7 @@ export default function AttendanceDetailPage({
               <TableBody>
                 {attendanceData.map((record, index) => {
                   const statusOption = ATTENDANCE_STATUS_OPTIONS.find(opt => opt.value === record.attendanceStatus);
+                  const isLeaveOrAbsent = record.attendanceStatus === 'cuti' || record.attendanceStatus === 'alpha';
                   return (
                     <TableRow key={record.date} data-testid={`row-attendance-${record.date}`}>
                       <TableCell className="font-medium">
@@ -569,9 +580,9 @@ export default function AttendanceDetailPage({
                         )}
                       </TableCell>
                       <TableCell>
-                        {readOnly ? (
-                          <span className="text-sm">
-                            {generateShiftOptions().find(opt => opt.value === record.shift)?.label || record.shift || '-'}
+                        {readOnly || isLeaveOrAbsent ? (
+                          <span className="text-sm text-gray-400">
+                            {isLeaveOrAbsent ? '-' : (generateShiftOptions().find(opt => opt.value === record.shift)?.label || record.shift || '-')}
                           </span>
                         ) : (
                           <Select
@@ -592,9 +603,9 @@ export default function AttendanceDetailPage({
                         )}
                       </TableCell>
                       <TableCell>
-                        {readOnly ? (
-                          <span className="text-sm">
-                            {record.checkIn || '-'}
+                        {readOnly || isLeaveOrAbsent ? (
+                          <span className="text-sm text-gray-400">
+                            {isLeaveOrAbsent ? '-' : (record.checkIn || '-')}
                           </span>
                         ) : (
                           <Input
@@ -607,9 +618,9 @@ export default function AttendanceDetailPage({
                         )}
                       </TableCell>
                       <TableCell>
-                        {readOnly ? (
-                          <span className="text-sm">
-                            {record.checkOut || '-'}
+                        {readOnly || isLeaveOrAbsent ? (
+                          <span className="text-sm text-gray-400">
+                            {isLeaveOrAbsent ? '-' : (record.checkOut || '-')}
                           </span>
                         ) : (
                           <Input
