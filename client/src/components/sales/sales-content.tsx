@@ -642,15 +642,86 @@ Total Pemasukan: Rp 100.000
   );
 }
 
-// Sales Detail Modal Component for single record
+// Sales Detail Modal Component for single record (EDITABLE VERSION)
 function SalesDetailModal({ record }: { record: Sales }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   
   // Get users data to show staff names
   const { data: allUsers } = useQuery<any[]>({ queryKey: ['/api/users'] });
+  
+  // Parse JSON data if available
+  const parseJsonData = (jsonString: string | null) => {
+    if (!jsonString) return [];
+    try {
+      return JSON.parse(jsonString);
+    } catch {
+      return [];
+    }
+  };
+
+  const incomeData = parseJsonData(record.incomeDetails || null);
+  const expenseData = parseJsonData(record.expenseDetails || null);
+  
+  // Edit form state
+  const [editData, setEditData] = useState({
+    shift: record.shift || "",
+    checkIn: record.checkIn || "",
+    checkOut: record.checkOut || "",
+    meterStart: record.meterStart || "",
+    meterEnd: record.meterEnd || "",
+    totalLiters: record.totalLiters || "",
+    totalCash: record.totalCash || "",
+    totalQris: record.totalQris || "",
+    totalIncome: record.totalIncome || "",
+    totalExpenses: record.totalExpenses || "",
+    incomeItems: incomeData,
+    expenseItems: expenseData,
+  });
+  
+  // Reset edit data when record changes or dialog opens
+  useEffect(() => {
+    setEditData({
+      shift: record.shift || "",
+      checkIn: record.checkIn || "",
+      checkOut: record.checkOut || "",
+      meterStart: record.meterStart || "",
+      meterEnd: record.meterEnd || "",
+      totalLiters: record.totalLiters || "",
+      totalCash: record.totalCash || "",
+      totalQris: record.totalQris || "",
+      totalIncome: record.totalIncome || "",
+      totalExpenses: record.totalExpenses || "",
+      incomeItems: parseJsonData(record.incomeDetails || null),
+      expenseItems: parseJsonData(record.expenseDetails || null),
+    });
+    setIsEditMode(false);
+  }, [record, isOpen]);
+  
+  // Update mutation for sales record
+  const updateSalesMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return await apiRequest('PUT', `/api/sales/${record.id}`, data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Berhasil",
+        description: "Data penjualan berhasil diupdate",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/sales'] });
+      setIsEditMode(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Gagal mengupdate data penjualan",
+        variant: "destructive",
+      });
+    },
+  });
   
   // Delete mutation for sales record
   const deleteSalesMutation = useMutation({
@@ -680,18 +751,70 @@ function SalesDetailModal({ record }: { record: Sales }) {
     }
   };
   
-  // Parse JSON data if available
-  const parseJsonData = (jsonString: string | null) => {
-    if (!jsonString) return [];
-    try {
-      return JSON.parse(jsonString);
-    } catch {
-      return [];
-    }
+  const handleSave = () => {
+    // Calculate totals
+    const totalIncomeCalc = editData.incomeItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0);
+    const totalExpensesCalc = editData.expenseItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0);
+    const totalSalesCalc = parseFloat(editData.totalCash || "0") + parseFloat(editData.totalQris || "0") + totalIncomeCalc - totalExpensesCalc;
+    
+    const updatePayload = {
+      shift: editData.shift,
+      checkIn: editData.checkIn,
+      checkOut: editData.checkOut,
+      meterStart: editData.meterStart,
+      meterEnd: editData.meterEnd,
+      totalLiters: editData.totalLiters,
+      totalCash: editData.totalCash,
+      totalQris: editData.totalQris,
+      totalIncome: totalIncomeCalc.toString(),
+      totalExpenses: totalExpensesCalc.toString(),
+      totalSales: totalSalesCalc.toString(),
+      incomeDetails: JSON.stringify(editData.incomeItems),
+      expenseDetails: JSON.stringify(editData.expenseItems),
+    };
+    
+    updateSalesMutation.mutate(updatePayload);
   };
-
-  const incomeData = parseJsonData(record.incomeDetails || null);
-  const expenseData = parseJsonData(record.expenseDetails || null);
+  
+  const addIncomeItem = () => {
+    setEditData({
+      ...editData,
+      incomeItems: [...editData.incomeItems, { description: "", amount: "" }]
+    });
+  };
+  
+  const removeIncomeItem = (index: number) => {
+    setEditData({
+      ...editData,
+      incomeItems: editData.incomeItems.filter((_: any, i: number) => i !== index)
+    });
+  };
+  
+  const updateIncomeItem = (index: number, field: string, value: string) => {
+    const newItems = [...editData.incomeItems];
+    newItems[index] = { ...newItems[index], [field]: value };
+    setEditData({ ...editData, incomeItems: newItems });
+  };
+  
+  const addExpenseItem = () => {
+    setEditData({
+      ...editData,
+      expenseItems: [...editData.expenseItems, { description: "", amount: "" }]
+    });
+  };
+  
+  const removeExpenseItem = (index: number) => {
+    setEditData({
+      ...editData,
+      expenseItems: editData.expenseItems.filter((_: any, i: number) => i !== index)
+    });
+  };
+  
+  const updateExpenseItem = (index: number, field: string, value: string) => {
+    const newItems = [...editData.expenseItems];
+    newItems[index] = { ...newItems[index], [field]: value };
+    setEditData({ ...editData, expenseItems: newItems });
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -711,25 +834,38 @@ function SalesDetailModal({ record }: { record: Sales }) {
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
-              Detail Penjualan Per Shift
+              Detail Penjualan Per Shift {isEditMode && <Badge variant="outline">Mode Edit</Badge>}
             </div>
-            {user && ['manager', 'administrasi'].includes(user.role) && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => handleDeleteSales(record.id)}
-                disabled={deleteSalesMutation.isPending}
-                className="text-red-600 border-red-200 hover:bg-red-50"
-                data-testid={`button-delete-${record.id}`}
-              >
-                {deleteSalesMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4 mr-1" />
-                )}
-                {deleteSalesMutation.isPending ? "Menghapus..." : "Hapus"}
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {!isEditMode && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditMode(true)}
+                  data-testid={`button-edit-${record.id}`}
+                >
+                  <Settings2 className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+              )}
+              {user && ['manager', 'administrasi'].includes(user.role) && !isEditMode && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => handleDeleteSales(record.id)}
+                  disabled={deleteSalesMutation.isPending}
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                  data-testid={`button-delete-${record.id}`}
+                >
+                  {deleteSalesMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-1" />
+                  )}
+                  {deleteSalesMutation.isPending ? "Menghapus..." : "Hapus"}
+                </Button>
+              )}
+            </div>
           </DialogTitle>
         </DialogHeader>
         
@@ -750,27 +886,56 @@ function SalesDetailModal({ record }: { record: Sales }) {
                 <Clock className="h-4 w-4" />
                 <span className="font-medium">Shift</span>
               </div>
-              <p className="text-lg font-semibold capitalize">
-                {record.shift || "—"}
-              </p>
+              {isEditMode ? (
+                <Input
+                  value={editData.shift}
+                  onChange={(e) => setEditData({ ...editData, shift: e.target.value })}
+                  className="mt-1"
+                  data-testid="input-shift"
+                />
+              ) : (
+                <p className="text-lg font-semibold capitalize">
+                  {record.shift || "—"}
+                </p>
+              )}
             </div>
             <div className="bg-green-50 p-3 rounded-lg">
               <div className="flex items-center gap-2 text-green-700 mb-1">
                 <Clock className="h-4 w-4" />
                 <span className="font-medium">Jam Masuk</span>
               </div>
-              <p className="text-lg font-semibold">
-                {record.checkIn || "—"}
-              </p>
+              {isEditMode ? (
+                <Input
+                  type="time"
+                  value={editData.checkIn}
+                  onChange={(e) => setEditData({ ...editData, checkIn: e.target.value })}
+                  className="mt-1"
+                  data-testid="input-checkin"
+                />
+              ) : (
+                <p className="text-lg font-semibold">
+                  {record.checkIn || "—"}
+                </p>
+              )}
             </div>
             <div className="bg-orange-50 p-3 rounded-lg">
               <div className="flex items-center gap-2 text-orange-700 mb-1">
                 <Clock className="h-4 w-4" />
                 <span className="font-medium">Jam Keluar</span>
               </div>
-              <p className="text-lg font-semibold">
-                {record.checkOut || "—"}
-              </p>
+              {isEditMode ? (
+                <Input
+                  type="time"
+                  value={editData.checkOut}
+                  onChange={(e) => setEditData({ ...editData, checkOut: e.target.value })}
+                  className="mt-1"
+                  data-testid="input-checkout"
+                />
+              ) : (
+                <p className="text-lg font-semibold">
+                  {record.checkOut || "—"}
+                </p>
+              )}
             </div>
           </div>
 
@@ -794,13 +959,43 @@ function SalesDetailModal({ record }: { record: Sales }) {
                 <TableBody>
                   <TableRow>
                     <TableCell className="font-medium">
-                      {record.meterStart || "0"}
+                      {isEditMode ? (
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={editData.meterStart}
+                          onChange={(e) => setEditData({ ...editData, meterStart: e.target.value })}
+                          data-testid="input-meter-start"
+                        />
+                      ) : (
+                        record.meterStart || "0"
+                      )}
                     </TableCell>
                     <TableCell className="font-medium">
-                      {record.meterEnd || "0"}
+                      {isEditMode ? (
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={editData.meterEnd}
+                          onChange={(e) => setEditData({ ...editData, meterEnd: e.target.value })}
+                          data-testid="input-meter-end"
+                        />
+                      ) : (
+                        record.meterEnd || "0"
+                      )}
                     </TableCell>
                     <TableCell className="font-semibold text-blue-600">
-                      {record.totalLiters || "0"} L
+                      {isEditMode ? (
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={editData.totalLiters}
+                          onChange={(e) => setEditData({ ...editData, totalLiters: e.target.value })}
+                          data-testid="input-total-liters"
+                        />
+                      ) : (
+                        `${record.totalLiters || "0"} L`
+                      )}
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -828,13 +1023,35 @@ function SalesDetailModal({ record }: { record: Sales }) {
                 <TableBody>
                   <TableRow>
                     <TableCell className="font-semibold text-orange-600">
-                      {formatRupiah(record.totalCash || 0)}
+                      {isEditMode ? (
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={editData.totalCash}
+                          onChange={(e) => setEditData({ ...editData, totalCash: e.target.value })}
+                          placeholder="Cash"
+                          data-testid="input-total-cash"
+                        />
+                      ) : (
+                        formatRupiah(record.totalCash || 0)
+                      )}
                     </TableCell>
                     <TableCell className="font-semibold text-blue-600">
-                      {formatRupiah(record.totalQris || 0)}
+                      {isEditMode ? (
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={editData.totalQris}
+                          onChange={(e) => setEditData({ ...editData, totalQris: e.target.value })}
+                          placeholder="QRIS"
+                          data-testid="input-total-qris"
+                        />
+                      ) : (
+                        formatRupiah(record.totalQris || 0)
+                      )}
                     </TableCell>
                     <TableCell className="font-semibold text-green-700">
-                      {formatRupiah((parseFloat(record.totalCash || "0") + parseFloat(record.totalQris || "0")))}
+                      {formatRupiah((parseFloat(editData.totalCash || "0") + parseFloat(editData.totalQris || "0")))}
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -854,59 +1071,175 @@ function SalesDetailModal({ record }: { record: Sales }) {
               <div className="grid md:grid-cols-2 gap-6">
                 {/* Pemasukan */}
                 <div>
-                  <h4 className="font-semibold text-green-700 mb-3 flex items-center gap-2">
-                    <span className="w-3 h-3 bg-green-500 rounded-full"></span>
-                    Pemasukan
+                  <h4 className="font-semibold text-green-700 mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+                      Pemasukan
+                    </div>
+                    {isEditMode && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addIncomeItem}
+                        data-testid="button-add-income"
+                      >
+                        + Tambah
+                      </Button>
+                    )}
                   </h4>
-                  {incomeData.length > 0 ? (
+                  {isEditMode ? (
                     <div className="space-y-2">
-                      {incomeData.map((item: any, index: number) => (
-                        <div key={index} className="flex justify-between items-center p-2 bg-green-50 rounded">
-                          <span className="text-sm">{item.description || item.name || `Item ${index + 1}`}</span>
-                          <span className="font-medium text-green-700">{formatRupiah(item.amount || 0)}</span>
+                      {editData.incomeItems.map((item: any, index: number) => (
+                        <div key={index} className="flex gap-2 items-center">
+                          <Input
+                            value={item.description || ""}
+                            onChange={(e) => updateIncomeItem(index, "description", e.target.value)}
+                            placeholder="Deskripsi"
+                            className="flex-1"
+                            data-testid={`input-income-desc-${index}`}
+                          />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={item.amount || ""}
+                            onChange={(e) => updateIncomeItem(index, "amount", e.target.value)}
+                            placeholder="Jumlah"
+                            className="w-32"
+                            data-testid={`input-income-amount-${index}`}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeIncomeItem(index)}
+                            data-testid={`button-remove-income-${index}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
                         </div>
                       ))}
+                      {editData.incomeItems.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-2">Tidak ada data pemasukan</p>
+                      )}
                       <div className="border-t pt-2 mt-3">
                         <div className="flex justify-between items-center font-semibold">
                           <span>Total Pemasukan:</span>
-                          <span className="text-green-700">{formatRupiah(record.totalIncome || 0)}</span>
+                          <span className="text-green-700">
+                            {formatRupiah(editData.incomeItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0))}
+                          </span>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center text-muted-foreground py-4">
-                      <p className="text-sm">Tidak ada data pemasukan</p>
-                      <p className="font-medium mt-1">{formatRupiah(record.totalIncome || 0)}</p>
-                    </div>
+                    <>
+                      {incomeData.length > 0 ? (
+                        <div className="space-y-2">
+                          {incomeData.map((item: any, index: number) => (
+                            <div key={index} className="flex justify-between items-center p-2 bg-green-50 rounded">
+                              <span className="text-sm">{item.description || item.name || `Item ${index + 1}`}</span>
+                              <span className="font-medium text-green-700">{formatRupiah(item.amount || 0)}</span>
+                            </div>
+                          ))}
+                          <div className="border-t pt-2 mt-3">
+                            <div className="flex justify-between items-center font-semibold">
+                              <span>Total Pemasukan:</span>
+                              <span className="text-green-700">{formatRupiah(record.totalIncome || 0)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center text-muted-foreground py-4">
+                          <p className="text-sm">Tidak ada data pemasukan</p>
+                          <p className="font-medium mt-1">{formatRupiah(record.totalIncome || 0)}</p>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
                 {/* Pengeluaran */}
                 <div>
-                  <h4 className="font-semibold text-red-700 mb-3 flex items-center gap-2">
-                    <span className="w-3 h-3 bg-red-500 rounded-full"></span>
-                    Pengeluaran
+                  <h4 className="font-semibold text-red-700 mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 bg-red-500 rounded-full"></span>
+                      Pengeluaran
+                    </div>
+                    {isEditMode && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addExpenseItem}
+                        data-testid="button-add-expense"
+                      >
+                        + Tambah
+                      </Button>
+                    )}
                   </h4>
-                  {expenseData.length > 0 ? (
+                  {isEditMode ? (
                     <div className="space-y-2">
-                      {expenseData.map((item: any, index: number) => (
-                        <div key={index} className="flex justify-between items-center p-2 bg-red-50 rounded">
-                          <span className="text-sm">{item.description || item.name || `Item ${index + 1}`}</span>
-                          <span className="font-medium text-red-700">{formatRupiah(item.amount || 0)}</span>
+                      {editData.expenseItems.map((item: any, index: number) => (
+                        <div key={index} className="flex gap-2 items-center">
+                          <Input
+                            value={item.description || ""}
+                            onChange={(e) => updateExpenseItem(index, "description", e.target.value)}
+                            placeholder="Deskripsi"
+                            className="flex-1"
+                            data-testid={`input-expense-desc-${index}`}
+                          />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={item.amount || ""}
+                            onChange={(e) => updateExpenseItem(index, "amount", e.target.value)}
+                            placeholder="Jumlah"
+                            className="w-32"
+                            data-testid={`input-expense-amount-${index}`}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeExpenseItem(index)}
+                            data-testid={`button-remove-expense-${index}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
                         </div>
                       ))}
+                      {editData.expenseItems.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-2">Tidak ada data pengeluaran</p>
+                      )}
                       <div className="border-t pt-2 mt-3">
                         <div className="flex justify-between items-center font-semibold">
                           <span>Total Pengeluaran:</span>
-                          <span className="text-red-700">{formatRupiah(record.totalExpenses || 0)}</span>
+                          <span className="text-red-700">
+                            {formatRupiah(editData.expenseItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0))}
+                          </span>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center text-muted-foreground py-4">
-                      <p className="text-sm">Tidak ada data pengeluaran</p>
-                      <p className="font-medium mt-1">{formatRupiah(record.totalExpenses || 0)}</p>
-                    </div>
+                    <>
+                      {expenseData.length > 0 ? (
+                        <div className="space-y-2">
+                          {expenseData.map((item: any, index: number) => (
+                            <div key={index} className="flex justify-between items-center p-2 bg-red-50 rounded">
+                              <span className="text-sm">{item.description || item.name || `Item ${index + 1}`}</span>
+                              <span className="font-medium text-red-700">{formatRupiah(item.amount || 0)}</span>
+                            </div>
+                          ))}
+                          <div className="border-t pt-2 mt-3">
+                            <div className="flex justify-between items-center font-semibold">
+                              <span>Total Pengeluaran:</span>
+                              <span className="text-red-700">{formatRupiah(record.totalExpenses || 0)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center text-muted-foreground py-4">
+                          <p className="text-sm">Tidak ada data pengeluaran</p>
+                          <p className="font-medium mt-1">{formatRupiah(record.totalExpenses || 0)}</p>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -924,7 +1257,12 @@ function SalesDetailModal({ record }: { record: Sales }) {
             <CardContent>
               <div className="text-center">
                 <p className="text-3xl font-bold text-green-700 mb-2">
-                  {formatRupiah(record.totalSales)}
+                  {isEditMode ? formatRupiah(
+                    parseFloat(editData.totalCash || "0") + 
+                    parseFloat(editData.totalQris || "0") + 
+                    editData.incomeItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0) - 
+                    editData.expenseItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0)
+                  ) : formatRupiah(record.totalSales)}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Total penjualan pada shift ini
@@ -933,6 +1271,52 @@ function SalesDetailModal({ record }: { record: Sales }) {
             </CardContent>
           </Card>
         </div>
+        
+        {/* Dialog Footer with Save/Cancel buttons in edit mode */}
+        {isEditMode && (
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsEditMode(false);
+                setEditData({
+                  shift: record.shift || "",
+                  checkIn: record.checkIn || "",
+                  checkOut: record.checkOut || "",
+                  meterStart: record.meterStart || "",
+                  meterEnd: record.meterEnd || "",
+                  totalLiters: record.totalLiters || "",
+                  totalCash: record.totalCash || "",
+                  totalQris: record.totalQris || "",
+                  totalIncome: record.totalIncome || "",
+                  totalExpenses: record.totalExpenses || "",
+                  incomeItems: parseJsonData(record.incomeDetails || null),
+                  expenseItems: parseJsonData(record.expenseDetails || null),
+                });
+              }}
+              data-testid="button-cancel-edit"
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={updateSalesMutation.isPending}
+              data-testid="button-save-edit"
+            >
+              {updateSalesMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Menyimpan...
+                </>
+              ) : (
+                <>
+                  <CheckSquare className="h-4 w-4 mr-2" />
+                  Simpan Perubahan
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
