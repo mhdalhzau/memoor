@@ -33,6 +33,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatRupiah, formatNumber } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +41,7 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   type Cashflow,
   type Customer,
+  type Sales,
   insertCustomerSchema,
 } from "@shared/schema";
 import { SyncButton } from "@/components/ui/sync-button";
@@ -157,6 +159,7 @@ export default function CashflowContent() {
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [deleteConfirmEntry, setDeleteConfirmEntry] = useState<Cashflow | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedSalesIds, setSelectedSalesIds] = useState<string[]>([]);
 
   // Fetch stores to get actual store names and data
   const { data: stores = [] } = useQuery({
@@ -231,6 +234,7 @@ export default function CashflowContent() {
   const watchKonter = form.watch("konter");
   const watchAmount = form.watch("amount");
   const watchPaymentStatus = form.watch("paymentStatus");
+  const watchDate = form.watch("date");
 
   // Check if current user can delete cashflow records
   const canDeleteCashflow = user && (user.role === 'manager' || user.role === 'administrasi');
@@ -363,6 +367,41 @@ export default function CashflowContent() {
     ? parseInt(activeTab.replace("store-", ""))
     : undefined;
 
+  // Fetch sales records with status "diterima" for Transfer Rekening
+  const { data: receivedSales = [] } = useQuery<Sales[]>({
+    queryKey: ["/api/sales/received", { storeId: currentStoreId, date: watchDate }],
+    queryFn: async () => {
+      if (!currentStoreId || !watchDate) return [];
+      const res = await apiRequest(
+        "GET",
+        `/api/sales?storeId=${currentStoreId}&status=diterima&date=${watchDate}`
+      );
+      return await res.json();
+    },
+    enabled: !!currentStoreId && !!watchDate && isTransferRekening(watchType),
+  });
+
+  // Calculate total transfer amount from selected sales records
+  useEffect(() => {
+    if (isTransferRekening(watchType) && selectedSalesIds.length > 0 && receivedSales.length > 0) {
+      const totalAmount = selectedSalesIds.reduce((sum, salesId) => {
+        const sales = receivedSales.find(s => s.id === salesId);
+        if (sales && sales.totalCash) {
+          return sum + parseFloat(sales.totalCash.toString());
+        }
+        return sum;
+      }, 0);
+      form.setValue("amount", totalAmount);
+    } else if (isTransferRekening(watchType) && selectedSalesIds.length === 0) {
+      form.setValue("amount", 0);
+    }
+  }, [selectedSalesIds, receivedSales, watchType, form]);
+
+  // Reset selected sales when date or type changes
+  useEffect(() => {
+    setSelectedSalesIds([]);
+  }, [watchDate, watchType]);
+
   const { data: cashflowRecords, isLoading } = useQuery<Cashflow[]>({
     queryKey: ["/api/cashflow", { storeId: currentStoreId }],
     queryFn: async () => {
@@ -430,7 +469,7 @@ export default function CashflowContent() {
 
   // Submit cashflow mutation
   const submitCashflowMutation = useMutation({
-    mutationFn: async (data: CashflowData) => {
+    mutationFn: async (data: CashflowData & { salesIds?: string[] }) => {
       console.log("🚀 CASHFLOW SUBMISSION STARTED");
       console.log("📝 Form Data:", data);
       console.log("🏪 Target Store ID:", data.storeId);
@@ -439,6 +478,16 @@ export default function CashflowContent() {
       const result = await res.json();
       console.log("✅ CASHFLOW SUBMISSION SUCCESS");
       console.log("📄 Server Response:", result);
+      
+      // If Transfer Rekening with selected sales, update sales status to "disetor"
+      if (data.salesIds && data.salesIds.length > 0) {
+        await Promise.all(
+          data.salesIds.map(async (salesId) => {
+            await apiRequest("PATCH", `/api/sales/${salesId}`, { status: "disetor" });
+          })
+        );
+      }
+      
       return result;
     },
     onSuccess: () => {
@@ -447,7 +496,9 @@ export default function CashflowContent() {
         description: "Cashflow entry added successfully!",
       });
       form.reset();
+      setSelectedSalesIds([]);
       queryClient.invalidateQueries({ queryKey: ["/api/cashflow"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
     },
     onError: (error: Error) => {
       console.error("❌ CASHFLOW SUBMISSION ERROR:", error);
@@ -565,10 +616,15 @@ export default function CashflowContent() {
     }
 
     // Force store ID to current store
-    const submissionData = { 
+    const submissionData: any = { 
       ...data, 
       storeId: currentStoreId 
     };
+    
+    // Add selected sales IDs for Transfer Rekening
+    if (isTransferRekening(data.type) && selectedSalesIds.length > 0) {
+      submissionData.salesIds = selectedSalesIds;
+    }
     
     console.log("📤 Final Submission Data:", submissionData);
     submitCashflowMutation.mutate(submissionData);
@@ -908,6 +964,66 @@ export default function CashflowContent() {
                             <h4 className="font-medium text-purple-800">
                               Transfer Rekening Details
                             </h4>
+
+                            {/* Sales Selection Checkboxes */}
+                            {receivedSales.length > 0 && (
+                              <div className="p-3 border border-blue-200 rounded-lg bg-blue-50/50 space-y-3">
+                                <h5 className="font-medium text-blue-800 text-sm">
+                                  Pilih Sales Record yang Diterima ({new Date(watchDate).toLocaleDateString('id-ID')})
+                                </h5>
+                                <div className="space-y-2 max-h-40 overflow-y-auto">
+                                  {receivedSales.map((sales) => (
+                                    <div
+                                      key={sales.id}
+                                      className="flex items-center justify-between p-2 bg-white rounded border border-blue-100"
+                                    >
+                                      <div className="flex items-center space-x-3">
+                                        <Checkbox
+                                          id={`sales-${sales.id}`}
+                                          checked={selectedSalesIds.includes(sales.id)}
+                                          onCheckedChange={(checked) => {
+                                            if (checked) {
+                                              setSelectedSalesIds([...selectedSalesIds, sales.id]);
+                                            } else {
+                                              setSelectedSalesIds(selectedSalesIds.filter(id => id !== sales.id));
+                                            }
+                                          }}
+                                          data-testid={`checkbox-sales-${sales.id}`}
+                                        />
+                                        <label
+                                          htmlFor={`sales-${sales.id}`}
+                                          className="text-sm font-medium cursor-pointer"
+                                        >
+                                          {sales.shift || 'N/A'} - {formatRupiah(sales.totalCash || 0)}
+                                        </label>
+                                      </div>
+                                      <span className="text-xs text-gray-500">
+                                        {new Date(sales.date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="pt-2 border-t border-blue-200">
+                                  <p className="text-sm font-semibold text-blue-900">
+                                    Total Terpilih: {formatRupiah(
+                                      selectedSalesIds.reduce((sum, salesId) => {
+                                        const sales = receivedSales.find(s => s.id === salesId);
+                                        return sum + (sales?.totalCash ? parseFloat(sales.totalCash.toString()) : 0);
+                                      }, 0)
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {receivedSales.length === 0 && (
+                              <div className="p-3 border border-gray-200 rounded-lg bg-gray-50 text-center">
+                                <p className="text-sm text-gray-600">
+                                  Tidak ada sales record dengan status "diterima" pada tanggal {new Date(watchDate).toLocaleDateString('id-ID')}
+                                </p>
+                              </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <FormField
                                 control={form.control}
@@ -941,12 +1057,14 @@ export default function CashflowContent() {
                                 name="amount"
                                 render={({ field }) => (
                                   <FormItem>
-                                    <FormLabel>Transfer Amount</FormLabel>
+                                    <FormLabel>Transfer Amount {selectedSalesIds.length > 0 && "(Auto-calculated)"}</FormLabel>
                                     <FormControl>
                                       <Input
                                         type="number"
                                         step="0.01"
                                         placeholder="Enter amount"
+                                        readOnly={selectedSalesIds.length > 0}
+                                        className={selectedSalesIds.length > 0 ? "bg-gray-100" : ""}
                                         data-testid="input-transfer-amount"
                                         {...field}
                                       />
