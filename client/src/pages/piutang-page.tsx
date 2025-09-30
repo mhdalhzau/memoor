@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +14,16 @@ import {
   DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Form,
   FormControl,
@@ -47,6 +58,8 @@ import {
   Search,
   AlertTriangle,
   UserCheck,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -96,6 +109,9 @@ export default function PiutangPage() {
   const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(
     new Set(),
   );
+  const [selectedPiutangIds, setSelectedPiutangIds] = useState<string[]>([]);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  
   // Fetch stores data for category display
   const { data: stores = [] } = useQuery<Store[]>({
     queryKey: ["/api/stores"],
@@ -256,6 +272,29 @@ export default function PiutangPage() {
       toast({
         title: "Error",
         description: error.message || "Failed to record payment",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      return await apiRequest("POST", "/api/piutang/bulk-delete", { ids });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: `Successfully deleted ${selectedPiutangIds.length} piutang record${selectedPiutangIds.length > 1 ? "s" : ""}`,
+      });
+      setSelectedPiutangIds([]);
+      setShowBulkDeleteDialog(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/piutang"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete piutang records",
         variant: "destructive",
       });
     },
@@ -544,6 +583,27 @@ export default function PiutangPage() {
     });
   }, [piutangRecords, stores]);
 
+  // Helper functions for checkbox selection
+  const togglePiutangSelection = (id: string) => {
+    setSelectedPiutangIds(prev => 
+      prev.includes(id) 
+        ? prev.filter(piutangId => piutangId !== id)
+        : [...prev, id]
+    );
+  };
+
+  const toggleAllPiutangs = () => {
+    if (selectedPiutangIds.length === piutangRecords.length) {
+      setSelectedPiutangIds([]);
+    } else {
+      setSelectedPiutangIds(piutangRecords.map(p => p.id));
+    }
+  };
+
+  const handleBulkDelete = () => {
+    bulkDeleteMutation.mutate(selectedPiutangIds);
+  };
+
   if (isLoading) {
     return (
       <div className="container mx-auto py-8 slide-up">
@@ -667,6 +727,42 @@ export default function PiutangPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {selectedPiutangIds.length > 0 && (
+            <>
+              <Badge variant="secondary" className="mr-2">
+                {selectedPiutangIds.length} selected
+              </Badge>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowBulkDeleteDialog(true)}
+                disabled={bulkDeleteMutation.isPending}
+                data-testid="button-bulk-delete-piutang"
+              >
+                {bulkDeleteMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete {selectedPiutangIds.length} item{selectedPiutangIds.length > 1 ? 's' : ''}
+                  </>
+                )}
+              </Button>
+            </>
+          )}
+          {piutangRecords.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={selectedPiutangIds.length === piutangRecords.length && piutangRecords.length > 0}
+                onCheckedChange={toggleAllPiutangs}
+                data-testid="checkbox-select-all-piutang"
+              />
+              <span className="text-sm text-gray-600 dark:text-gray-400">Select All</span>
+            </div>
+          )}
           <Button
             onClick={() => {
               console.log("🔄 Manual refresh piutang data");
@@ -1030,14 +1126,25 @@ export default function PiutangPage() {
                           {item.piutangRecords.map((piutang) => {
                             const remainingAmount =
                               calculateRemainingDebt(piutang);
+                            const isSelected = selectedPiutangIds.includes(piutang.id);
                             return (
                               <div
                                 key={piutang.id}
-                                className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800"
+                                className={`border rounded-lg p-4 transition-colors ${
+                                  isSelected 
+                                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300' 
+                                    : 'bg-gray-50 dark:bg-gray-800'
+                                }`}
                                 data-testid={`card-piutang-${piutang.id}`}
                               >
                                 <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center gap-2">
+                                    <Checkbox
+                                      checked={isSelected}
+                                      onCheckedChange={() => togglePiutangSelection(piutang.id)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      data-testid={`checkbox-piutang-${piutang.id}`}
+                                    />
                                     <Receipt className="h-4 w-4 text-gray-500" />
                                     <span
                                       className="font-medium"
@@ -1213,6 +1320,89 @@ export default function PiutangPage() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Selected Piutang Records?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedPiutangIds.length} piutang record{selectedPiutangIds.length > 1 ? 's' : ''}? 
+              This action cannot be undone and will permanently delete the following records:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          {/* List of selected piutang records */}
+          <div className="max-h-60 overflow-y-auto border rounded-md p-3 space-y-2">
+            {selectedPiutangIds.map((piutangId) => {
+              const record = piutangRecords?.find(r => r.id === piutangId);
+              if (!record) return null;
+              
+              const store = stores?.find((s) => s.id === record.storeId);
+              const storeName = store?.name || `Store ${record.storeId}`;
+              
+              const customer = unifiedCustomers.find(c => c.id === record.customerId);
+              const customerName = customer?.name || `Customer ${record.customerId.slice(-8)}`;
+              
+              return (
+                <div key={piutangId} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">{customerName}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                      {storeName} • {record.description}
+                    </div>
+                    {record.dueDate && (
+                      <div className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                        <Calendar className="h-3 w-3" />
+                        Due: {new Date(record.dueDate).toLocaleDateString('id-ID', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric'
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold text-red-600">
+                      {formatRupiah(parseFloat(record.amount))}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Paid: {formatRupiah(parseFloat(record.paidAmount || "0"))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              disabled={bulkDeleteMutation.isPending}
+              data-testid="button-cancel-bulk-delete-piutang"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+              className="bg-red-600 hover:bg-red-700"
+              data-testid="button-confirm-bulk-delete-piutang"
+            >
+              {bulkDeleteMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete {selectedPiutangIds.length} Record{selectedPiutangIds.length > 1 ? 's' : ''}
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
