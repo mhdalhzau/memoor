@@ -54,6 +54,7 @@ import {
   Plus,
   User,
   Trash2,
+  Save,
 } from "lucide-react";
 
 // Define transaction types by category
@@ -839,17 +840,39 @@ export default function CashflowContent() {
                                 name="pajakOngkos"
                                 render={({ field }) => (
                                   <FormItem>
-                                    <FormLabel>Pajak Ongkos (Auto-calculated)</FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        type="number"
-                                        placeholder="Pajak ongkos"
-                                        readOnly
-                                        className="bg-gray-100"
-                                        data-testid="input-pajak-ongkos"
-                                        {...field}
-                                      />
-                                    </FormControl>
+                                    <FormLabel>Pajak Ongkos</FormLabel>
+                                    <div className="flex gap-2">
+                                      <FormControl>
+                                        <Input
+                                          type="number"
+                                          placeholder="Pajak ongkos"
+                                          data-testid="input-pajak-ongkos"
+                                          {...field}
+                                          onChange={(e) => {
+                                            const value = parseFloat(e.target.value) || 0;
+                                            field.onChange(value);
+                                            // Update total when pajak changes
+                                            const baseAmount = form.getValues("amount") || 0;
+                                            const pajakTransfer = form.getValues("pajakTransfer") || 2500;
+                                            form.setValue("totalPengeluaran", baseAmount + value + pajakTransfer);
+                                          }}
+                                        />
+                                      </FormControl>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                          form.setValue("pajakOngkos", 0);
+                                          const baseAmount = form.getValues("amount") || 0;
+                                          const pajakTransfer = form.getValues("pajakTransfer") || 2500;
+                                          form.setValue("totalPengeluaran", baseAmount + pajakTransfer);
+                                        }}
+                                        data-testid="button-reset-pajak"
+                                      >
+                                        <Save className="h-4 w-4" />
+                                      </Button>
+                                    </div>
                                     <FormMessage />
                                   </FormItem>
                                 )}

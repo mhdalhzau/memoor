@@ -10,6 +10,12 @@ This is a multi-role employee management system built with React, TypeScript, Ex
 - **Staff (Endang)**: endang@spbu.com / endang123
 
 ## Recent Fixes (September 30, 2025)
+✅ **Cashflow Pajak Ongkos Enhancement**: Modified Pajak Ongkos field for Pembelian Stok (Pembelian Minyak)
+  - Pajak Ongkos field is now editable for manual input
+  - Added quick-reset button (Save icon) to instantly set pajak to 0
+  - Total Pengeluaran automatically updates when pajak is changed manually
+  - User can now toggle tax on/off easily without affecting the main form structure
+
 ✅ **Attendance Status Enhancement**: Modified daily attendance data behavior for "cuti" (leave) and "alpha" (absent) statuses
   - When status is changed to "cuti" or "alpha", all data fields (shift, check-in, check-out) are automatically cleared
   - Input fields for shift, check-in time, and check-out time are disabled when status is "cuti" or "alpha"
