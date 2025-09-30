@@ -2519,9 +2519,6 @@ function SalesRecordsTable({
               const record = records.find(r => r.id === salesId);
               if (!record) return null;
               
-              const store = stores?.find((s: any) => s.id === record.storeId);
-              const storeName = store?.name || `Store ${record.storeId}`;
-              
               return (
                 <div key={salesId} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded">
                   <div className="flex-1">
@@ -2529,7 +2526,7 @@ function SalesRecordsTable({
                       {formatIndonesianDate(record.date || record.createdAt)}
                     </div>
                     <div className="text-xs text-gray-600 dark:text-gray-400">
-                      {storeName} • {getUserNameFromId(record.userId, allUsers)}
+                      {storeLabel} • {getUserNameFromId(record.userId, allUsers)}
                     </div>
                   </div>
                   <div className="text-right">

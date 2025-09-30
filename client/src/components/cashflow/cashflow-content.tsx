@@ -57,7 +57,10 @@ import {
   User,
   Trash2,
   Save,
+  Loader2,
 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 
 // Define transaction types by category
 const incomeTypes = [
@@ -160,6 +163,8 @@ export default function CashflowContent() {
   const [deleteConfirmEntry, setDeleteConfirmEntry] = useState<Cashflow | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedSalesIds, setSelectedSalesIds] = useState<string[]>([]);
+  const [selectedCashflowIds, setSelectedCashflowIds] = useState<string[]>([]);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
 
   // Fetch stores to get actual store names and data
   const { data: stores = [] } = useQuery({
@@ -589,6 +594,30 @@ export default function CashflowContent() {
     },
   });
 
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await apiRequest("POST", "/api/cashflows/bulk-delete", { ids });
+      return await res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: `Successfully deleted ${selectedCashflowIds.length} cashflow record${selectedCashflowIds.length > 1 ? 's' : ''}`,
+      });
+      setSelectedCashflowIds([]);
+      setShowBulkDeleteDialog(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/cashflow"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete cashflow records",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Delete confirmation handlers
   const handleDeleteClick = (entry: Cashflow, event: React.MouseEvent) => {
     event.stopPropagation(); // Prevent triggering the row click
@@ -605,6 +634,48 @@ export default function CashflowContent() {
   const handleDeleteCancel = () => {
     setIsDeleteDialogOpen(false);
     setDeleteConfirmEntry(null);
+  };
+
+  // Bulk delete handlers
+  const toggleCashflowSelection = (id: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSelectedCashflowIds(prev => 
+      prev.includes(id) ? prev.filter(cashflowId => cashflowId !== id) : [...prev, id]
+    );
+  };
+
+  const toggleAllCashflowsForStore = (storeId: number) => {
+    const storeCashflows = cashflowRecords?.filter(record => record.storeId === storeId) || [];
+    const storeCashflowIds = storeCashflows.map(record => record.id);
+    
+    const allSelected = storeCashflowIds.every(id => selectedCashflowIds.includes(id));
+    
+    if (allSelected) {
+      // Deselect all from this store
+      setSelectedCashflowIds(prev => prev.filter(id => !storeCashflowIds.includes(id)));
+    } else {
+      // Select all from this store
+      setSelectedCashflowIds(prev => {
+        const newSelection = [...prev];
+        storeCashflowIds.forEach(id => {
+          if (!newSelection.includes(id)) {
+            newSelection.push(id);
+          }
+        });
+        return newSelection;
+      });
+    }
+  };
+
+  const handleBulkDelete = () => {
+    bulkDeleteMutation.mutate(selectedCashflowIds);
+  };
+
+  // Get selected count for current store
+  const getSelectedCountForStore = (storeId: number) => {
+    const storeCashflows = cashflowRecords?.filter(record => record.storeId === storeId) || [];
+    const storeCashflowIds = storeCashflows.map(record => record.id);
+    return selectedCashflowIds.filter(id => storeCashflowIds.includes(id)).length;
   };
 
   const onSubmit = (data: CashflowData) => {
@@ -1407,10 +1478,56 @@ export default function CashflowContent() {
               {/* Cashflow Records - FIXED: Using dynamic store.id instead of hardcoded */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    Recent Cashflow Records
-                  </CardTitle>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <CardTitle className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5" />
+                      Recent Cashflow Records
+                    </CardTitle>
+                    
+                    {canDeleteCashflow && cashflowRecords && cashflowRecords.filter((record) => record.storeId === store.id).length > 0 && (
+                      <div className="flex items-center gap-2">
+                        {getSelectedCountForStore(store.id) > 0 && (
+                          <>
+                            <Badge variant="secondary" className="mr-2" data-testid={`badge-selected-count-store-${store.id}`}>
+                              {getSelectedCountForStore(store.id)} selected
+                            </Badge>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => setShowBulkDeleteDialog(true)}
+                              disabled={bulkDeleteMutation.isPending}
+                              data-testid={`button-bulk-delete-cashflow-store-${store.id}`}
+                            >
+                              {bulkDeleteMutation.isPending ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Deleting...
+                                </>
+                              ) : (
+                                <>
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete {getSelectedCountForStore(store.id)} item{getSelectedCountForStore(store.id) > 1 ? 's' : ''}
+                                </>
+                              )}
+                            </Button>
+                          </>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={
+                              cashflowRecords.filter((record) => record.storeId === store.id).length > 0 &&
+                              cashflowRecords.filter((record) => record.storeId === store.id).every(record => selectedCashflowIds.includes(record.id))
+                            }
+                            onCheckedChange={() => toggleAllCashflowsForStore(store.id)}
+                            data-testid={`checkbox-select-all-store-${store.id}`}
+                          />
+                          <Label className="text-sm cursor-pointer" onClick={() => toggleAllCashflowsForStore(store.id)}>
+                            Select All
+                          </Label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent>
                   {isLoading ? (
@@ -1435,7 +1552,9 @@ export default function CashflowContent() {
                         .map((entry) => (
                           <div
                             key={entry.id}
-                            className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                            className={`flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${
+                              selectedCashflowIds.includes(entry.id) ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300' : ''
+                            }`}
                             onClick={() => {
                               setSelectedEntry(entry);
                               setIsDetailModalOpen(true);
@@ -1443,6 +1562,14 @@ export default function CashflowContent() {
                             data-testid={`cashflow-entry-${entry.id}`}
                           >
                             <div className="flex items-center gap-3">
+                              {canDeleteCashflow && (
+                                <Checkbox
+                                  checked={selectedCashflowIds.includes(entry.id)}
+                                  onCheckedChange={(e) => toggleCashflowSelection(entry.id, e as any)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  data-testid={`checkbox-cashflow-${entry.id}`}
+                                />
+                              )}
                               <div
                                 className={`p-2 rounded-full ${
                                   entry.category === "Income"
@@ -1692,6 +1819,85 @@ export default function CashflowContent() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Selected Cashflow Records?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedCashflowIds.length} cashflow record{selectedCashflowIds.length > 1 ? 's' : ''}? 
+              This action cannot be undone and will permanently delete the following records:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          {/* List of selected cashflows */}
+          <div className="max-h-60 overflow-y-auto border rounded-md p-3 space-y-2">
+            {selectedCashflowIds.map((cashflowId) => {
+              const record = cashflowRecords?.find(r => r.id === cashflowId);
+              if (!record) return null;
+              
+              const store = stores?.find((s: any) => s.id === record.storeId);
+              const storeName = store?.name || `Store ${record.storeId}`;
+              
+              return (
+                <div key={cashflowId} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">
+                      {new Date(record.date).toLocaleDateString('id-ID', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric'
+                      })}
+                    </div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                      {storeName} • {record.category} • {record.type}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`font-semibold ${
+                      record.category === "Income" ? "text-green-600" : "text-red-600"
+                    }`}>
+                      {formatRupiah(
+                        record.category === "Expense" && record.totalPengeluaran
+                          ? record.totalPengeluaran
+                          : record.amount
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              disabled={bulkDeleteMutation.isPending}
+              data-testid="button-cancel-bulk-delete-cashflow"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+              className="bg-red-600 hover:bg-red-700"
+              data-testid="button-confirm-bulk-delete-cashflow"
+            >
+              {bulkDeleteMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete {selectedCashflowIds.length} Record{selectedCashflowIds.length > 1 ? 's' : ''}
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
