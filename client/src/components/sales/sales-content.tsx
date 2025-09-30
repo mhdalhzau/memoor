@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -1703,8 +1704,36 @@ function SalesRecordsTable({
   const [density, setDensity] = useState<TableDensity>('comfortable');
   const [columns, setColumns] = useState<ColumnVisibility>(DEFAULT_COLUMNS);
   const [sortState, setSortState] = useState<SortState>({ column: null, direction: null });
-  const [selectedRecords, setSelectedRecords] = useState<Set<string>>(new Set());
+  const [selectedSales, setSelectedSales] = useState<Set<string>>(new Set());
   const [showControls, setShowControls] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      return await apiRequest('POST', '/api/sales/bulk-delete', { ids });
+    },
+    onSuccess: (response) => {
+      toast({
+        title: "Success",
+        description: `Successfully deleted ${selectedSales.size} sales record${selectedSales.size > 1 ? 's' : ''}`,
+        "data-testid": "status-bulk-delete-result",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/sales'] });
+      setSelectedSales(new Set());
+      setShowBulkDeleteDialog(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete sales records",
+        variant: "destructive",
+        "data-testid": "status-bulk-delete-result",
+      });
+    },
+  });
 
   if (isLoading) {
     return (
@@ -1765,21 +1794,26 @@ function SalesRecordsTable({
 
   // Handle record selection
   const toggleRecord = (id: string) => {
-    const newSelected = new Set(selectedRecords);
+    const newSelected = new Set(selectedSales);
     if (newSelected.has(id)) {
       newSelected.delete(id);
     } else {
       newSelected.add(id);
     }
-    setSelectedRecords(newSelected);
+    setSelectedSales(newSelected);
   };
 
   const toggleAll = () => {
-    if (selectedRecords.size === records.length) {
-      setSelectedRecords(new Set());
+    if (selectedSales.size === records.length) {
+      setSelectedSales(new Set());
     } else {
-      setSelectedRecords(new Set(records.map(r => r.id)));
+      setSelectedSales(new Set(records.map(r => r.id)));
     }
+  };
+
+  // Handle bulk delete
+  const handleBulkDelete = () => {
+    bulkDeleteMutation.mutate(Array.from(selectedSales));
   };
 
   // Get cell size classes based on density
@@ -1834,10 +1868,31 @@ function SalesRecordsTable({
           
           {/* Table Controls */}
           <div className="flex items-center gap-2">
-            {selectedRecords.size > 0 && (
-              <Badge variant="secondary" className="mr-2">
-                {selectedRecords.size} selected
-              </Badge>
+            {selectedSales.size > 0 && (
+              <>
+                <Badge variant="secondary" className="mr-2">
+                  {selectedSales.size} selected
+                </Badge>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setShowBulkDeleteDialog(true)}
+                  disabled={bulkDeleteMutation.isPending}
+                  data-testid="button-bulk-delete-sales"
+                >
+                  {bulkDeleteMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Selected ({selectedSales.size})
+                    </>
+                  )}
+                </Button>
+              </>
             )}
             
             <Button
@@ -1896,10 +1951,10 @@ function SalesRecordsTable({
                 <TableHead className={getCellClasses()}>
                   <input
                     type="checkbox"
-                    checked={selectedRecords.size === records.length && records.length > 0}
+                    checked={selectedSales.size === records.length && records.length > 0}
                     onChange={toggleAll}
                     className="rounded"
-                    data-testid="checkbox-select-all"
+                    data-testid="checkbox-select-all-sales"
                   />
                 </TableHead>
                 
@@ -2096,7 +2151,7 @@ function SalesRecordsTable({
             <TableBody>
               {sortedRecords.map((record) => {
                 const metrics = getBusinessMetrics(record);
-                const isSelected = selectedRecords.has(record.id);
+                const isSelected = selectedSales.has(record.id);
                 
                 return (
                   <TableRow 
@@ -2115,7 +2170,7 @@ function SalesRecordsTable({
                         checked={isSelected}
                         onChange={() => toggleRecord(record.id)}
                         className="rounded"
-                        data-testid={`checkbox-select-${record.id}`}
+                        data-testid={`checkbox-row-${record.id}`}
                       />
                     </TableCell>
                     
@@ -2446,6 +2501,78 @@ function SalesRecordsTable({
           </div>
         )}
       </CardContent>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Selected Sales Records?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedSales.size} sales record{selectedSales.size > 1 ? 's' : ''}? 
+              This action cannot be undone and will permanently delete the following records:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          {/* List of selected sales */}
+          <div className="max-h-60 overflow-y-auto border rounded-md p-3 space-y-2">
+            {Array.from(selectedSales).map((salesId) => {
+              const record = records.find(r => r.id === salesId);
+              if (!record) return null;
+              
+              const store = stores?.find((s: any) => s.id === record.storeId);
+              const storeName = store?.name || `Store ${record.storeId}`;
+              
+              return (
+                <div key={salesId} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">
+                      {formatIndonesianDate(record.date || record.createdAt)}
+                    </div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                      {storeName} • {getUserNameFromId(record.userId, allUsers)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold text-green-600">
+                      {formatRupiah(record.totalSales)}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {formatLiters(record.totalLiters)} L
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              disabled={bulkDeleteMutation.isPending}
+              data-testid="button-cancel-bulk-delete"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+              className="bg-red-600 hover:bg-red-700"
+              data-testid="button-confirm-bulk-delete"
+            >
+              {bulkDeleteMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete {selectedSales.size} Record{selectedSales.size > 1 ? 's' : ''}
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
