@@ -180,6 +180,27 @@ export default function DashboardContent() {
     enabled: !!dateRange?.from && !!dateRange?.to,
   });
 
+  // Fetch revenue per store
+  const { data: revenuePerStore = [], isLoading: isLoadingRevenue } = useQuery({
+    queryKey: ["/api/dashboard/revenue-per-store", dateRangeParams],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (dateRange?.from) params.append("startDate", dateRange.from.toISOString());
+      if (dateRange?.to) params.append("endDate", dateRange.to.toISOString());
+      
+      const response = await fetch(`/api/dashboard/revenue-per-store?${params.toString()}`);
+      if (!response.ok) throw new Error("Failed to fetch revenue per store");
+      return response.json();
+    },
+    enabled: !!dateRange?.from && !!dateRange?.to,
+  });
+
+  // Calculate total revenue across all stores
+  const totalRevenue = useMemo(() => {
+    if (!revenuePerStore || revenuePerStore.length === 0) return 0;
+    return revenuePerStore.reduce((sum: number, store: any) => sum + parseFloat(store.totalRevenue || 0), 0);
+  }, [revenuePerStore]);
+
   const setDateRangePreset = (preset: string) => {
     const today = new Date();
     let from: Date;
@@ -352,6 +373,67 @@ export default function DashboardContent() {
         </Card>
       </div>
 
+      {/* Total Revenue Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 stagger-children">
+        {/* Total Revenue All Stores */}
+        <Card className="stat-card shadow-card border-l-4 border-l-purple-500 overflow-hidden hover:shadow-lg transition-shadow duration-300">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="stat-icon bg-gradient-to-br from-purple-400 to-purple-600 p-3 rounded-xl shadow-md">
+                <DollarSign className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-muted-foreground mb-1">
+                  Total Penghasilan Semua Toko
+                </p>
+                <p className="text-2xl font-bold text-foreground count-up" data-testid="text-total-revenue-all">
+                  {formatCurrency(totalRevenue)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Revenue Per Store Cards */}
+        {isLoadingRevenue ? (
+          <>
+            {Array.from({ length: 2 }).map((_, i) => (
+              <Card key={i} className="shadow-card overflow-hidden">
+                <CardContent className="p-6">
+                  <Skeleton className="h-20 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        ) : (
+          revenuePerStore.map((store: any, index: number) => (
+            <Card 
+              key={store.storeId} 
+              className="stat-card shadow-card border-l-4 border-l-indigo-500 overflow-hidden hover:shadow-lg transition-shadow duration-300"
+            >
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="stat-icon bg-gradient-to-br from-indigo-400 to-indigo-600 p-3 rounded-xl shadow-md">
+                    <DollarSign className="h-6 w-6 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">
+                      {store.storeName}
+                    </p>
+                    <p className="text-2xl font-bold text-foreground count-up" data-testid={`text-revenue-store-${store.storeId}`}>
+                      {formatCurrency(parseFloat(store.totalRevenue || 0))}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {store.salesCount} transaksi
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+
       {/* Filters */}
       <Card className="shadow-card slide-up">
         <CardHeader>
@@ -449,39 +531,96 @@ export default function DashboardContent() {
         {/* Sales Trends Chart */}
         <Card className="shadow-card slide-up hover:shadow-lg transition-shadow duration-300">
           <CardHeader>
-            <CardTitle data-testid="title-sales-trends">Sales Trends</CardTitle>
+            <CardTitle data-testid="title-sales-trends">
+              Sales Trends 
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                ({timeGrouping === 'daily' ? 'Harian' : timeGrouping === 'weekly' ? 'Mingguan' : 'Bulanan'})
+              </span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {isLoadingSalesTrends ? (
-              <Skeleton className="h-[300px] w-full" />
+              <Skeleton className="h-[350px] w-full" />
             ) : salesTrends.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={salesTrends}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => format(new Date(value), "MMM dd")}
-                  />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip
-                    formatter={(value: any) => formatCurrency(value)}
-                    labelFormatter={(label) => format(new Date(label), "MMM dd, yyyy")}
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="totalSales"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    dot={{ r: 4 }}
-                    activeDot={{ r: 6 }}
-                    name="Total Sales"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={salesTrends}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 11 }}
+                      angle={timeGrouping === 'monthly' ? -45 : 0}
+                      textAnchor={timeGrouping === 'monthly' ? 'end' : 'middle'}
+                      height={timeGrouping === 'monthly' ? 60 : 30}
+                      tickFormatter={(value) => {
+                        const date = new Date(value);
+                        if (timeGrouping === 'daily') return format(date, "dd MMM");
+                        if (timeGrouping === 'weekly') return `Week ${format(date, "w, MMM")}`;
+                        return format(date, "MMM yyyy");
+                      }}
+                    />
+                    <YAxis tick={{ fontSize: 11 }} width={80} />
+                    <Tooltip
+                      formatter={(value: any, name: string) => {
+                        if (name === 'totalSales') return [formatCurrency(value), 'Total Sales'];
+                        if (name === 'transactionCount') return [value, 'Transactions'];
+                        if (name === 'averageTicket') return [formatCurrency(value), 'Avg Ticket'];
+                        return [value, name];
+                      }}
+                      labelFormatter={(label) => {
+                        const date = new Date(label);
+                        if (timeGrouping === 'daily') return format(date, "dd MMMM yyyy");
+                        if (timeGrouping === 'weekly') return `Week ${format(date, "w")}, ${format(date, "MMMM yyyy")}`;
+                        return format(date, "MMMM yyyy");
+                      }}
+                    />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="totalSales"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
+                      name="Total Sales"
+                    />
+                    {timeGrouping !== 'daily' && (
+                      <Line
+                        type="monotone"
+                        dataKey="averageTicket"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        dot={{ r: 4 }}
+                        name="Avg Ticket"
+                      />
+                    )}
+                  </LineChart>
+                </ResponsiveContainer>
+                <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Total Sales</p>
+                      <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">
+                        {formatCurrency(salesTrends.reduce((sum: number, item: any) => sum + parseFloat(item.totalSales || 0), 0))}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Avg per {timeGrouping === 'daily' ? 'Day' : timeGrouping === 'weekly' ? 'Week' : 'Month'}</p>
+                      <p className="text-lg font-semibold text-green-600 dark:text-green-400">
+                        {formatCurrency(salesTrends.reduce((sum: number, item: any) => sum + parseFloat(item.totalSales || 0), 0) / salesTrends.length)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Data Points</p>
+                      <p className="text-lg font-semibold text-purple-600 dark:text-purple-400">
+                        {salesTrends.length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground" data-testid="text-no-sales-data">
+              <div className="h-[350px] flex items-center justify-center text-muted-foreground" data-testid="text-no-sales-data">
                 No sales data available for the selected period
               </div>
             )}

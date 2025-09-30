@@ -19,6 +19,7 @@ import { formatRupiah, formatLiters, formatIndonesianDate, formatTime, formatPer
 import { type Sales } from "@shared/schema";
 import { SyncButton } from "@/components/ui/sync-button";
 import { z } from "zod";
+import { getStoreShifts } from "@shared/attendance-utils";
 
 // Function to get user name from userId
 function getUserNameFromId(userId: string | null, allUsers: any[] = []): string {
@@ -653,6 +654,14 @@ function SalesDetailModal({ record }: { record: Sales }) {
   // Get users data to show staff names
   const { data: allUsers } = useQuery<any[]>({ queryKey: ['/api/users'] });
   
+  // Get stores data to get shift configuration
+  const { data: stores = [] } = useQuery<any[]>({ queryKey: ['/api/stores'] });
+  
+  // Get current store and its shifts
+  const currentStore = stores.find(s => s.id === record.storeId);
+  const storeShifts = getStoreShifts(currentStore);
+  const shiftOptions = Object.keys(storeShifts);
+  
   // Parse JSON data if available
   const parseJsonData = (jsonString: string | null) => {
     if (!jsonString) return [];
@@ -891,12 +900,21 @@ function SalesDetailModal({ record }: { record: Sales }) {
                 <span className="font-medium">Shift</span>
               </div>
               {isEditMode ? (
-                <Input
+                <Select
                   value={editData.shift}
-                  onChange={(e) => setEditData({ ...editData, shift: e.target.value })}
-                  className="mt-1"
-                  data-testid="input-shift"
-                />
+                  onValueChange={(value) => setEditData({ ...editData, shift: value })}
+                >
+                  <SelectTrigger className="mt-1" data-testid="select-shift">
+                    <SelectValue placeholder="Pilih shift" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {shiftOptions.map((shift) => (
+                      <SelectItem key={shift} value={shift} data-testid={`option-shift-${shift}`}>
+                        {shift}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               ) : (
                 <p className="text-lg font-semibold capitalize">
                   {record.shift || "—"}

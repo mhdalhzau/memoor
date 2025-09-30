@@ -3662,7 +3662,8 @@ export function registerRoutes(app: Express): Server {
           storeName: store?.name || `Store ${sId}`,
           totalSales: groupedData[key].totalSales,
           transactionCount: groupedData[key].count,
-          averageSales: groupedData[key].totalSales / groupedData[key].count
+          averageSales: groupedData[key].totalSales / groupedData[key].count,
+          averageTicket: groupedData[key].totalSales / groupedData[key].count
         }));
         
         trends.push(...trendData);
@@ -3711,6 +3712,53 @@ export function registerRoutes(app: Express): Server {
       }
       
       res.json(comparison);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Dashboard Revenue Per Store API endpoint
+  app.get("/api/dashboard/revenue-per-store", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+      
+      const { startDate, endDate } = req.query;
+      
+      // Get accessible store IDs
+      const accessibleStoreIds = await getAccessibleStoreIds(req.user);
+      
+      // Parse date range
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setDate(new Date().getDate() - 30));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const revenueData: any[] = [];
+      
+      for (const storeId of accessibleStoreIds) {
+        const sales = await storage.getSalesByStore(storeId, start.toISOString(), end.toISOString());
+        const store = await storage.getStore(storeId);
+        
+        const totalRevenue = sales.reduce((sum, sale) => sum + parseFloat(sale.totalSales || '0'), 0);
+        const salesCount = sales.length;
+        const totalCash = sales.reduce((sum, sale) => sum + parseFloat(sale.totalCash || '0'), 0);
+        const totalQris = sales.reduce((sum, sale) => sum + parseFloat(sale.totalQris || '0'), 0);
+        const totalLiters = sales.reduce((sum, sale) => sum + parseFloat(sale.totalLiters || '0'), 0);
+        
+        revenueData.push({
+          storeId,
+          storeName: store?.name || `Store ${storeId}`,
+          totalRevenue,
+          salesCount,
+          totalCash,
+          totalQris,
+          totalLiters,
+          averageSale: salesCount > 0 ? totalRevenue / salesCount : 0
+        });
+      }
+      
+      // Sort by revenue descending
+      revenueData.sort((a, b) => b.totalRevenue - a.totalRevenue);
+      
+      res.json(revenueData);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
