@@ -19,6 +19,23 @@ if (!databaseUrl) {
 const url = new URL(databaseUrl);
 
 // Create MySQL connection pool with SSL configuration
+let sslConfig: any = false;
+
+// Try to use CA certificate if available, otherwise use basic SSL
+try {
+  if (fs.existsSync("attached_assets/ca.pem")) {
+    sslConfig = {
+      ca: fs.readFileSync("attached_assets/ca.pem", "utf8"),
+      rejectUnauthorized: true,
+    };
+  } else if (url.searchParams.get('ssl-mode') === 'REQUIRED' || databaseUrl.includes('ssl-mode=REQUIRED')) {
+    sslConfig = { rejectUnauthorized: false };
+  }
+} catch (error) {
+  console.warn("SSL certificate not found, using basic SSL connection");
+  sslConfig = { rejectUnauthorized: false };
+}
+
 const pool = mysql.createPool({
   host: url.hostname,
   port: parseInt(url.port) || 3306,
@@ -28,10 +45,7 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  ssl: {
-    ca: fs.readFileSync("attached_assets/ca.pem", "utf8"),
-    rejectUnauthorized: true,
-  },
+  ssl: sslConfig,
 });
 
 // Test MySQL database connection
