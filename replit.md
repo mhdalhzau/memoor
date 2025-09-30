@@ -1,6 +1,32 @@
 # Overview
 This is a multi-role employee management system built with React, TypeScript, Express, and MySQL. It serves staff, managers, and administrators with different access levels for attendance tracking, sales reporting, cashflow management, payroll processing, and proposal submissions. The system supports multiple stores and includes robust role-based authentication and authorization. Key capabilities include comprehensive dashboards with interactive data visualizations, intelligent sales record shift auto-detection, editable sales details with full transaction data modification, and an enhanced UI/UX framework.
 
+# Recent Changes (September 30, 2025)
+## Bulk Delete Functionality
+- **Sales Records**: Added checkbox-based bulk delete with confirmation dialog showing selected records details
+- **Cashflow Records**: Implemented bulk delete with multi-record selection and detailed confirmation UI
+- **Piutang Records**: Added bulk delete functionality adapted to the collapsible customer-grouped structure
+- All bulk delete operations include:
+  - Individual record checkboxes with data-testid attributes
+  - "Select All" checkbox for batch selection
+  - Visual indication for selected items (blue highlight)
+  - Confirmation dialog with record details preview
+  - Loading states during deletion
+  - Success toast notifications
+  - Automatic data refresh and selection clearing
+
+## Design System Enhancements
+- **Color Palette**: Updated to calmer, neutral backgrounds with improved contrast in both light and dark modes
+- **Spacing**: Doubled base spacing to 0.5rem for more generous, comfortable layouts
+- **Shadows**: 
+  - Light mode: Subtle shadows (0.03-0.12 alpha) for gentle elevation
+  - Dark mode: Professional shadows (0.06-0.18 alpha) with increased blur radii for depth without muddiness
+- **Typography**: Normalized hierarchy with proper H1-H6 scales, improved line heights, and consistent text sizing:
+  - H4 for section titles
+  - text-sm for data/content  
+  - text-xs for metadata/labels
+- **Professional Touches**: Subtle borders, consistent badge styling, smooth transitions for interactive elements
+
 # User Preferences
 I prefer detailed explanations.
 
