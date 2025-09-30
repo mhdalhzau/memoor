@@ -4191,8 +4191,8 @@ export function registerRoutes(app: Express): Server {
             notes: dayData.notes || null
           });
           results.push(updated);
-        } else if (dayData.checkIn || dayData.checkOut || dayData.notes) {
-          // Create new record only if there's meaningful data
+        } else if (dayData.checkIn || dayData.checkOut || dayData.notes || dayData.attendanceStatus) {
+          // Create new record if there's meaningful data (including status changes)
           const created = await storage.createAttendance({
             userId: employeeId,
             storeId: primaryStoreId,
@@ -4202,7 +4202,7 @@ export function registerRoutes(app: Express): Server {
             shift: dayData.shift || null,
             latenessMinutes: dayData.latenessMinutes || 0,
             overtimeMinutes: dayData.overtimeMinutes || 0,
-            attendanceStatus: dayData.attendanceStatus || 'hadir',
+            attendanceStatus: dayData.attendanceStatus || 'belum_diatur',
             notes: dayData.notes || null
           });
           results.push(created);

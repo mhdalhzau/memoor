@@ -14,6 +14,8 @@ This is a multi-role employee management system built with React, TypeScript, Ex
   - When status is changed to "cuti" or "alpha", all data fields (shift, check-in, check-out) are automatically cleared
   - Input fields for shift, check-in time, and check-out time are disabled when status is "cuti" or "alpha"
   - Time metrics (lateness, early arrival, overtime) are reset to 0 for leave/absent entries
+  - **Backend Fix**: Fixed attendance status not being saved to database when no time data is present
+  - Backend now creates attendance records when attendanceStatus is set, even without check-in/check-out times
   - Improves data accuracy by preventing invalid time entries for non-working statuses
 
 ## Recent Fixes (September 29, 2025)
