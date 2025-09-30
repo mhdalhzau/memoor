@@ -1093,6 +1093,49 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Update sales status
+  app.patch("/api/sales/:id", async (req, res) => {
+    try {
+      if (!req.user || !['manager', 'administrasi', 'staff'].includes(req.user.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const salesId = req.params.id;
+      const { status } = req.body;
+
+      // Validate status value
+      const validStatuses = ['none', 'diterima', 'disetor'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ 
+          message: "Invalid status value", 
+          details: `Status must be one of: ${validStatuses.join(', ')}` 
+        });
+      }
+
+      // Get the sales record to verify store access
+      const existingSales = await storage.getSales(salesId);
+      if (!existingSales) {
+        return res.status(404).json({ message: "Sales record not found" });
+      }
+
+      // Verify store access
+      if (!(await hasStoreAccess(req.user, existingSales.storeId))) {
+        return res.status(403).json({ message: "You don't have access to update this sales record" });
+      }
+
+      // Update the status
+      const updatedSales = await storage.updateSalesStatus(salesId, status);
+      
+      if (!updatedSales) {
+        return res.status(404).json({ message: "Failed to update sales status" });
+      }
+
+      res.json(updatedSales);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   // New endpoint: Convert all setoran data to sales report
   app.post("/api/sales/import-from-setoran", async (req, res) => {
     try {

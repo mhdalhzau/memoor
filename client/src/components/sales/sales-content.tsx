@@ -46,6 +46,7 @@ interface ColumnVisibility {
   averageTicket: boolean;
   details: boolean;
   performance: boolean;
+  status: boolean;
   actions: boolean;
 }
 
@@ -65,6 +66,7 @@ const DEFAULT_COLUMNS: ColumnVisibility = {
   averageTicket: false,
   details: false,
   performance: false,
+  status: true,
   actions: true,
 };
 
@@ -1186,6 +1188,79 @@ export default function SalesContent() {
   );
 }
 
+// Status Select Component with inline editing
+function StatusSelect({ recordId, currentStatus }: { recordId: string; currentStatus: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ status }: { status: string }) => {
+      return await apiRequest('PATCH', `/api/sales/${recordId}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/sales'] });
+      toast({
+        title: "Status Updated",
+        description: "Sales status has been updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update status",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleStatusChange = (newStatus: string) => {
+    updateStatusMutation.mutate({ status: newStatus });
+  };
+
+  const getStatusBadgeColor = (status: string) => {
+    switch (status) {
+      case 'diterima':
+        return 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 border-blue-300 dark:border-blue-700';
+      case 'disetor':
+        return 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 border-green-300 dark:border-green-700';
+      default:
+        return 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600';
+    }
+  };
+
+  return (
+    <Select 
+      value={currentStatus || 'none'} 
+      onValueChange={handleStatusChange}
+      disabled={updateStatusMutation.isPending}
+    >
+      <SelectTrigger 
+        className={`w-32 border ${getStatusBadgeColor(currentStatus || 'none')}`}
+        data-testid={`select-status-${recordId}`}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="none" data-testid={`status-option-none-${recordId}`}>
+          <Badge variant="outline" className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600">
+            None
+          </Badge>
+        </SelectItem>
+        <SelectItem value="diterima" data-testid={`status-option-diterima-${recordId}`}>
+          <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 border-blue-300 dark:border-blue-700">
+            Diterima
+          </Badge>
+        </SelectItem>
+        <SelectItem value="disetor" data-testid={`status-option-disetor-${recordId}`}>
+          <Badge variant="outline" className="bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 border-green-300 dark:border-green-700">
+            Disetor
+          </Badge>
+        </SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
 // Component to display sales records table
 function SalesRecordsTable({ 
   records, 
@@ -1567,6 +1642,21 @@ function SalesRecordsTable({
                   </TableHead>
                 )}
                 
+                {/* Status Column */}
+                {columns.status && (
+                  <TableHead 
+                    className={`${getCellClasses()} cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800`}
+                    onClick={() => handleSort('status')}
+                    data-testid="header-status"
+                  >
+                    <div className="flex items-center gap-1">
+                      <CheckSquare className="h-4 w-4" />
+                      Status
+                      {renderSortIcon('status')}
+                    </div>
+                  </TableHead>
+                )}
+                
                 {/* Actions Column */}
                 {columns.actions && (
                   <TableHead className={getCellClasses()} data-testid="header-actions">
@@ -1860,6 +1950,13 @@ function SalesRecordsTable({
                             </div>
                           )}
                         </div>
+                      </TableCell>
+                    )}
+                    
+                    {/* Status Cell */}
+                    {columns.status && (
+                      <TableCell className={getCellClasses()} data-testid={`cell-status-${record.id}`}>
+                        <StatusSelect recordId={record.id} currentStatus={record.status || 'none'} />
                       </TableCell>
                     )}
                     

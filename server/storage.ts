@@ -83,6 +83,7 @@ export interface IStorage {
   getSalesByStore(storeId: number, startDate?: string, endDate?: string): Promise<Sales[]>;
   createSales(sales: InsertSales): Promise<Sales>;
   deleteSales(id: string): Promise<void>;
+  updateSalesStatus(id: string, status: string): Promise<Sales | undefined>;
   checkDailySubmission(userId: string, storeId: number, date: string): Promise<boolean>;
   
   // Cashflow methods
@@ -821,6 +822,19 @@ export class DatabaseStorage implements IStorage {
       console.log(`✅ Successfully deleted sales record ${id} with cascading deletes for related cashflow and piutang records`);
     } catch (error) {
       console.error('Error deleting sales with cascading deletes:', error);
+      throw error;
+    }
+  }
+
+  async updateSalesStatus(id: string, status: string): Promise<Sales | undefined> {
+    try {
+      await db.update(sales).set({ status }).where(eq(sales.id, id));
+      
+      // MySQL doesn't support .returning(), so fetch the updated sales
+      const result = await db.select().from(sales).where(eq(sales.id, id)).limit(1);
+      return result[0];
+    } catch (error) {
+      console.error('Error updating sales status:', error);
       throw error;
     }
   }
