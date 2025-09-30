@@ -5,6 +5,7 @@ import * as schema from "@shared/schema";
 
 // Get MySQL database URL from environment variables
 const databaseUrl =
+  "mysql://avnadmin:AVNS_Woo6_cb4krTtGU7mJQi@marlokk-mhdalhzau.j.aivencloud.com:18498/defaultdb?ssl-mode=REQUIRED" ||
   process.env.MYSQL_DATABASE_URL ||
   process.env.DATABASE_URL;
 
@@ -27,7 +28,10 @@ try {
       ca: fs.readFileSync("attached_assets/ca.pem", "utf8"),
       rejectUnauthorized: true,
     };
-  } else if (url.searchParams.get('ssl-mode') === 'REQUIRED' || databaseUrl.includes('ssl-mode=REQUIRED')) {
+  } else if (
+    url.searchParams.get("ssl-mode") === "REQUIRED" ||
+    databaseUrl.includes("ssl-mode=REQUIRED")
+  ) {
     sslConfig = { rejectUnauthorized: false };
   }
 } catch (error) {
@@ -81,22 +85,22 @@ export async function ensureShiftsColumn(): Promise<void> {
   try {
     console.log("🔄 Checking if shifts column exists in stores table...");
     const connection = await pool.getConnection();
-    
+
     // Check if column exists
     const [columns] = await connection.execute(
-      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stores' AND COLUMN_NAME = 'shifts'"
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stores' AND COLUMN_NAME = 'shifts'",
     );
-    
+
     if ((columns as any[]).length === 0) {
       console.log("➕ Adding shifts column to stores table...");
       await connection.execute(
-        "ALTER TABLE stores ADD COLUMN shifts TEXT DEFAULT NULL"
+        "ALTER TABLE stores ADD COLUMN shifts TEXT DEFAULT NULL",
       );
       console.log("✅ Shifts column added successfully");
     } else {
       console.log("✅ Shifts column already exists");
     }
-    
+
     connection.release();
   } catch (error) {
     console.error("❌ Failed to ensure shifts column:", error);
