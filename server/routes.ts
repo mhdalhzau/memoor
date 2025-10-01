@@ -32,6 +32,11 @@ import {
 import { calculateShiftOvertime, formatOvertimeDuration, detectShiftFromTime } from "@shared/overtime-utils";
 import { z } from "zod";
 
+// Cashflow constants for sales
+const CASHFLOW_CATEGORY_INCOME = "Income";
+const CASHFLOW_TYPE_SALES = "Sales";
+const SALES_STATUS_DISETOR = "disetor";
+
 // Helper functions for multi-store authorization
 async function hasStoreAccess(user: any, storeId: number): Promise<boolean> {
   console.log("🔒 STORE ACCESS CHECK STARTED");
@@ -1102,37 +1107,67 @@ export function registerRoutes(app: Express): Server {
       }
 
       const salesId = req.params.id;
-      const { status } = req.body;
+      const { status: newStatus } = req.body;
+
+      console.log(`🔄 SALES STATUS UPDATE STARTED`);
+      console.log(`📋 Sales ID: ${salesId}`);
+      console.log(`🎯 New Status: ${newStatus}`);
+      console.log(`👤 User: ${req.user.name} (${req.user.role})`);
 
       // Validate status value
       const validStatuses = ['none', 'diterima', 'disetor'];
-      if (!validStatuses.includes(status)) {
+      if (!validStatuses.includes(newStatus)) {
+        console.log(`❌ Invalid status value: ${newStatus}`);
         return res.status(400).json({ 
           message: "Invalid status value", 
           details: `Status must be one of: ${validStatuses.join(', ')}` 
         });
       }
 
-      // Get the sales record to verify store access
+      // Get the sales record to verify store access and get old status
       const existingSales = await storage.getSales(salesId);
       if (!existingSales) {
+        console.log(`❌ Sales record not found: ${salesId}`);
         return res.status(404).json({ message: "Sales record not found" });
       }
 
+      // Store old status BEFORE update
+      const oldStatus = existingSales.status;
+
+      console.log(`📊 Existing sales:`, {
+        id: existingSales.id,
+        storeId: existingSales.storeId,
+        oldStatus: oldStatus,
+        newStatus: newStatus,
+        totalSales: existingSales.totalSales
+      });
+
       // Verify store access
       if (!(await hasStoreAccess(req.user, existingSales.storeId))) {
+        console.log(`❌ Access denied to store ${existingSales.storeId}`);
         return res.status(403).json({ message: "You don't have access to update this sales record" });
       }
 
-      // Update the status
-      const updatedSales = await storage.updateSalesStatus(salesId, status);
-      
-      if (!updatedSales) {
-        return res.status(404).json({ message: "Failed to update sales status" });
-      }
+      // Use atomic transaction method to update status and handle cashflow
+      const result = await storage.updateSalesStatusWithCashflow(
+        salesId, 
+        newStatus, 
+        req.user.id
+      );
 
-      res.json(updatedSales);
+      const response = {
+        ...result.sales,
+        statusTransition: { 
+          from: oldStatus, 
+          to: newStatus 
+        },
+        cashflowAction: result.action
+      };
+
+      console.log(`📤 Response:`, response);
+      res.json(response);
     } catch (error: any) {
+      console.error(`❌ SALES STATUS UPDATE FAILED:`, error);
       res.status(400).json({ message: error.message });
     }
   });

@@ -39,7 +39,9 @@ import {
   type InventoryTransaction,
   type InsertInventoryTransaction,
   type InventoryTransactionWithProduct,
-  TRANSACTION_TYPES
+  TRANSACTION_TYPES,
+  CASHFLOW_CATEGORIES,
+  CASHFLOW_TYPES
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import session from "express-session";
@@ -86,6 +88,7 @@ export interface IStorage {
   updateSales(id: string, data: Partial<InsertSales>): Promise<Sales | undefined>;
   deleteSales(id: string): Promise<void>;
   updateSalesStatus(id: string, status: string): Promise<Sales | undefined>;
+  updateSalesStatusWithCashflow(salesId: string, newStatus: string, userId: string): Promise<{ sales: Sales, cashflow: Cashflow | null, action: 'created' | 'deleted' | 'none' }>;
   checkDailySubmission(userId: string, storeId: number, date: string): Promise<boolean>;
   deleteManySales(ids: string[]): Promise<number>;
   
@@ -93,6 +96,7 @@ export interface IStorage {
   getCashflow(id: string): Promise<Cashflow | undefined>;
   getCashflowByStore(storeId: number): Promise<Cashflow[]>;
   createCashflow(cashflow: InsertCashflow): Promise<Cashflow>;
+  createSalesCashflow(salesId: string): Promise<Cashflow>;
   deleteCashflowBySalesId(salesId: string): Promise<void>;
   deleteManyCashflow(ids: string[]): Promise<number>;
   
@@ -219,7 +223,7 @@ export interface IStorage {
 }
 
 // Database Storage Implementation using Drizzle ORM
-import { db } from "./db";
+import { db, pool } from "./db";
 import { 
   users, 
   stores, 
@@ -884,6 +888,187 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async updateSalesStatusWithCashflow(
+    salesId: string, 
+    newStatus: string, 
+    userId: string
+  ): Promise<{ sales: Sales, cashflow: Cashflow | null, action: 'created' | 'deleted' | 'none' }> {
+    const connection = await pool.getConnection();
+    
+    try {
+      console.log(`🔄 Starting atomic transaction for sales ${salesId} status update to "${newStatus}"`);
+      await connection.beginTransaction();
+      
+      console.log(`📊 Step 1: Fetching sales record...`);
+      const [salesRows] = await connection.execute(
+        'SELECT * FROM sales WHERE sales_id = ?',
+        [salesId]
+      );
+      
+      const salesRecords = salesRows as any[];
+      if (!salesRecords || salesRecords.length === 0) {
+        throw new Error(`Sales record ${salesId} not found`);
+      }
+      
+      const existingSales = salesRecords[0];
+      const oldStatus = existingSales.status;
+      
+      console.log(`✅ Sales record found. Old status: "${oldStatus}", New status: "${newStatus}"`);
+      
+      console.log(`📝 Step 2: Updating sales status...`);
+      await connection.execute(
+        'UPDATE sales SET status = ? WHERE sales_id = ?',
+        [newStatus, salesId]
+      );
+      console.log(`✅ Sales status updated successfully`);
+      
+      let cashflowAction: 'created' | 'deleted' | 'none' = 'none';
+      let cashflowResult: Cashflow | null = null;
+      
+      const SALES_STATUS_DISETOR = "disetor";
+      
+      console.log(`💰 Step 3: Handling cashflow based on status transition...`);
+      
+      if (oldStatus !== SALES_STATUS_DISETOR && newStatus === SALES_STATUS_DISETOR) {
+        console.log(`💵 Transition: "${oldStatus}" → "${newStatus}" - Creating cashflow entry...`);
+        
+        console.log(`🧹 Deleting any existing cashflow for sales ${salesId} to prevent duplicates...`);
+        await connection.execute(
+          'DELETE FROM cashflow WHERE sales_id = ? AND type = ?',
+          [salesId, CASHFLOW_TYPES.SALES]
+        );
+        
+        const salesDate = existingSales.date ? new Date(existingSales.date) : new Date();
+        const formattedDate = salesDate.toLocaleDateString('id-ID', { 
+          day: '2-digit', 
+          month: 'long', 
+          year: 'numeric' 
+        });
+        
+        const cashflowId = randomUUID();
+        await connection.execute(
+          `INSERT INTO cashflow 
+           (cashflow_id, store_id, category, type, amount, description, sales_id, date, created_at) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [
+            cashflowId,
+            existingSales.store_id,
+            CASHFLOW_CATEGORIES.INCOME,
+            CASHFLOW_TYPES.SALES,
+            existingSales.total_sales,
+            `Penjualan disetor - ${formattedDate}`,
+            salesId,
+            existingSales.date
+          ]
+        );
+        
+        console.log(`✅ Cashflow entry created with ID: ${cashflowId}`);
+        
+        const [cashflowRows] = await connection.execute(
+          'SELECT * FROM cashflow WHERE cashflow_id = ?',
+          [cashflowId]
+        );
+        const cashflows = cashflowRows as any[];
+        cashflowResult = this.mapCashflowRow(cashflows[0]);
+        cashflowAction = 'created';
+        
+      } else if (oldStatus === SALES_STATUS_DISETOR && newStatus !== SALES_STATUS_DISETOR) {
+        console.log(`🗑️ Transition: "${oldStatus}" → "${newStatus}" - Deleting cashflow entries...`);
+        
+        await connection.execute(
+          'DELETE FROM cashflow WHERE sales_id = ? AND type = ?',
+          [salesId, CASHFLOW_TYPES.SALES]
+        );
+        
+        console.log(`✅ Cashflow entries deleted for sales ${salesId}`);
+        cashflowAction = 'deleted';
+        
+      } else {
+        console.log(`⏭️ No cashflow action needed for transition: "${oldStatus}" → "${newStatus}"`);
+      }
+      
+      console.log(`✅ Step 4: Committing transaction...`);
+      await connection.commit();
+      console.log(`✅ Transaction committed successfully`);
+      
+      const [updatedSalesRows] = await connection.execute(
+        'SELECT * FROM sales WHERE sales_id = ?',
+        [salesId]
+      );
+      const updatedSalesRecords = updatedSalesRows as any[];
+      const updatedSales = this.mapSalesRow(updatedSalesRecords[0]);
+      
+      console.log(`🎉 Atomic transaction completed successfully for sales ${salesId}`);
+      
+      return {
+        sales: updatedSales,
+        cashflow: cashflowResult,
+        action: cashflowAction
+      };
+      
+    } catch (error: any) {
+      console.error(`❌ Transaction failed for sales ${salesId}:`, error);
+      console.log(`🔙 Rolling back transaction...`);
+      await connection.rollback();
+      console.log(`✅ Transaction rolled back`);
+      throw error;
+    } finally {
+      connection.release();
+      console.log(`🔓 Database connection released`);
+    }
+  }
+  
+  private mapSalesRow(row: any): Sales {
+    return {
+      id: row.sales_id,
+      storeId: row.store_id,
+      userId: row.user_id,
+      date: row.date,
+      totalSales: row.total_sales,
+      transactions: row.transactions,
+      averageTicket: row.average_ticket,
+      totalQris: row.total_qris,
+      totalCash: row.total_cash,
+      meterStart: row.meter_start,
+      meterEnd: row.meter_end,
+      totalLiters: row.total_liters,
+      totalIncome: row.total_income,
+      totalExpenses: row.total_expenses,
+      incomeDetails: row.income_details,
+      expenseDetails: row.expense_details,
+      shift: row.shift,
+      checkIn: row.check_in,
+      checkOut: row.check_out,
+      submissionDate: row.submission_date,
+      status: row.status,
+      createdAt: row.created_at
+    };
+  }
+  
+  private mapCashflowRow(row: any): Cashflow {
+    return {
+      id: row.cashflow_id,
+      storeId: row.store_id,
+      category: row.category,
+      type: row.type,
+      amount: row.amount,
+      description: row.description,
+      customerId: row.customer_id,
+      piutangId: row.piutang_id,
+      salesId: row.sales_id,
+      paymentStatus: row.payment_status,
+      jumlahGalon: row.jumlah_galon,
+      pajakOngkos: row.pajak_ongkos,
+      pajakTransfer: row.pajak_transfer,
+      totalPengeluaran: row.total_pengeluaran,
+      konter: row.konter,
+      pajakTransferRekening: row.pajak_transfer_rekening,
+      hasil: row.hasil,
+      date: row.date,
+      createdAt: row.created_at
+    };
+  }
+
   async checkDailySubmission(userId: string, storeId: number, date: string): Promise<boolean> {
     try {
       const startOfDay = new Date(date);
@@ -983,6 +1168,63 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async createSalesCashflow(salesId: string): Promise<Cashflow> {
+    try {
+      console.log(`💰 Creating cashflow for sales ${salesId}`);
+      
+      const salesRecord = await this.getSales(salesId);
+      if (!salesRecord) {
+        const error = `Sales record ${salesId} not found`;
+        console.error(`❌ ${error}`);
+        throw new Error(error);
+      }
+      
+      console.log(`📊 Sales record found:`, {
+        id: salesRecord.id,
+        storeId: salesRecord.storeId,
+        totalSales: salesRecord.totalSales,
+        date: salesRecord.date,
+        status: salesRecord.status
+      });
+      
+      // Delete any existing cashflow for this sales to prevent duplicates
+      console.log(`🧹 Deleting any existing cashflow for sales ${salesId} to prevent duplicates...`);
+      await this.deleteCashflowBySalesId(salesId);
+      
+      const salesDate = salesRecord.date ? new Date(salesRecord.date) : new Date();
+      const formattedDate = salesDate.toLocaleDateString('id-ID', { 
+        day: '2-digit', 
+        month: 'long', 
+        year: 'numeric' 
+      });
+      
+      const cashflowData: InsertCashflow = {
+        storeId: salesRecord.storeId,
+        category: CASHFLOW_CATEGORIES.INCOME,
+        type: CASHFLOW_TYPES.SALES,
+        amount: salesRecord.totalSales,
+        description: `Penjualan disetor - ${formattedDate}`,
+        salesId: salesRecord.id,
+        date: salesRecord.date
+      };
+      
+      console.log(`💾 Creating cashflow entry:`, cashflowData);
+      
+      const newCashflow = await this.createCashflow(cashflowData);
+      
+      console.log(`✅ Cashflow created successfully:`, {
+        id: newCashflow.id,
+        amount: newCashflow.amount,
+        salesId: newCashflow.salesId
+      });
+      
+      return newCashflow;
+    } catch (error) {
+      console.error('❌ Error creating sales cashflow:', error);
+      throw error;
+    }
+  }
+
   async deleteCashflow(id: string): Promise<boolean> {
     try {
       const result = await db.delete(cashflow).where(eq(cashflow.id, id));
@@ -996,9 +1238,30 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCashflowBySalesId(salesId: string): Promise<void> {
     try {
-      await db.delete(cashflow).where(eq(cashflow.salesId, salesId));
+      console.log(`🗑️ Deleting cashflow entries for sales ${salesId}`);
+      
+      const existingCashflows = await db
+        .select()
+        .from(cashflow)
+        .where(
+          and(
+            eq(cashflow.salesId, salesId),
+            eq(cashflow.type, CASHFLOW_TYPES.SALES)
+          )
+        );
+      
+      console.log(`📋 Found ${existingCashflows.length} cashflow entries to delete`);
+      
+      await db.delete(cashflow).where(
+        and(
+          eq(cashflow.salesId, salesId),
+          eq(cashflow.type, CASHFLOW_TYPES.SALES)
+        )
+      );
+      
+      console.log(`✅ Cashflow entries deleted successfully`);
     } catch (error) {
-      console.error('Error deleting cashflow by salesId:', error);
+      console.error('❌ Error deleting cashflow by salesId:', error);
       throw error;
     }
   }

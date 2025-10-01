@@ -13,6 +13,24 @@ export const TRANSACTION_TYPES = {
   PENJUALAN_TRANSFER: "Penjualan (Transfer rekening)"
 } as const;
 
+// Cashflow category constants
+export const CASHFLOW_CATEGORIES = {
+  INCOME: "Income",
+  EXPENSE: "Expense",
+  INVESTMENT: "Investment"
+} as const;
+
+// Cashflow type constants
+export const CASHFLOW_TYPES = {
+  SALES: "Sales",
+  INVENTORY: "Inventory",
+  UTILITIES: "Utilities",
+  SALARY: "Salary",
+  OTHER: "Other",
+  PEMBELIAN_MINYAK: "Pembelian Minyak",
+  TRANSFER_REKENING: "Transfer Rekening"
+} as const;
+
 // Users table - Map TypeScript 'id' property to database 'user_id' column
 export const users = mysqlTable("users", {
   id: varchar("user_id", { length: 36 }).primaryKey().default(sql`(uuid())`),

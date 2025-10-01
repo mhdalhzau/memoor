@@ -132,6 +132,30 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     console.log(`📡 Subscribed to real-time data for ${user.role} role`);
   };
 
+  // Invalidate dashboard queries based on table changes
+  const invalidateDashboardQueries = (table: string) => {
+    console.log('📊 Invalidating dashboard queries for:', table);
+    
+    // Invalidate dashboard stats for all affected tables
+    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+    
+    if (table === 'sales') {
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/sales-trends'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/sales-comparison'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/revenue-per-store'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/payment-distribution'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/product-performance'] });
+    }
+    
+    if (table === 'cashflow') {
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/cashflow-trends'] });
+    }
+    
+    if (table === 'attendance') {
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/attendance-summary'] });
+    }
+  };
+
   // Handle CREATE events
   const handleCreateEvent = (event: WebSocketEvent) => {
     const { table, data, storeId } = event;
@@ -159,6 +183,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
     // Invalidate related queries to refetch
     queryClient.invalidateQueries({ queryKey: ['/api/' + table] });
+    
+    // Invalidate dashboard queries
+    invalidateDashboardQueries(table);
   };
 
   // Handle UPDATE events
@@ -191,6 +218,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
     // Also invalidate specific item query
     queryClient.invalidateQueries({ queryKey: ['/api/' + table, id] });
+    
+    // Invalidate dashboard queries
+    invalidateDashboardQueries(table);
   };
 
   // Handle DELETE events
@@ -219,6 +249,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
     // Invalidate queries
     queryClient.invalidateQueries({ queryKey: ['/api/' + table] });
+    
+    // Invalidate dashboard queries
+    invalidateDashboardQueries(table);
   };
 
   // Get relevant query keys for a table
