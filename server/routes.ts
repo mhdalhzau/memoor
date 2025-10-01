@@ -8,6 +8,7 @@ import { initializeRealtimeService, getRealtimeService } from "./websocket";
 import { testDatabaseConnection, ensureDatabaseConnection } from "./db";
 import { createDatabaseBackup, restoreDatabaseFromBackup } from "./backup";
 import { realtimeMiddleware } from "./middleware/realtime";
+import { safeLogUser } from "./utils/safe-logger";
 import { 
   initializeGoogleSheetsService, 
   getGoogleSheetsService, 
@@ -40,7 +41,7 @@ const SALES_STATUS_DISETOR = "disetor";
 // Helper functions for multi-store authorization
 async function hasStoreAccess(user: any, storeId: number): Promise<boolean> {
   console.log("🔒 STORE ACCESS CHECK STARTED");
-  console.log("👤 User:", JSON.stringify(user, null, 2));
+  safeLogUser("👤 User:", user);
   console.log("🏪 Store ID:", storeId);
   
   // First verify the store exists
@@ -78,7 +79,7 @@ async function getUserFirstStoreId(user: any): Promise<number | undefined> {
 
 async function getAccessibleStoreIds(user: any): Promise<number[]> {
   console.log("🔍 GET ACCESSIBLE STORE IDS STARTED");
-  console.log("👤 User:", JSON.stringify(user, null, 2));
+  safeLogUser("👤 User:", user);
   
   if (user.role === 'administrasi') {
     console.log("👑 Admin user detected - getting all stores");
@@ -150,7 +151,7 @@ export function registerRoutes(app: Express): Server {
   // Database backup routes
   app.post('/api/backup/create', async (req: any, res: any) => {
     console.log("🚀 DATABASE BACKUP CREATE STARTED");
-    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    safeLogUser("👤 User:", req.user);
     
     if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
       console.log("❌ BACKUP ACCESS DENIED: Insufficient permissions");
@@ -180,7 +181,7 @@ export function registerRoutes(app: Express): Server {
 
   app.post('/api/backup/restore', async (req: any, res: any) => {
     console.log("🚀 DATABASE RESTORE STARTED");
-    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    safeLogUser("👤 User:", req.user);
     console.log("📝 Request Body:", req.body);
     
     if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
@@ -240,7 +241,7 @@ export function registerRoutes(app: Express): Server {
   // Manual export endpoint (alias for create)
   app.post('/api/backup/export', async (req: any, res: any) => {
     console.log("🚀 DATABASE EXPORT STARTED");
-    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    safeLogUser("👤 User:", req.user);
     
     if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
       console.log("❌ EXPORT ACCESS DENIED: Insufficient permissions");
@@ -275,7 +276,7 @@ export function registerRoutes(app: Express): Server {
   // Download backup file endpoint
   app.get('/api/backup/download', async (req: any, res: any) => {
     console.log("🚀 BACKUP DOWNLOAD STARTED");
-    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    safeLogUser("👤 User:", req.user);
     console.log("🔍 Query Params:", req.query);
     
     if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
@@ -333,7 +334,7 @@ export function registerRoutes(app: Express): Server {
   // List available backups endpoint
   app.get('/api/backup/list', async (req: any, res: any) => {
     console.log("🚀 BACKUP LIST REQUEST STARTED");
-    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    safeLogUser("👤 User:", req.user);
     
     if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
       console.log("❌ BACKUP LIST ACCESS DENIED: Insufficient permissions");
@@ -385,7 +386,7 @@ export function registerRoutes(app: Express): Server {
   // Manual import endpoint
   app.post('/api/backup/import', async (req: any, res: any) => {
     console.log("🚀 DATABASE IMPORT STARTED");
-    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    safeLogUser("👤 User:", req.user);
     
     if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
       console.log("❌ IMPORT ACCESS DENIED: Insufficient permissions");
@@ -444,7 +445,7 @@ export function registerRoutes(app: Express): Server {
   // Sales data migration endpoint
   app.post('/api/migrate-sales-data', async (req: any, res: any) => {
     console.log("🚀 SALES DATA MIGRATION STARTED");
-    console.log("👤 User:", req.user ? JSON.stringify(req.user, null, 2) : "Not authenticated");
+    safeLogUser("👤 User:", req.user);
     console.log("📝 Request Body:", req.body);
     
     if (!req.isAuthenticated() || (req.user.role !== 'administrasi' && req.user.role !== 'manager')) {
