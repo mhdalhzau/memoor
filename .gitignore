@@ -3,6 +3,37 @@ dist
 .DS_Store
 server/public
 vite.config.ts.*
-*.tar.gzcookies.txt
+*.tar.gz
+cookies.txt
 .env
 .env.local
+
+# Logs
+*.log
+/tmp/
+
+# Database backups
+database_backup/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+*.db
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
